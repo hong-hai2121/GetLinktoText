@@ -1,16 +1,18 @@
 import os
 import shutil
 
+from config import (
+    BASE_DIR,
+    GECKODRIVER_PATH,
+    LINKS_FILE,
+    MODEL_NAME,
+    OUTPUT_VIDEO_DIR,
+    OUTPUT_WORD_FILE,
+    WHISPER_MODEL_PATH,
+)
 from profiles_config import FIREFOX_PROFILE_PATH
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LINKS_FILE = os.path.join(BASE_DIR, "linkgettoText.txt")
-OUTPUT_WORD_FILE = os.path.join(BASE_DIR, "final_result.docx")
-WHISPER_MODEL_PATH = os.path.join(BASE_DIR, "whisper_cache")
-OUTPUT_VIDEO_DIR = os.path.join(BASE_DIR, "output_videos")
-MODEL_NAME = "medium"
 FFMPEG_PATH = shutil.which("ffmpeg")
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
 
 CHUNK_LENGTH_MS = 3 * 60 * 1000  # 3 phút/đoạn
 DEFAULT_MAX_CHUNKS = 2  # Mặc định nhận diện 5 đoạn đầu
