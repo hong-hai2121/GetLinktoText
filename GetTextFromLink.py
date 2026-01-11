@@ -1,3 +1,12 @@
+from config import (
+    BASE_DIR,
+    GECKODRIVER_PATH,
+    LINKS_FILE,
+    MODEL_NAME,
+    OUTPUT_VIDEO_DIR,
+    OUTPUT_WORD_FILE,
+    WHISPER_MODEL_PATH,
+)
 from src.gui import GetTextApp
 from src.main import launch_gui, main
 
