@@ -277,7 +277,7 @@ class Translator:
 
     # ===== Chọn hướng dẫn phù hợp =====
     def get_instruction_text(self):
-        return INSTRUCTION_FIRST_Darama if INSTRUCTION_MODE.lower() == "drama" else INSTRUCTION_FIRST_AnhViet
+        return INSTRUCTION_FIRST_Darama if INSTRUCTION_MODE.lower() == "drama" else INSTRUCTION_FIRST
 
     # ===== Làm sạch text phản hồi =====
     def _sanitize_reply_text(self, s: str) -> str:

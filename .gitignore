@@ -57,3 +57,19 @@ vosk-model-*.zip
 
 # or ignore the whole folder if it's all output
 SourceTruyen/XulyAmThanh/AmThanh_GiamGiong/
+
+# Ignore SourceTruyen directories
+SourceTruyen/dSRT/
+SourceTruyen/.progress/
+SourceTruyen/Cleaned/
+SourceTruyen/old srt/
+SourceTruyen/Outputs/
+SourceTruyen/XulyAmThanh/AmThanh/
+SourceTruyen/XulyAmThanh/AmThanh_peaks/
+SourceTruyen/XuLyVideo/Video_TangToc/
+SourceTruyen/XuLyVideo/videodoc/
+
+# Ignore output and backup directories
+output_videos/
+local_videos/
+backup/
