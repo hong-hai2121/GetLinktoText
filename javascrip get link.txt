@@ -1,0 +1,44 @@
+Reels: 
+/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]/div[1]
+
+Video Thường: 
+
+BS HẢI: /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div[3]/div/div/div/div[2]/div/div
+BS VŨ BÌNH: /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div[4]/div/div/div/div[2]/div/div
+BS CHIỀU: /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div[2]/div/div/div/div[2]/div/div
+
+
+// Lấy phần tử <div> dựa trên XPath
+let divElement = document.evaluate(
+  '/html/body/ytd-app/div[1]/ytd-page-manager/ytd-browse/ytd-two-column-browse-results-renderer/div[1]/ytd-rich-grid-renderer/div[5]',
+  document,
+  null,
+  XPathResult.FIRST_ORDERED_NODE_TYPE,
+  null
+).singleNodeValue;
+
+// Kiểm tra nếu tìm thấy phần tử
+if (divElement) {
+  // Lấy tất cả các thẻ <a> bên trong <div>
+  let links = divElement.querySelectorAll('a');
+
+  // Chuyển các liên kết thành danh sách các URL
+  let linkList = Array.from(links).map(link => link.href);
+
+  // Chuyển danh sách liên kết thành chuỗi để lưu vào file
+  let fileContent = linkList.join('\n');
+
+  // Tạo và tải xuống file
+  let blob = new Blob([fileContent], { type: 'text/plain' });
+  let link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'links.txt'; // Tên file tải xuống
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  console.log("File đã được tải xuống.");
+} else {
+  console.log("Không tìm thấy phần tử <div>.");
+}
+

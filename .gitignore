@@ -1,0 +1,59 @@
+#############
+# Python
+#############
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+#############
+# Virtual env
+#############
+venv/
+.venv/
+ENV/
+env/
+
+#############
+# Secrets
+#############
+.env
+.env.*
+*.key
+*.pem
+
+#############
+# IDE / OS
+#############
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+#############
+# Logs / temp
+#############
+*.log
+*.tmp
+*.bak
+
+#############
+# Large models / cache (you have these)
+#############
+whisper_cache/
+*.pt
+vosk-model-*.zip
+*.onnx
+
+#############
+# Generated outputs / data folders (ignore after initial snapshot)
+#############
+# big audio/video outputs
+*.wav
+*.mp3
+*.mp4
+*.mkv
+*.zip
+
+# or ignore the whole folder if it's all output
+SourceTruyen/XulyAmThanh/AmThanh_GiamGiong/
