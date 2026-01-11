@@ -1,14 +1,12 @@
-import gc
 import os
 import threading
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-from src import browser_client
 from src import config
 from src import io
-from src import pipeline
 from src.notifications import play_sound
+from src.services.get_text import GetTextService
 
 
 class GetTextApp:
@@ -35,6 +33,7 @@ class GetTextApp:
 
         self.build_ui()
         self.load_links()
+        self.service = GetTextService(logger=self.log)
 
     def center_window(self, w: int = 1200, h: int = 650):
         self.root.update_idletasks()
@@ -283,7 +282,7 @@ class GetTextApp:
 
     def restart_firefox_thread(self):
         try:
-            ok = browser_client.restart_firefox()
+            ok = self.service.restart_firefox()
             self.log("✅ Firefox đã khởi động lại thành công!" if ok else "❌ Lỗi khi khởi động lại Firefox")
         except Exception as e:
             self.log(f"❌ Lỗi: {e}")
@@ -311,53 +310,43 @@ class GetTextApp:
         threading.Thread(target=self.run_pipeline_thread, daemon=True).start()
 
     def run_pipeline_thread(self):
+        selected = self.selected_model.get()
+        use_title_mode = self.title_mode_var.get()
+
+        if use_title_mode:
+            if self.title_only_var.get():
+                title_submode = "title_only"
+            elif self.content_mode_var.get():
+                title_submode = "content_only"
+            else:
+                title_submode = "full"
+        else:
+            title_submode = "full"
+
         try:
-            import torch as _torch
-            import whisper as _whisper
+            max_chunks = int(self.max_chunks_var.get())
+            if max_chunks <= 0:
+                max_chunks = config.DEFAULT_MAX_CHUNKS
+        except Exception:
+            max_chunks = config.DEFAULT_MAX_CHUNKS
+
+        try:
+            self.service.initialize_whisper()
         except Exception as e:
             self.log(f"❌ Không import được torch/whisper: {e}")
             messagebox.showerror("Lỗi", f"Không import được torch/whisper: {e}")
             self.root.after(0, lambda: self.start_btn.config(state="normal"))
             return
 
-        config.torch = _torch
-        config.whisper = _whisper
-
-        config.device = "cuda" if config.torch.cuda.is_available() else "cpu"
-        self.log(f"✅ Whisper sẽ chạy trên {'GPU' if config.device=='cuda' else 'CPU'}")
-
-        selected = self.selected_model.get()
-        config.USE_TITLE_MODE = self.title_mode_var.get()
-
-        if config.USE_TITLE_MODE:
-            if self.title_only_var.get():
-                config.TITLE_MODE_SUBMODE = "title_only"
-            elif self.content_mode_var.get():
-                config.TITLE_MODE_SUBMODE = "content_only"
-            else:
-                config.TITLE_MODE_SUBMODE = "full"
+        self.service.configure_runtime(
+            model_name=selected,
+            use_title_mode=use_title_mode,
+            title_submode=title_submode,
+            max_chunks=max_chunks,
+        )
 
         try:
-            config.MAX_CHUNKS_RUNTIME = int(self.max_chunks_var.get())
-            if config.MAX_CHUNKS_RUNTIME <= 0:
-                config.MAX_CHUNKS_RUNTIME = config.DEFAULT_MAX_CHUNKS
-        except Exception:
-            config.MAX_CHUNKS_RUNTIME = config.DEFAULT_MAX_CHUNKS
-
-        try:
-            if config.model is None or selected != config.MODEL_NAME:
-                self.log(f"🔄 Đang tải model '{selected}'...")
-                if config.model is not None:
-                    del config.model
-                    if config.device == "cuda":
-                        config.torch.cuda.empty_cache()
-                    gc.collect()
-
-                config.MODEL_NAME = selected
-                config.model = config.whisper.load_model(config.MODEL_NAME, download_root=config.WHISPER_MODEL_PATH).to(
-                    config.device
-                )
-                self.log(f"✅ Đã tải model '{config.MODEL_NAME}' thành công")
+            self.service.load_model(selected)
         except Exception as e:
             self.log(f"❌ Lỗi khi tải model: {e}")
             play_sound("error")
@@ -377,7 +366,7 @@ class GetTextApp:
         builtins.print = gui_print
         try:
             self.log("=== BẮT ĐẦU XỬ LÝ ===")
-            pipeline.process_videos()
+            self.service.process_videos()
             self.log("=== HOÀN TẤT ===")
             play_sound("success")
         except Exception as e:
