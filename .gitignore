@@ -36,6 +36,8 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+*.docx
+*.txt
 
 #############
 # Large models / cache (you have these)
@@ -73,3 +75,6 @@ SourceTruyen/XuLyVideo/videodoc/
 output_videos/
 local_videos/
 backup/
+final_result.docx
+final_result2.docx
+linkgettoText.txt
