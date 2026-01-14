@@ -18,6 +18,9 @@ global_driver = None
 DRIVER_LOCK = threading.Lock()
 FIREFOX_INIT_EVENT = threading.Event()
 FIREFOX_INIT_IN_PROGRESS = False
+FIREFOX_CMD_PATH = r"C:\Program Files\Mozilla Firefox\firefox.exe"
+FIREFOX_CMD_URL = "https://chatgpt.com/"
+FIREFOX_CMD_WAIT_SECONDS = 15
 
 
 def is_driver_alive(drv):
@@ -43,7 +46,7 @@ def init_firefox():
 
 
 def restart_firefox():
-    """Đóng Firefox hiện tại (nếu có) và mở lại cái mới (không mở trùng)."""
+    """Đóng Firefox hiện tại, mở bằng CMD 15s, tắt, rồi mở lại bằng Selenium."""
     global global_driver, FIREFOX_INIT_IN_PROGRESS
 
     with DRIVER_LOCK:
@@ -70,7 +73,25 @@ def restart_firefox():
         except Exception:
             pass
 
-        print("🌐 Đang mở Firefox mới...")
+        print("🧹 Đang mở Firefox bằng CMD trong 15 giây...")
+        cmd_process = None
+        try:
+            cmd_process = subprocess.Popen([FIREFOX_CMD_PATH, FIREFOX_CMD_URL])
+            time.sleep(FIREFOX_CMD_WAIT_SECONDS)
+        except Exception as e:
+            print(f"⚠️ Lỗi khi mở Firefox bằng CMD: {e}")
+        finally:
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", "firefox.exe"], timeout=4)
+            except Exception:
+                pass
+            if cmd_process is not None:
+                try:
+                    cmd_process.wait(timeout=2)
+                except Exception:
+                    pass
+
+        print("🌐 Đang mở Firefox mới bằng Selenium...")
         time.sleep(1)
         drv = init_firefox()
 
