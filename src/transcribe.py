@@ -129,8 +129,9 @@ def transcribe_whisper(audio_path, use_chunks=False, max_chunks=None):
     print(f"⏳ Thời lượng file: {duration:.2f} giây")
 
     if not use_chunks and duration > 900:
-        print("❌ File audio dài hơn 15 phút, không thể nhận diện.")
-        return None
+        print("ℹ️ File audio dài hơn 15 phút, sẽ chia nhỏ để nhận diện toàn bộ.")
+        use_chunks = True
+        max_chunks = None
 
     # Xóa model2 khi quay lại medium (an toàn hơn: set None + giải phóng VRAM)
     if config.model2 is not None:
@@ -189,7 +190,12 @@ def transcribe_whisper(audio_path, use_chunks=False, max_chunks=None):
         return text_local.strip()
 
     if use_chunks:
-        max_take = max_chunks if (max_chunks and max_chunks > 0) else config.DEFAULT_MAX_CHUNKS
+        if max_chunks is None:
+            max_take = None
+        elif max_chunks > 0:
+            max_take = max_chunks
+        else:
+            max_take = config.DEFAULT_MAX_CHUNKS
         chunk_paths = split_audio(audio_path, chunk_length_ms=config.CHUNK_LENGTH_MS, max_chunks=max_take)
         full_text_parts = []
         for idx, chunk_path in enumerate(chunk_paths, start=1):
