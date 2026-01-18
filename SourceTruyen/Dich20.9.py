@@ -552,18 +552,6 @@ class Translator:
             clear_progress(input_path)
             first_file = False  # các file sau sẽ reset về 0
 
-            # Chỉ move file khi đã có output hợp lệ
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                try:
-                    archived = move_to_archive(input_path, OLD_SRT_DIR)
-                    print(f"📦 Đã chuyển file gốc vào lưu trữ: {archived}")
-                except Exception as e:
-                    print(f"⚠️ Không thể chuyển file gốc: {e}")
-            else:
-                print("⚠️ File output rỗng, không chuyển sang lưu trữ.")
-
-            clear_progress(input_path)
-
         self.driver.quit()
         print("\n🎉 Hoàn tất tất cả file.")
 
