@@ -36,7 +36,8 @@ except Exception:
         pass  # Không có âm thanh trên hệ khác
 
 # ======== Import đường dẫn profile Firefox ========
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+repo_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(repo_root))
 from profiles_config import FIREFOX_PROFILE_PATH
 
 # ======== Cấu hình chính ========
@@ -48,11 +49,11 @@ GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
 CHATGPT_URL = "https://chatgpt.com/"
 
 GROUP_SIZE = 60
-START_BLOCK_INDEX = 0       # Mặc định (không cần chỉnh, sẽ được override khi resume)
-END_BLOCK_INDEX = None      #  None  
-SEND_INSTRUCTION_BEFORE = True
-INSTRUCTION_MODE = "xianxia"
-STOP_ON_MISSING = True
+START_BLOCK_INDEX = 0               # Mặc định (không cần chỉnh, sẽ được override khi resume)
+END_BLOCK_INDEX = None              #  None  
+SEND_INSTRUCTION_BEFORE = True      # Dùng để tự động gửi instruction/prompt hướng dẫn dịch trước khi bắt đầu dịch.
+INSTRUCTION_MODE = "xianxia"        # "xianxia" (tu tiên) hoặc "drama"
+STOP_ON_MISSING = True              # Dùng để dừng toàn bộ tiến trình khi một batch có block bị thiếu nội dung (sau khi nhận phản hồi từ ChatGPT).
 
 # ======== Hướng dẫn dịch (instruction) ========
 INSTRUCTION_FIRST = (
@@ -201,7 +202,19 @@ class Translator:
         textarea = WebDriverWait(self.driver, 30).until(
             EC.presence_of_element_located((By.XPATH, '//*[@id="prompt-textarea"]'))
         )
-        textarea.clear()
+        try:
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", textarea)
+            self.driver.execute_script("arguments[0].click();", textarea)
+        except Exception:
+            pass
+        try:
+            textarea.clear()
+        except Exception:
+            try:
+                textarea.send_keys("\ue009" + "a")
+                textarea.send_keys("\ue003")
+            except Exception:
+                pass
         textarea.send_keys(text)
         time.sleep(random.uniform(5, 15))
         textarea.send_keys("\ue007")  # Enter
@@ -481,18 +494,6 @@ class Translator:
 
             clear_progress(input_path)
             first_file = False  # các file sau sẽ reset về 0
-
-            # Chỉ move file khi đã có output hợp lệ
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                try:
-                    archived = move_to_archive(input_path, OLD_SRT_DIR)
-                    print(f"📦 Đã chuyển file gốc vào lưu trữ: {archived}")
-                except Exception as e:
-                    print(f"⚠️ Không thể chuyển file gốc: {e}")
-            else:
-                print("⚠️ File output rỗng, không chuyển sang lưu trữ.")
-
-            clear_progress(input_path)
 
         self.driver.quit()
         print("\n🎉 Hoàn tất tất cả file.")
