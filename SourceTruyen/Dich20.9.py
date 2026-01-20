@@ -12,7 +12,6 @@ import random
 import sys
 import shutil
 import json
-import subprocess
 from pathlib import Path
 from datetime import datetime
 from selenium import webdriver
@@ -21,7 +20,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ======== Cấu hình âm thanh cảnh báo ========
 try:
@@ -55,8 +53,6 @@ END_BLOCK_INDEX = None      #  None
 SEND_INSTRUCTION_BEFORE = True
 INSTRUCTION_MODE = "xianxia"
 STOP_ON_MISSING = True
-RESPONSE_TIMEOUT = 180
-FIREFOX_RESTART_WAIT = 15
 
 # ======== Hướng dẫn dịch (instruction) ========
 INSTRUCTION_FIRST = (
@@ -188,14 +184,6 @@ class Translator:
 
     # ===== Khởi tạo Firefox driver =====
     def init_driver(self):
-        try:
-            return self._create_driver()
-        except (TimeoutException, WebDriverException) as exc:
-            print(f"⚠️ Không thể khởi tạo Firefox hoặc không thấy ô nhập: {exc}")
-            self.restart_firefox_via_cmd()
-            return self._create_driver()
-
-    def _create_driver(self):
         options = Options()
         options.add_argument("-profile")
         options.add_argument(FIREFOX_PROFILE_PATH)
@@ -208,70 +196,19 @@ class Translator:
         )
         return driver
 
-    def restart_firefox_via_cmd(self):
-        self._close_driver()
-        print("🔁 Đang khởi động lại Firefox bằng lệnh CMD...")
-        self._start_firefox_cmd()
-        time.sleep(FIREFOX_RESTART_WAIT)
-        self._kill_firefox_cmd()
-        time.sleep(3)
-        self._start_firefox_cmd()
-        time.sleep(FIREFOX_RESTART_WAIT)
-        self._kill_firefox_cmd()
-        time.sleep(3)
-
-    def _start_firefox_cmd(self):
-        try:
-            if os.name == "nt":
-                subprocess.Popen(["cmd", "/c", "start", "", "firefox"], shell=False)
-            else:
-                subprocess.Popen(["firefox"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
-
-    def _kill_firefox_cmd(self):
-        try:
-            if os.name == "nt":
-                subprocess.run(["taskkill", "/IM", "firefox.exe", "/F"], check=False)
-            else:
-                subprocess.run(["pkill", "-f", "firefox"], check=False)
-        except Exception:
-            pass
-
-    def _close_driver(self):
-        if not self.driver:
-            return
-        try:
-            self.driver.quit()
-        except Exception:
-            pass
-        self.driver = None
-
     # ===== Gửi tin nhắn vào ChatGPT =====
     def send_message(self, text):
-        try:
-            textarea = WebDriverWait(self.driver, 30).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="prompt-textarea"]'))
-            )
-            textarea.clear()
-            textarea.send_keys(text)
-            time.sleep(random.uniform(5, 15))
-            textarea.send_keys("\ue007")  # Enter
-        except (TimeoutException, WebDriverException) as exc:
-            print(f"⚠️ Không thấy ô nhập để gửi câu hỏi: {exc}")
-            self.restart_firefox_via_cmd()
-            self.driver = self._create_driver()
-            textarea = WebDriverWait(self.driver, 30).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="prompt-textarea"]'))
-            )
-            textarea.clear()
-            textarea.send_keys(text)
-            time.sleep(random.uniform(5, 15))
-            textarea.send_keys("\ue007")  # Enter
+        textarea = WebDriverWait(self.driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="prompt-textarea"]'))
+        )
+        textarea.clear()
+        textarea.send_keys(text)
+        time.sleep(random.uniform(5, 15))
+        textarea.send_keys("\ue007")  # Enter
 
     # ===== Chờ ChatGPT trả lời xong =====
     def wait_until_complete(self):
-        WebDriverWait(self.driver, RESPONSE_TIMEOUT).until_not(
+        WebDriverWait(self.driver, 600).until_not(
             EC.presence_of_element_located((By.XPATH, "//button[@data-testid='stop-button']"))
         )
 
@@ -391,15 +328,8 @@ class Translator:
         self.current_input = input_path
         self.current_index = i
 
-        try:
-            self.send_message(prompt)
-            self.wait_until_complete()
-        except TimeoutException:
-            print("⚠️ GPT không phản hồi trong 3 phút, thử khởi động lại Firefox...")
-            self.restart_firefox_via_cmd()
-            self.driver = self._create_driver()
-            self.send_message(prompt)
-            self.wait_until_complete()
+        self.send_message(prompt)
+        self.wait_until_complete()
 
         MAX_RETRY = 3
         retry_sleep = 5
@@ -551,6 +481,18 @@ class Translator:
 
             clear_progress(input_path)
             first_file = False  # các file sau sẽ reset về 0
+
+            # Chỉ move file khi đã có output hợp lệ
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                try:
+                    archived = move_to_archive(input_path, OLD_SRT_DIR)
+                    print(f"📦 Đã chuyển file gốc vào lưu trữ: {archived}")
+                except Exception as e:
+                    print(f"⚠️ Không thể chuyển file gốc: {e}")
+            else:
+                print("⚠️ File output rỗng, không chuyển sang lưu trữ.")
+
+            clear_progress(input_path)
 
         self.driver.quit()
         print("\n🎉 Hoàn tất tất cả file.")
