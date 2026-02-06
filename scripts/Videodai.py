@@ -84,10 +84,9 @@ def clear_output_directory(directory):
 
 # Tạo thư mục nếu chưa có
 os.makedirs(WHISPER_MODEL_PATH, exist_ok=True)
-if (USE_LINKS_FROM_FILE == True ):
-    os.makedirs(OUTPUT_VIDEO_DIR, exist_ok=True)
-    # Gọi hàm xóa file trong thư mục output_video trước khi bắt đầu xử lý
-    clear_output_directory(OUTPUT_VIDEO_DIR)
+os.makedirs(OUTPUT_VIDEO_DIR, exist_ok=True)
+# Gọi hàm xóa file trong thư mục output_video trước khi bắt đầu xử lý
+clear_output_directory(OUTPUT_VIDEO_DIR)
 # ✅ Xóa nội dung cũ trong file Word khi bắt đầu một phiên mới
 if os.path.exists(OUTPUT_WORD_FILE):
     doc = Document()
