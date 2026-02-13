@@ -29,7 +29,9 @@ class GetTextApp:
         self.title_only_var = tk.BooleanVar(value=False)
         self.desc_mode_var = tk.BooleanVar(value=True)
         self.content_mode_var = tk.BooleanVar(value=False)
+        self.skip_long_video_var = tk.BooleanVar(value=False)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
+        self.max_links_per_run_var = tk.IntVar(value=0)
 
         self.build_ui()
         self.load_links()
@@ -70,8 +72,24 @@ class GetTextApp:
             row=2, column=0, sticky="w", pady=(0, 6)
         )
 
+        link_limit_row = ttk.Frame(info_frame)
+        link_limit_row.grid(row=3, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(link_limit_row, text="So link xu ly moi lan (0 = tat ca):").pack(side="left", padx=(0, 8))
+        ttk.Spinbox(link_limit_row, from_=0, to=100000, width=8, textvariable=self.max_links_per_run_var).pack(
+            side="left"
+        )
+
+        ttk.Label(info_frame, text=f"File luu link da xu ly: {config.PROCESSED_LINKS_FILE}").grid(
+            row=4, column=0, sticky="w", pady=(0, 6)
+        )
+
+        self.skip_long_video_cb = ttk.Checkbutton(
+            info_frame, text="Bo qua video dai hon 15 phut", variable=self.skip_long_video_var
+        )
+        self.skip_long_video_cb.grid(row=5, column=0, sticky="w", pady=(0, 6))
+
         model_row = ttk.Frame(info_frame)
-        model_row.grid(row=3, column=0, sticky="w", pady=(0, 6))
+        model_row.grid(row=6, column=0, sticky="w", pady=(0, 6))
         ttk.Label(model_row, text="Model Whisper:").pack(side="left", padx=(0, 8))
         ttk.Combobox(
             model_row,
@@ -82,7 +100,7 @@ class GetTextApp:
         ).pack(side="left")
 
         title_row = ttk.Frame(info_frame)
-        title_row.grid(row=4, column=0, sticky="w", pady=(0, 2))
+        title_row.grid(row=7, column=0, sticky="w", pady=(0, 2))
         self.title_checkbox = ttk.Checkbutton(
             title_row,
             text="Chia nhỏ audio + Tiêu đề/Mô tả/Tag",
@@ -98,7 +116,7 @@ class GetTextApp:
         self.max_chunks_spin.pack(side="left")
 
         submode_row = ttk.Frame(info_frame)
-        submode_row.grid(row=5, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
+        submode_row.grid(row=8, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
         self.sub_title_cb = ttk.Checkbutton(
             submode_row, text="Tiêu đề", variable=self.title_only_var, command=self.on_submode_title, state="disabled"
         )
@@ -331,6 +349,15 @@ class GetTextApp:
             max_chunks = config.DEFAULT_MAX_CHUNKS
 
         try:
+            max_links_per_run = int(self.max_links_per_run_var.get())
+            if max_links_per_run < 0:
+                max_links_per_run = 0
+        except Exception:
+            max_links_per_run = 0
+
+        skip_long_videos = self.skip_long_video_var.get()
+
+        try:
             self.service.initialize_whisper()
         except Exception as e:
             self.log(f"❌ Không import được torch/whisper: {e}")
@@ -343,6 +370,8 @@ class GetTextApp:
             use_title_mode=use_title_mode,
             title_submode=title_submode,
             max_chunks=max_chunks,
+            max_links_per_run=max_links_per_run,
+            skip_long_videos=skip_long_videos,
         )
 
         try:

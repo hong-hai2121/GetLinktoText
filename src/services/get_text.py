@@ -17,6 +17,8 @@ class GetTextService:
     def __init__(self, logger: Callable[[str], None] | None = None):
         self.logger = logger or (lambda message: print(message))
         self._link_counter = 0
+        self.max_links_per_run = 0
+        self.processed_links_file = config.PROCESSED_LINKS_FILE
 
     def log(self, message: str):
         self.logger(message)
@@ -27,11 +29,16 @@ class GetTextService:
         use_title_mode: bool,
         title_submode: str,
         max_chunks: int,
+        max_links_per_run: int = 0,
+        skip_long_videos: bool = False,
     ):
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
         config.MAX_CHUNKS_RUNTIME = max(1, int(max_chunks))
+        config.SKIP_LONG_VIDEOS = bool(skip_long_videos)
         config.MODEL_NAME = model_name
+        self.max_links_per_run = max(0, int(max_links_per_run))
+        self.processed_links_file = config.PROCESSED_LINKS_FILE
 
     def initialize_whisper(self):
         import torch as _torch
@@ -59,6 +66,49 @@ class GetTextService:
 
     def restart_firefox(self):
         return browser_client.restart_firefox()
+
+    def _read_links_file(self):
+        with open(config.LINKS_FILE, "r", encoding="utf-8") as file:
+            return [line.strip() for line in file.readlines() if line.strip()]
+
+    def _split_links_for_current_run(self, links: list[str]):
+        if self.max_links_per_run <= 0:
+            return links, []
+        return links[: self.max_links_per_run], links[self.max_links_per_run :]
+
+    def _append_processed_links(self, processed_links: list[str]):
+        if not processed_links:
+            return
+
+        target_dir = os.path.dirname(os.path.abspath(self.processed_links_file))
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+
+        has_existing_content = os.path.exists(self.processed_links_file) and os.path.getsize(self.processed_links_file) > 0
+        with open(self.processed_links_file, "a", encoding="utf-8") as file:
+            if has_existing_content:
+                file.write("\n")
+            file.write("\n".join(processed_links))
+            file.write("\n")
+
+    def _rewrite_remaining_links(self, remaining_links: list[str]):
+        with open(config.LINKS_FILE, "w", encoding="utf-8") as file:
+            if remaining_links:
+                file.write("\n".join(remaining_links))
+                file.write("\n")
+
+    def _finalize_link_batch(self, processed_links: list[str], remaining_links: list[str]):
+        if self.max_links_per_run <= 0 or not processed_links:
+            return
+
+        try:
+            self._append_processed_links(processed_links)
+            self._rewrite_remaining_links(remaining_links)
+            self.log(
+                f"✅ Da chuyen {len(processed_links)} link dau vao {self.processed_links_file} va cap nhat lai {config.LINKS_FILE}."
+            )
+        except Exception as e:
+            self.log(f"⚠️ Khong the cap nhat file link sau khi xu ly batch: {e}")
 
     def clean_link(self, line: str, fallback_index: int | None = None):
         match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://\S+)", line)
@@ -116,6 +166,15 @@ class GetTextService:
             self.log(f"⛔ Bỏ qua video {video_number} do tiêu đề không phù hợp.")
             return None
 
+        if config.SKIP_LONG_VIDEOS:
+            duration_seconds = download.get_video_duration_seconds(link)
+            if duration_seconds is not None and duration_seconds > config.LONG_VIDEO_THRESHOLD_SECONDS:
+                max_minutes = config.LONG_VIDEO_THRESHOLD_SECONDS // 60
+                self.log(
+                    f"⏭️ Bo qua video {video_number}: thoi luong {duration_seconds / 60:.1f} phut > {max_minutes} phut."
+                )
+                return None
+
         fb_video_url = None
         if checklinktiktok == 0:
             fb_video_url = download.get_facebook_video_url(link)
@@ -154,6 +213,17 @@ class GetTextService:
         else:
             self.log(f"❌ Lỗi! Âm thanh chưa được lưu vào {audio_path}")
             return None, None
+
+        if config.SKIP_LONG_VIDEOS:
+            duration_seconds = transcribe.get_audio_duration(audio_path)
+            if duration_seconds is None:
+                self.log("⚠️ Khong lay duoc thoi luong audio, tiep tuc xu ly.")
+            elif duration_seconds > config.LONG_VIDEO_THRESHOLD_SECONDS:
+                max_minutes = config.LONG_VIDEO_THRESHOLD_SECONDS // 60
+                self.log(
+                    f"⏭️ Bo qua video {video_number}: thoi luong {duration_seconds / 60:.1f} phut > {max_minutes} phut."
+                )
+                return None, None
 
         transcript = transcribe.transcribe_whisper(
             audio_path, use_chunks=config.USE_TITLE_MODE, max_chunks=config.MAX_CHUNKS_RUNTIME
@@ -220,8 +290,6 @@ class GetTextService:
         title, video_path, audio_path, is_local_file = download_result
 
         transcript, transcript_path = self.transcribe_audio(video_path, audio_path, video_number)
-        if transcript is None:
-            return transcript_path
 
         try:
             if os.path.exists(audio_path):
@@ -236,6 +304,9 @@ class GetTextService:
                 self.log(f"🗑️ Đã xóa file video: {video_path}")
             except Exception as e:
                 self.log(f"⚠️ Không thể xóa video: {e}")
+
+        if transcript is None:
+            return transcript_path
 
         gc.collect()
         if config.device == "cuda":
@@ -282,12 +353,17 @@ class GetTextService:
                 driver = browser_client.init_firefox()
                 browser_client.global_driver = driver
 
-        with open(config.LINKS_FILE, "r", encoding="utf-8") as file:
-            links = [line.strip() for line in file.readlines() if line.strip()]
+        links = self._read_links_file()
+        links_for_run, remaining_links = self._split_links_for_current_run(links)
 
-        for idx, raw_line in enumerate(links, start=1):
+        if self.max_links_per_run > 0:
+            self.log(
+                f"🎯 Dang chay batch {len(links_for_run)} link dau (gioi han={self.max_links_per_run}, tong={len(links)})."
+            )
+
+        for idx, raw_line in enumerate(links_for_run, start=1):
             video_number, _ = self.clean_link(raw_line)
-            self.log(f"🔄 Đang xử lý video {idx}/{len(links)} (ID={video_number})...")
+            self.log(f"🔄 Đang xử lý video {idx}/{len(links_for_run)} (ID={video_number})...")
 
             if config.USE_TITLE_MODE:
                 transcript_file = self.process_video(idx, raw_line, doc, None, None)
@@ -370,6 +446,8 @@ class GetTextService:
                     gc.collect()
                     if config.device == "cuda":
                         config.torch.cuda.empty_cache()
+
+        self._finalize_link_batch(links_for_run, remaining_links)
 
         self.log("\n🧹 Giải phóng bộ nhớ...")
 

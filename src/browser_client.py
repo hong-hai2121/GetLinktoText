@@ -175,10 +175,13 @@ def send_to_chatgpt(driver, text, mode="clean"):
             prompt = (
                 "không áp dụng yêu cầu trước đó. chỉ viết nội dung đã chỉnh sửa, không ghi phần thông báo như “Đã sửa” hay mô tả gì thêm, "
                 "viết thành 1 đoạn không thêm icon, Sửa lỗi chính tả, kiểm tra câu văn có nghĩa, thêm dấu câu nếu cần, nhưng giữ nguyên nội dung gốc, "
-                "không rút gọn hay thay đổi ý nghĩa, phù hợp với mô hình TTS, thay Bác sĩ x thành bác sĩ Hội\n\n"
+                "không rút gọn hay thay đổi ý nghĩa, phù hợp với mô hình TTS, thay Bác sĩ x thành bác sĩ Hội. "
+                "Ưu tiên sửa lỗi chính tả các từ/thuật ngữ tiếng Anh. "
+                "Quy tắc tiếng Anh: nếu là thuật ngữ/viết tắt (ví dụ: REM, cortisol, goitrogen, omega-3, HbA1c…), hãy viết đúng chuẩn; "
+                "nếu nghi ngờ do TTS nghe sai, hãy chọn cách viết tiếng Anh phổ biến nhất trong ngữ cảnh; không dịch sang tiếng Việt trừ khi bản gốc đã có dịch. "
+                "Giữ nguyên số liệu/ký hiệu (ví dụ: 2 x 10, 40–60%).\n\n"
                 + text
             )
-
         try:
             textarea = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="prompt-textarea"]'))
@@ -197,7 +200,6 @@ def send_to_chatgpt(driver, text, mode="clean"):
 
         max_wait_time = 180
         check_interval = 5
-        stable_time = 30
         stop_button_xpath = "//button[@data-testid='stop-button']"
 
         print("⌛ Đang chờ phản hồi từ ChatGPT (tối đa 3 phút)...")
@@ -242,29 +244,10 @@ def send_to_chatgpt(driver, text, mode="clean"):
             )
             time.sleep(30)
 
-        print("📩 ChatGPT ĐÃ TRẢ LỜI XONG LẤY NỘI DUNG:")
-
-        stable_counter = 0
-        last_content = final_content
-
-        while stable_counter < stable_time:
-            time.sleep(check_interval)
-
-            messages = driver.find_elements(By.CSS_SELECTOR, "div[data-message-author-role='assistant']")
-            new_messages = messages[initial_count:]
-            current_content = "\n".join([msg.text.strip() for msg in new_messages])
-
-            if current_content == last_content:
-                stable_counter += check_interval
-                print(f"⚖ Nội dung không thay đổi, chờ thêm {stable_time - stable_counter}s để xác nhận...")
-            else:
-                stable_counter = 0
-                print("🔄 Nội dung thay đổi, cập nhật lại!")
-                last_content = current_content
-                final_content = current_content
+        print("📩 ChatGPT ĐÃ TRẢ LỜI XONG, TRẢ KẾT QUẢ NGAY.")
 
         if final_content:
-            print("✅ Nội dung cuối cùng đã ổn định, trả về kết quả.")
+            print("✅ Đã nhận nội dung từ GPT, không chờ thêm.")
             return final_content
 
         print("❌ Lỗi: Không lấy được phản hồi từ ChatGPT.")

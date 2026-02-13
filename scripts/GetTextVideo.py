@@ -392,8 +392,16 @@ def transcribe_whisper(audio_path):
 def send_to_chatgpt(driver, text):
     """Gửi nội dung đến ChatGPT, lấy kết quả ngay khi ChatGPT dừng gõ, kiểm tra 30 giây để cập nhật nếu có thay đổi."""
     try:
-        prompt = f"không áp dụng yêu cầu trước đó. chỉ viết nội dung đã chỉnh sửa, không ghi phần thông báo như “Đã sửa” hay mô tả gì thêm, viết thành 1 đoạn không thêm icon, Sửa lỗi chính tả, kiểm tra câu văn có nghĩa, thêm dấu câu nếu cần, nhưng giữ nguyên nội dung gốc, không rút gọn hay thay đổi ý nghĩa, phù hợp với mô hình TTS, thay Bác sĩ x thành bác sĩ Hội\n\n{text}"
-
+        prompt = (
+            "không áp dụng yêu cầu trước đó. chỉ viết nội dung đã chỉnh sửa, không ghi phần thông báo như “Đã sửa” hay mô tả gì thêm, "
+            "viết thành 1 đoạn không thêm icon, Sửa lỗi chính tả, kiểm tra câu văn có nghĩa, thêm dấu câu nếu cần, nhưng giữ nguyên nội dung gốc, "
+            "không rút gọn hay thay đổi ý nghĩa, phù hợp với mô hình TTS, thay Bác sĩ x thành bác sĩ Hội. "
+            "Ưu tiên sửa lỗi chính tả các từ/thuật ngữ tiếng Anh. "
+            "Quy tắc tiếng Anh: nếu là thuật ngữ/viết tắt (ví dụ: REM, cortisol, goitrogen, omega-3, HbA1c…), hãy viết đúng chuẩn; "
+            "nếu nghi ngờ do TTS nghe sai, hãy chọn cách viết tiếng Anh phổ biến nhất trong ngữ cảnh; không dịch sang tiếng Việt trừ khi bản gốc đã có dịch. "
+            "Giữ nguyên số liệu/ký hiệu (ví dụ: 2 x 10, 40–60%).\n\n"
+            + text
+        )
         # Tìm ô nhập liệu của ChatGPT
         try:
             textarea = WebDriverWait(driver, 20).until(

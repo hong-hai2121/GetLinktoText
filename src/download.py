@@ -48,6 +48,20 @@ def get_facebook_video_url(video_url):
         return None
 
 
+def get_video_duration_seconds(video_url):
+    try:
+        ydl_opts = {"quiet": True, "noplaylist": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            duration = info.get("duration")
+            if duration is None:
+                return None
+            return float(duration)
+    except Exception as e:
+        print(f"⚠️ Khong lay duoc thoi luong video: {e}")
+        return None
+
+
 def download_video(video_url, output_path):
     """Tải video về thư mục output_video"""
     try:
