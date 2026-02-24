@@ -1,6 +1,7 @@
 import gc
 import os
 import re
+import threading
 from typing import Callable
 
 from docx import Document
@@ -13,12 +14,18 @@ from src import transcribe
 from src.notifications import play_sound
 
 
+class StopRequestedError(Exception):
+    """Raised when user requests to stop current processing."""
+
+
 class GetTextService:
     def __init__(self, logger: Callable[[str], None] | None = None):
         self.logger = logger or (lambda message: print(message))
         self._link_counter = 0
         self.max_links_per_run = 0
         self.processed_links_file = config.PROCESSED_LINKS_FILE
+        self.move_processed_links = True
+        self.stop_event = threading.Event()
 
     def log(self, message: str):
         self.logger(message)
@@ -31,6 +38,7 @@ class GetTextService:
         max_chunks: int,
         max_links_per_run: int = 0,
         skip_long_videos: bool = False,
+        move_processed_links: bool = True,
     ):
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
@@ -39,6 +47,7 @@ class GetTextService:
         config.MODEL_NAME = model_name
         self.max_links_per_run = max(0, int(max_links_per_run))
         self.processed_links_file = config.PROCESSED_LINKS_FILE
+        self.move_processed_links = bool(move_processed_links)
 
     def initialize_whisper(self):
         import torch as _torch
@@ -66,6 +75,19 @@ class GetTextService:
 
     def restart_firefox(self):
         return browser_client.restart_firefox()
+
+    def request_stop(self):
+        self.stop_event.set()
+
+    def clear_stop_request(self):
+        self.stop_event.clear()
+
+    def is_stop_requested(self):
+        return self.stop_event.is_set()
+
+    def _check_stop_requested(self):
+        if self.is_stop_requested():
+            raise StopRequestedError("Da nhan yeu cau dung tu nguoi dung.")
 
     def _read_links_file(self):
         with open(config.LINKS_FILE, "r", encoding="utf-8") as file:
@@ -99,6 +121,9 @@ class GetTextService:
 
     def _finalize_link_batch(self, processed_links: list[str], remaining_links: list[str]):
         if self.max_links_per_run <= 0 or not processed_links:
+            return
+        if not self.move_processed_links:
+            self.log("Batch da xu ly xong. Da tat che do chuyen link sang processed_links.txt.")
             return
 
         try:
@@ -149,6 +174,7 @@ class GetTextService:
             f.write(formatted_refined_text)
 
     def download_video(self, link: str, video_number: int, browser):
+        self._check_stop_requested()
         is_local_file = os.path.exists(link) and os.path.isfile(link)
         if is_local_file:
             self.log(f"📁 Phát hiện file local: {link}")
@@ -199,6 +225,7 @@ class GetTextService:
         return title, video_path, audio_path, is_local_file
 
     def transcribe_audio(self, video_path: str, audio_path: str, video_number: int):
+        self._check_stop_requested()
         if os.path.exists(video_path):
             self.log(f"🎥 Video đã sẵn sàng: {video_path}")
         else:
@@ -279,6 +306,7 @@ class GetTextService:
             self.log("✅ Hoàn thành xử lý video, tiếp tục với video tiếp theo!")
 
     def process_video(self, index: int, link: str, doc: Document, driver, browser):
+        self._check_stop_requested()
         video_number, link = self.clean_link(link, index)
         link = link.strip().strip('"').strip("'")
         video_number = video_number if video_number is not None else index
@@ -330,6 +358,7 @@ class GetTextService:
         return transcript_path
 
     def process_videos(self):
+        self._check_stop_requested()
         doc = Document()
         doc.save(config.OUTPUT_WORD_FILE)
 
@@ -355,6 +384,7 @@ class GetTextService:
 
         links = self._read_links_file()
         links_for_run, remaining_links = self._split_links_for_current_run(links)
+        processed_count = 0
 
         if self.max_links_per_run > 0:
             self.log(
@@ -362,6 +392,7 @@ class GetTextService:
             )
 
         for idx, raw_line in enumerate(links_for_run, start=1):
+            self._check_stop_requested()
             video_number, _ = self.clean_link(raw_line)
             self.log(f"🔄 Đang xử lý video {idx}/{len(links_for_run)} (ID={video_number})...")
 
@@ -369,12 +400,14 @@ class GetTextService:
                 transcript_file = self.process_video(idx, raw_line, doc, None, None)
             else:
                 transcript_file = self.process_video(idx, raw_line, doc, driver, driver)
+            self._check_stop_requested()
 
             if config.USE_TITLE_MODE and transcript_file and os.path.exists(transcript_file):
                 with open(transcript_file, "r", encoding="utf-8") as f:
                     current_transcript = f.read().strip()
 
                 if current_transcript:
+                    self._check_stop_requested()
                     if config.TITLE_MODE_SUBMODE == "content_only":
                         self.log(f"\n📝 Chế độ Nội dung: đã lưu transcript cho video {idx}, bỏ qua gửi GPT.")
                         try:
@@ -382,6 +415,7 @@ class GetTextService:
                             self.log(f"🗑️ Đã xóa file transcript: {transcript_file}")
                         except Exception as e:
                             self.log(f"⚠️ Không thể xóa transcript: {e}")
+                        processed_count += 1
                         continue
 
                     self.log(f"\n📝 Đang xử lý GPT cho video {idx}...")
@@ -393,6 +427,7 @@ class GetTextService:
                         "Mỗi tiêu đề trên một dòng, không ghi số thứ tự:\n\n" + current_transcript
                     )
                     titles_result = browser_client.send_to_chatgpt(driver, title_prompt, mode="raw")
+                    self._check_stop_requested()
                     if titles_result:
                         para = doc.add_paragraph()
                         para_run = para.add_run(f"🎯 5 Tiêu đề gợi ý cho video {idx}:")
@@ -407,6 +442,7 @@ class GetTextService:
                         except Exception as e:
                             self.log(f"⚠️ Không thể xóa transcript: {e}")
                         self.log(f"✅ Video {idx}: Chế độ Tiêu đề - đã xong sau Yêu cầu 1.")
+                        processed_count += 1
                         continue
 
                     self.log(f"\n📝 Yêu cầu 2: Viết mô tả video {idx} và hashtag...")
@@ -415,6 +451,7 @@ class GetTextService:
                         "dựa trên nội dung:\n\n" + current_transcript
                     )
                     desc_result = browser_client.send_to_chatgpt(driver, desc_prompt, mode="raw")
+                    self._check_stop_requested()
                     if desc_result:
                         para = doc.add_paragraph()
                         para_run = para.add_run(f"📝 Mô tả + Hashtag cho video {idx}:")
@@ -427,6 +464,7 @@ class GetTextService:
                         "ngăn cách bằng dấu phẩy. Dựa trên nội dung:\n\n" + current_transcript
                     )
                     tag_result = browser_client.send_to_chatgpt(driver, tag_prompt, mode="raw")
+                    self._check_stop_requested()
                     if tag_result:
                         para = doc.add_paragraph()
                         para_run = para.add_run(f"🏷️ Tags cho video {idx}:")
@@ -447,7 +485,11 @@ class GetTextService:
                     if config.device == "cuda":
                         config.torch.cuda.empty_cache()
 
-        self._finalize_link_batch(links_for_run, remaining_links)
+            processed_count += 1
+
+        processed_links = links_for_run[:processed_count]
+        remaining_after_run = links_for_run[processed_count:] + remaining_links
+        self._finalize_link_batch(processed_links, remaining_after_run)
 
         self.log("\n🧹 Giải phóng bộ nhớ...")
 

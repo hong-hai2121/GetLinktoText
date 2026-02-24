@@ -1,3 +1,5 @@
+
+
 D:\Python\GetLinktoText\OpenAI Whisper\clean_segments\123_sent_0001.wav
 D:\Python\GetLinktoText\OpenAI Whisper\clean_segments\123_sent_0002.wav
 D:\Python\GetLinktoText\OpenAI Whisper\clean_segments\123_sent_0003.wav

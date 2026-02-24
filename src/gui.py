@@ -6,7 +6,7 @@ from tkinter import messagebox, scrolledtext, ttk
 from src import config
 from src import io
 from src.notifications import play_sound
-from src.services.get_text import GetTextService
+from src.services.get_text import GetTextService, StopRequestedError
 
 
 class GetTextApp:
@@ -30,8 +30,11 @@ class GetTextApp:
         self.desc_mode_var = tk.BooleanVar(value=True)
         self.content_mode_var = tk.BooleanVar(value=False)
         self.skip_long_video_var = tk.BooleanVar(value=False)
+        self.move_processed_links_var = tk.BooleanVar(value=True)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
         self.max_links_per_run_var = tk.IntVar(value=0)
+        self.is_running = False
+        self.worker_thread = None
 
         self.build_ui()
         self.load_links()
@@ -83,13 +86,20 @@ class GetTextApp:
             row=4, column=0, sticky="w", pady=(0, 6)
         )
 
+        self.move_processed_links_cb = ttk.Checkbutton(
+            info_frame,
+            text="Chuyen link da xu ly sang processed_links.txt",
+            variable=self.move_processed_links_var,
+        )
+        self.move_processed_links_cb.grid(row=5, column=0, sticky="w", pady=(0, 6))
+
         self.skip_long_video_cb = ttk.Checkbutton(
             info_frame, text="Bo qua video dai hon 15 phut", variable=self.skip_long_video_var
         )
-        self.skip_long_video_cb.grid(row=5, column=0, sticky="w", pady=(0, 6))
+        self.skip_long_video_cb.grid(row=6, column=0, sticky="w", pady=(0, 6))
 
         model_row = ttk.Frame(info_frame)
-        model_row.grid(row=6, column=0, sticky="w", pady=(0, 6))
+        model_row.grid(row=7, column=0, sticky="w", pady=(0, 6))
         ttk.Label(model_row, text="Model Whisper:").pack(side="left", padx=(0, 8))
         ttk.Combobox(
             model_row,
@@ -100,7 +110,7 @@ class GetTextApp:
         ).pack(side="left")
 
         title_row = ttk.Frame(info_frame)
-        title_row.grid(row=7, column=0, sticky="w", pady=(0, 2))
+        title_row.grid(row=8, column=0, sticky="w", pady=(0, 2))
         self.title_checkbox = ttk.Checkbutton(
             title_row,
             text="Chia nhỏ audio + Tiêu đề/Mô tả/Tag",
@@ -116,7 +126,7 @@ class GetTextApp:
         self.max_chunks_spin.pack(side="left")
 
         submode_row = ttk.Frame(info_frame)
-        submode_row.grid(row=8, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
+        submode_row.grid(row=9, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
         self.sub_title_cb = ttk.Checkbutton(
             submode_row, text="Tiêu đề", variable=self.title_only_var, command=self.on_submode_title, state="disabled"
         )
@@ -137,17 +147,19 @@ class GetTextApp:
 
         self.start_btn = ttk.Button(action_frame, text="▶ Bắt đầu xử lý", command=self.start_process, width=22)
         self.start_btn.grid(row=0, column=0, padx=(0, 8), pady=(0, 8), sticky="ew")
+        self.stop_btn = ttk.Button(action_frame, text="Dừng", command=self.stop_process, width=22, state="disabled")
+        self.stop_btn.grid(row=0, column=1, pady=(0, 8), sticky="ew")
 
         self.restart_firefox_btn = ttk.Button(
             action_frame, text="♻ Khởi động lại Firefox", command=self.restart_firefox_async, width=22
         )
-        self.restart_firefox_btn.grid(row=0, column=1, pady=(0, 8), sticky="ew")
+        self.restart_firefox_btn.grid(row=1, column=0, padx=(0, 8), sticky="ew")
 
         self.save_btn = ttk.Button(action_frame, text="💾 Lưu danh sách", command=self.save_links, width=22)
-        self.save_btn.grid(row=1, column=0, padx=(0, 8), sticky="ew")
+        self.save_btn.grid(row=1, column=1, sticky="ew")
 
         self.reload_btn = ttk.Button(action_frame, text="🔄 Tải lại danh sách", command=self.load_links, width=22)
-        self.reload_btn.grid(row=1, column=1, sticky="ew")
+        self.reload_btn.grid(row=2, column=0, columnspan=2, pady=(8, 0), sticky="ew")
 
         main = ttk.LabelFrame(self.root, text="Danh sách", padding=10)
         main.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
@@ -314,7 +326,24 @@ class GetTextApp:
 
         self.root.after(0, _append)
 
+    def set_running_state(self, running: bool):
+        self.is_running = running
+        self.start_btn.config(state="disabled" if running else "normal")
+        self.stop_btn.config(state="normal" if running else "disabled")
+
+    def stop_process(self):
+        if not self.is_running:
+            self.log("Khong co tien trinh nao dang chay.")
+            return
+        self.stop_btn.config(state="disabled")
+        self.service.request_stop()
+        self.log("Da gui yeu cau dung. Vui long doi tac vu hien tai ket thuc.")
+
     def start_process(self):
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.log("Tien trinh dang chay. Neu muon dung, hay bam 'Dung'.")
+            return
+
         self.save_links()
         try:
             self.load_links()
@@ -324,8 +353,10 @@ class GetTextApp:
             self.nb.select(0)
         except Exception:
             pass
-        self.start_btn.config(state="disabled")
-        threading.Thread(target=self.run_pipeline_thread, daemon=True).start()
+        self.service.clear_stop_request()
+        self.set_running_state(True)
+        self.worker_thread = threading.Thread(target=self.run_pipeline_thread, daemon=True)
+        self.worker_thread.start()
 
     def run_pipeline_thread(self):
         selected = self.selected_model.get()
@@ -356,13 +387,18 @@ class GetTextApp:
             max_links_per_run = 0
 
         skip_long_videos = self.skip_long_video_var.get()
+        move_processed_links = self.move_processed_links_var.get()
 
         try:
             self.service.initialize_whisper()
+            if self.service.is_stop_requested():
+                self.log("=== DA DUNG THEO YEU CAU ===")
+                self.root.after(0, lambda: self.set_running_state(False))
+                return
         except Exception as e:
             self.log(f"❌ Không import được torch/whisper: {e}")
             messagebox.showerror("Lỗi", f"Không import được torch/whisper: {e}")
-            self.root.after(0, lambda: self.start_btn.config(state="normal"))
+            self.root.after(0, lambda: self.set_running_state(False))
             return
 
         self.service.configure_runtime(
@@ -372,15 +408,20 @@ class GetTextApp:
             max_chunks=max_chunks,
             max_links_per_run=max_links_per_run,
             skip_long_videos=skip_long_videos,
+            move_processed_links=move_processed_links,
         )
 
         try:
             self.service.load_model(selected)
+            if self.service.is_stop_requested():
+                self.log("=== DA DUNG THEO YEU CAU ===")
+                self.root.after(0, lambda: self.set_running_state(False))
+                return
         except Exception as e:
             self.log(f"❌ Lỗi khi tải model: {e}")
             play_sound("error")
             messagebox.showerror("Lỗi", f"Không thể tải model: {e}")
-            self.root.after(0, lambda: self.start_btn.config(state="normal"))
+            self.root.after(0, lambda: self.set_running_state(False))
             return
 
         import builtins
@@ -398,13 +439,15 @@ class GetTextApp:
             self.service.process_videos()
             self.log("=== HOÀN TẤT ===")
             play_sound("success")
+        except StopRequestedError:
+            self.log("=== DA DUNG THEO YEU CAU ===")
         except Exception as e:
             self.log(f"❌ Lỗi: {e}")
             play_sound("error")
             messagebox.showerror("Lỗi", str(e))
         finally:
             builtins.print = original_print
-            self.root.after(0, lambda: self.start_btn.config(state="normal"))
+            self.root.after(0, lambda: self.set_running_state(False))
             try:
                 self.root.after(0, lambda: self.nb.select(0))
                 self.root.after(0, lambda: self.log_text.see(tk.END))
