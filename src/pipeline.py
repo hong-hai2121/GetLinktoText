@@ -19,17 +19,29 @@ def clean_link(line: str, fallback_index: int | None = None):
       - Nếu có fallback_index: dùng fallback_index
       - Nếu không: tự tăng bộ đếm nội bộ (giống cách cũ nhưng không dùng mutable default arg)
     """
-    match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://\S+)", line)
+    line = line.strip()
+    match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://[^\s\"'<>]+)", line)
     if match:
-        return int(match.group(1)), match.group(2)
+        return int(match.group(1)), match.group(2).rstrip(".,;)]}>")
+
+    url_match = re.search(r"(https?://[^\s\"'<>]+)", line)
+    if url_match:
+        extracted_url = url_match.group(1).rstrip(".,;)]}>")
+        if fallback_index is not None:
+            return fallback_index, extracted_url
+
+        if not hasattr(clean_link, "_counter"):
+            clean_link._counter = 0
+        clean_link._counter += 1
+        return clean_link._counter, extracted_url
 
     if fallback_index is not None:
-        return fallback_index, line.strip()
+        return fallback_index, line
 
     if not hasattr(clean_link, "_counter"):
         clean_link._counter = 0
     clean_link._counter += 1
-    return clean_link._counter, line.strip()
+    return clean_link._counter, line
 
 
 def check_title_blacklist(title):

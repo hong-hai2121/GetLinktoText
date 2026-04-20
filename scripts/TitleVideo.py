@@ -23,7 +23,7 @@ import gc
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # Giờ mới import được
-from profiles_config import get_profile, FIREFOX_PROFILE_PATH
+from profiles_config import FIREFOX_PROFILE_PATH
 
 # ================= Cấu hình =================
 LINKS_FILE = "linkgettoText.txt"  # File chứa danh sách link video
@@ -150,38 +150,6 @@ def check_title_blacklist(title):
             print(f"⚠️ Tiêu đề '{title}' chứa từ khóa cấm '{keyword}' (phần kiểm tra: '{title_clean}'), bỏ qua video.")
             return True
     return False
-
-# def get_video_title_facebook(url, browser):
-#     """Lấy tiêu đề video bằng danh sách XPath."""
-#     try:
-#         browser.execute_script("window.open('about:blank', '_blank');")
-#         browser.switch_to.window(browser.window_handles[-1])
-#         browser.get(url)
-#         wait = WebDriverWait(browser, 10)
-#         xpaths = [
-#             '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[1]/div/div[2]/div/div/div/div[1]/div/div/div[2]/div[1]/div/div[1]/div[2]/div/div/div[3]/span/div',
-#             '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div[1]/div/div[1]/div[2]/div/div/div[2]/span/div',
-#             '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[2]/div[1]/div/div/div[2]/div[1]/div[3]/div/span/div/div'
-            
-#         ]
-#         for xpath in xpaths:
-#             try:
-#                 title_element = wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
-#                 title = title_element.text.strip()
-#                 print(f"✅ Tiêu đề video: {title}")
-#                 browser.close()
-#                 browser.switch_to.window(browser.window_handles[0])
-#                 return title
-#             except:
-#                 print(f"⚠️ Không tìm thấy tiêu đề với XPath: {xpath}: ")
-                
-#         print("❌ Không thể lấy tiêu đề với cả hai XPath.")
-#         browser.close()
-#         browser.switch_to.window(browser.window_handles[0])
-#         return "Không thể lấy tiêu đề"
-#     except Exception as e:
-#         print(f"❌ Lỗi khi lấy tiêu đề: {e}")
-#         return "Không thể lấy tiêu đề"
 
 def get_video_title_facebook(url, browser=None):  # vẫn giữ tham số browser để tương thích code cũ
     """
@@ -421,36 +389,6 @@ def transcribe_whisper(audio_path):
     result = model.transcribe(audio_path, language="vi")
     #result = model.transcribe(audio_path)
     transcript = result["text"]
-
-    # 🔹 Kiểm tra lỗi lặp từ
-    # if detect_repetition(transcript):
-    #     print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3' và nhận diện lại...")
-
-    #     MODEL_NAME2 = "large-v3"
-    #     whisper_model_path = os.path.join(WHISPER_MODEL_PATH, f"{MODEL_NAME2}.pt")
-    #     if os.path.exists(whisper_model_path):
-    #         print(f"✅ Mô hình Whisper '{MODEL_NAME}' đã có, không cần tải lại.")
-    #     else:
-    #         print(f"🔄 Tải mô hình Whisper '{MODEL_NAME}'...")
-    #     # 🔹 Kiểm tra model2 đã tồn tại hay chưa, nếu chưa thì tải
-    #     if 'model2' not in globals() or model2 is None:
-    #         print(f"🔄 Đang tải model large-v3...")
-    #         model2 = whisper.load_model(MODEL_NAME2, download_root=WHISPER_MODEL_PATH).to(device)
-    #         print("✅ Model large-v3 đã tải thành công.")
-
-    #     # 🔹 Sau khi tải xong, mới xóa model medium
-    #     if 'model' in globals():
-    #         print("🗑️ Đang xóa model medium khỏi bộ nhớ GPU để giải phóng tài nguyên...")
-    #         del model
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #         print("✅ Model medium đã được xóa.")
-
-    #     # 🔹 Chạy nhận diện lại với model2 (large-v3)
-    #     print(f"📝 Chạy lại nhận diện giọng nói với model '{MODEL_NAME2}'...")
-    #     result = model2.transcribe(audio_path, language="vi")
-    #     transcript = result["text"]
-
     return transcript
 
 
@@ -534,27 +472,6 @@ def send_to_chatgpt(driver, text):
         time.sleep(5)
         #print(final_content)
 
-        # **Bước 4: Kiểm tra nội dung có thay đổi trong 30 giây không**
-        # stable_counter = 0
-        # last_content = final_content  # Nội dung vừa lấy ngay sau khi ChatGPT dừng gõ
-
-        # while stable_counter < stable_time:
-        #     time.sleep(check_interval)
-
-        #     # Lấy nội dung mới
-        #     messages = driver.find_elements(By.CSS_SELECTOR, "div[data-message-author-role='assistant']")
-        #     new_messages = messages[initial_count:]  # Chỉ lấy tin nhắn mới
-        #     current_content = "\n".join([msg.text.strip() for msg in new_messages])
-
-        #     if current_content == last_content:
-        #         stable_counter += check_interval
-        #         print(f"⚖ Nội dung không thay đổi, chờ thêm {stable_time - stable_counter}s để xác nhận...")
-        #     else:
-        #         stable_counter = 0  # Reset nếu nội dung thay đổi
-        #         print("🔄 Nội dung thay đổi, cập nhật lại!")
-        #         last_content = current_content  # Cập nhật nội dung mới nhất
-        #         final_content = current_content
-
         # **Bước 5: Trả về nội dung cuối cùng sau khi ổn định**
         if final_content:
             print("✅ Nội dung cuối cùng đã ổn định, trả về kết quả.")
@@ -605,17 +522,6 @@ def process_video(index, link, doc, driver, browser):
 
     checklinktiktok = 1 if is_tiktok_link(link) else 0
     print(f"{link} -> TikTok: {checklinktiktok}")
-
-    # Lấy tiêu đề video
-    # if checklinktiktok == 0:
-    #     title = get_video_title_facebook(link, browser)
-    # else:
-    #     title = get_video_title_facebook(link, browser) #get_video_title_tiktok
-        
-    # Kiểm tra tiêu đề có chứa từ khóa cấm không
-    # if CHECK_TITLE_BLACKLIST and check_title_blacklist(title):
-    #     print(f"⛔ Bỏ qua video {video_number} do tiêu đề không phù hợp.")
-    #     return  # Thoát hàm, không xử lý tiếp
     
     # Tiếp tục xử lý nếu tiêu đề hợp lệ
     if checklinktiktok == 0:

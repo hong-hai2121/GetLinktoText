@@ -2,6 +2,7 @@
 # Python
 #############
 __pycache__/
+.pycache_tmp/
 *.py[cod]
 *$py.class
 *.pyd

@@ -10,7 +10,7 @@ PROFILES = {
     "Profile06": r"C:\Users\PC\AppData\Roaming\Mozilla\Firefox\Profiles\mef4v4wh.6"
 }
 
-selected_name = "Profile01"
+selected_name = "Profile05"
 
 # Cho phép override bằng biến môi trường FIREFOX_PROFILE_NAME nếu muốn tạm đổi
 selected_name = os.environ.get("FIREFOX_PROFILE_NAME", selected_name)

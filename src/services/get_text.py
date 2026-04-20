@@ -38,12 +38,14 @@ class GetTextService:
         max_chunks: int,
         max_links_per_run: int = 0,
         skip_long_videos: bool = False,
+        skip_gpt_processing: bool = False,
         move_processed_links: bool = True,
     ):
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
         config.MAX_CHUNKS_RUNTIME = max(1, int(max_chunks))
         config.SKIP_LONG_VIDEOS = bool(skip_long_videos)
+        config.SKIP_GPT_PROCESSING = bool(skip_gpt_processing)
         config.MODEL_NAME = model_name
         self.max_links_per_run = max(0, int(max_links_per_run))
         self.processed_links_file = config.PROCESSED_LINKS_FILE
@@ -136,15 +138,25 @@ class GetTextService:
             self.log(f"⚠️ Khong the cap nhat file link sau khi xu ly batch: {e}")
 
     def clean_link(self, line: str, fallback_index: int | None = None):
-        match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://\S+)", line)
+        line = line.strip()
+        match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://[^\s\"'<>]+)", line)
         if match:
-            return int(match.group(1)), match.group(2)
+            return int(match.group(1)), match.group(2).rstrip(".,;)]}>")
+
+        url_match = re.search(r"(https?://[^\s\"'<>]+)", line)
+        if url_match:
+            extracted_url = url_match.group(1).rstrip(".,;)]}>")
+            if fallback_index is not None:
+                return fallback_index, extracted_url
+
+            self._link_counter += 1
+            return self._link_counter, extracted_url
 
         if fallback_index is not None:
-            return fallback_index, line.strip()
+            return fallback_index, line
 
         self._link_counter += 1
-        return self._link_counter, line.strip()
+        return self._link_counter, line
 
     def check_title_blacklist(self, title: str):
         if not title or title == "Không thể lấy tiêu đề":
@@ -253,7 +265,11 @@ class GetTextService:
                 return None, None
 
         transcript = transcribe.transcribe_whisper(
-            audio_path, use_chunks=config.USE_TITLE_MODE, max_chunks=config.MAX_CHUNKS_RUNTIME
+            audio_path,
+            use_chunks=config.USE_TITLE_MODE,
+            max_chunks=config.MAX_CHUNKS_RUNTIME,
+            save_chunk_transcripts=config.SKIP_GPT_PROCESSING,
+            chunk_text_prefix=os.path.join(config.OUTPUT_VIDEO_DIR, f"transcript_{video_number}"),
         )
         transcript_filename = f"transcript_{video_number}.txt"
         transcript_path = os.path.join(config.OUTPUT_VIDEO_DIR, transcript_filename)
@@ -288,7 +304,7 @@ class GetTextService:
         if transcript:
             if refined_text:
                 doc.add_paragraph(f"Nội dung:\n{refined_text}")
-            elif not config.USE_TITLE_MODE or (
+            elif config.SKIP_GPT_PROCESSING or not config.USE_TITLE_MODE or (
                 config.USE_TITLE_MODE and config.TITLE_MODE_SUBMODE == "content_only"
             ):
                 doc.add_paragraph(f"Nội dung:\n{transcript}")
@@ -340,7 +356,11 @@ class GetTextService:
         if config.device == "cuda":
             config.torch.cuda.empty_cache()
 
-        if config.USE_TITLE_MODE:
+        if config.SKIP_GPT_PROCESSING:
+            self.log(f"Video {video_number}: da bat che do chi luu transcript, bo qua GPT.")
+            refined_text = None
+            title_suggestion = None
+        elif config.USE_TITLE_MODE:
             self.log("📁 Chế độ chia nhỏ: sẽ xử lý GPT sau khi nhận diện xong tất cả...")
             refined_text = None
             title_suggestion = None
@@ -364,8 +384,8 @@ class GetTextService:
 
         driver = browser_client.global_driver
 
-        need_gpt = (not config.USE_TITLE_MODE) or (
-            config.USE_TITLE_MODE and config.TITLE_MODE_SUBMODE != "content_only"
+        need_gpt = (not config.SKIP_GPT_PROCESSING) and (
+            (not config.USE_TITLE_MODE) or (config.USE_TITLE_MODE and config.TITLE_MODE_SUBMODE != "content_only")
         )
 
         if need_gpt:
@@ -396,13 +416,16 @@ class GetTextService:
             video_number, _ = self.clean_link(raw_line)
             self.log(f"🔄 Đang xử lý video {idx}/{len(links_for_run)} (ID={video_number})...")
 
-            if config.USE_TITLE_MODE:
-                transcript_file = self.process_video(idx, raw_line, doc, None, None)
-            else:
-                transcript_file = self.process_video(idx, raw_line, doc, driver, driver)
+            active_driver = driver if need_gpt else None
+            transcript_file = self.process_video(idx, raw_line, doc, active_driver, active_driver)
             self._check_stop_requested()
 
-            if config.USE_TITLE_MODE and transcript_file and os.path.exists(transcript_file):
+            if (
+                config.USE_TITLE_MODE
+                and not config.SKIP_GPT_PROCESSING
+                and transcript_file
+                and os.path.exists(transcript_file)
+            ):
                 with open(transcript_file, "r", encoding="utf-8") as f:
                     current_transcript = f.read().strip()
 

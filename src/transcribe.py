@@ -116,7 +116,13 @@ def detect_repetition(transcript):
     return False
 
 
-def transcribe_whisper(audio_path, use_chunks=False, max_chunks=None):
+def transcribe_whisper(
+    audio_path,
+    use_chunks=False,
+    max_chunks=None,
+    save_chunk_transcripts=False,
+    chunk_text_prefix=None,
+):
     """Nhận diện giọng nói bằng Whisper; hỗ trợ chia nhỏ và chỉ lấy max_chunks đoạn đầu."""
 
     print("📝 Đang kiểm tra thời lượng file âm thanh...")
@@ -203,6 +209,11 @@ def transcribe_whisper(audio_path, use_chunks=False, max_chunks=None):
             try:
                 text_chunk = transcribe_one(chunk_path)
                 full_text_parts.append(text_chunk)
+                if save_chunk_transcripts and chunk_text_prefix:
+                    chunk_txt_path = f"{chunk_text_prefix}_chunk_{idx}.txt"
+                    with open(chunk_txt_path, "w", encoding="utf-8") as chunk_file:
+                        chunk_file.write(text_chunk)
+                    print(f"Da luu transcript tung doan: {chunk_txt_path}")
             except Exception as e:
                 print(f"❌ Lỗi khi xử lý đoạn {idx}: {e}")
             finally:

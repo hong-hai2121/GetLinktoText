@@ -29,8 +29,9 @@ class GetTextApp:
         self.title_only_var = tk.BooleanVar(value=False)
         self.desc_mode_var = tk.BooleanVar(value=True)
         self.content_mode_var = tk.BooleanVar(value=False)
+        self.skip_gpt_var = tk.BooleanVar(value=False)
         self.skip_long_video_var = tk.BooleanVar(value=False)
-        self.move_processed_links_var = tk.BooleanVar(value=True)
+        self.move_processed_links_var = tk.BooleanVar(value=False)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
         self.max_links_per_run_var = tk.IntVar(value=0)
         self.is_running = False
@@ -98,8 +99,15 @@ class GetTextApp:
         )
         self.skip_long_video_cb.grid(row=6, column=0, sticky="w", pady=(0, 6))
 
+        self.skip_gpt_cb = ttk.Checkbutton(
+            info_frame,
+            text="Khong gui noi dung len GPT, chi luu transcript",
+            variable=self.skip_gpt_var,
+        )
+        self.skip_gpt_cb.grid(row=7, column=0, sticky="w", pady=(0, 6))
+
         model_row = ttk.Frame(info_frame)
-        model_row.grid(row=7, column=0, sticky="w", pady=(0, 6))
+        model_row.grid(row=8, column=0, sticky="w", pady=(0, 6))
         ttk.Label(model_row, text="Model Whisper:").pack(side="left", padx=(0, 8))
         ttk.Combobox(
             model_row,
@@ -110,7 +118,7 @@ class GetTextApp:
         ).pack(side="left")
 
         title_row = ttk.Frame(info_frame)
-        title_row.grid(row=8, column=0, sticky="w", pady=(0, 2))
+        title_row.grid(row=9, column=0, sticky="w", pady=(0, 2))
         self.title_checkbox = ttk.Checkbutton(
             title_row,
             text="Chia nhỏ audio + Tiêu đề/Mô tả/Tag",
@@ -126,7 +134,7 @@ class GetTextApp:
         self.max_chunks_spin.pack(side="left")
 
         submode_row = ttk.Frame(info_frame)
-        submode_row.grid(row=9, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
+        submode_row.grid(row=10, column=0, sticky="w", padx=(18, 0), pady=(2, 0))
         self.sub_title_cb = ttk.Checkbutton(
             submode_row, text="Tiêu đề", variable=self.title_only_var, command=self.on_submode_title, state="disabled"
         )
@@ -387,6 +395,7 @@ class GetTextApp:
             max_links_per_run = 0
 
         skip_long_videos = self.skip_long_video_var.get()
+        skip_gpt_processing = self.skip_gpt_var.get()
         move_processed_links = self.move_processed_links_var.get()
 
         try:
@@ -408,6 +417,7 @@ class GetTextApp:
             max_chunks=max_chunks,
             max_links_per_run=max_links_per_run,
             skip_long_videos=skip_long_videos,
+            skip_gpt_processing=skip_gpt_processing,
             move_processed_links=move_processed_links,
         )
 
