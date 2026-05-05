@@ -3,6 +3,7 @@ import shutil
 
 from config import (
     BASE_DIR,
+    COOKIES_BROWSER,
     GECKODRIVER_PATH,
     LINKS_FILE,
     MODEL_NAME,

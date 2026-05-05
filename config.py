@@ -18,3 +18,5 @@ MODEL_NAME = _env("MODEL_NAME", "medium")
 GECKODRIVER_PATH = _env(
     "GECKODRIVER_PATH", r"D:\\Python\\GetLinktoText\\geckodriver.exe"
 )
+# Browser to use for yt-dlp cookie extraction ("chrome", "firefox", "edge", etc.)
+COOKIES_BROWSER = _env("COOKIES_BROWSER", "chrome")

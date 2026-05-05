@@ -2,6 +2,13 @@ import re
 
 import yt_dlp
 from src.notifications import play_sound
+from src import config as src_config
+
+
+def _ydl_opts_with_cookies(base_opts: dict | None = None) -> dict:
+    opts = base_opts.copy() if base_opts else {}
+    opts["cookiesfrombrowser"] = (src_config.COOKIES_BROWSER,)
+    return opts
 
 
 def get_video_title_facebook(url, browser=None):  # vẫn giữ tham số browser để tương thích code cũ
@@ -10,7 +17,7 @@ def get_video_title_facebook(url, browser=None):  # vẫn giữ tham số browse
     """
     try:
         print(f"🔍 Đang xử lý: {url}")
-        with yt_dlp.YoutubeDL() as ydl:
+        with yt_dlp.YoutubeDL(_ydl_opts_with_cookies()) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get("description", "Video không có tiêu đề")
             print(f"🎬 Tiêu đề gốc: {title}")
@@ -38,7 +45,7 @@ def get_video_title_facebook(url, browser=None):  # vẫn giữ tham số browse
 def get_facebook_video_url(video_url):
     """Lấy URL thực tế của video Facebook bằng yt-dlp"""
     try:
-        ydl_opts = {"quiet": True, "format": "bestaudio/best"}
+        ydl_opts = _ydl_opts_with_cookies({"quiet": True, "format": "bestaudio/best"})
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
             return info["url"]
@@ -50,7 +57,7 @@ def get_facebook_video_url(video_url):
 
 def get_video_duration_seconds(video_url):
     try:
-        ydl_opts = {"quiet": True, "noplaylist": True}
+        ydl_opts = _ydl_opts_with_cookies({"quiet": True, "noplaylist": True})
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
             duration = info.get("duration")
@@ -65,7 +72,7 @@ def get_video_duration_seconds(video_url):
 def download_video(video_url, output_path):
     """Tải video về thư mục output_video"""
     try:
-        ydl_opts = {"quiet": True, "outtmpl": output_path}
+        ydl_opts = _ydl_opts_with_cookies({"quiet": True, "outtmpl": output_path})
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
         print("✅ Video đã được tải xuống thành công.")
