@@ -93,7 +93,7 @@ class GetTextService:
 
     def _check_stop_requested(self):
         if self.is_stop_requested():
-            raise StopRequestedError("Da nhan yeu cau dung tu nguoi dung.")
+            raise StopRequestedError("Đã nhận yêu cầu dừng từ người dùng.")
 
     def _read_links_file(self):
         with open(config.LINKS_FILE, "r", encoding="utf-8") as file:
@@ -112,9 +112,8 @@ class GetTextService:
         if target_dir:
             os.makedirs(target_dir, exist_ok=True)
 
-        has_existing_content = os.path.exists(self.processed_links_file) and os.path.getsize(self.processed_links_file) > 0
         with open(self.processed_links_file, "a", encoding="utf-8") as file:
-            if has_existing_content:
+            if file.tell() > 0:
                 file.write("\n")
             file.write("\n".join(processed_links))
             file.write("\n")
@@ -129,17 +128,17 @@ class GetTextService:
         if self.max_links_per_run <= 0 or not processed_links:
             return
         if not self.move_processed_links:
-            self.log("Batch da xu ly xong. Da tat che do chuyen link sang processed_links.txt.")
+            self.log("Batch đã xử lý xong. Đã tắt chế độ chuyển link sang processed_links.txt.")
             return
 
         try:
             self._append_processed_links(processed_links)
             self._rewrite_remaining_links(remaining_links)
             self.log(
-                f"✅ Da chuyen {len(processed_links)} link dau vao {self.processed_links_file} va cap nhat lai {config.LINKS_FILE}."
+                f"✅ Đã chuyển {len(processed_links)} link đầu vào {self.processed_links_file} và cập nhật lại {config.LINKS_FILE}."
             )
         except Exception as e:
-            self.log(f"⚠️ Khong the cap nhat file link sau khi xu ly batch: {e}")
+            self.log(f"⚠️ Không thể cập nhật file link sau khi xử lý batch: {e}")
 
     def clean_link(self, line: str, fallback_index: int | None = None):
         line = line.strip()
@@ -317,13 +316,14 @@ class GetTextService:
 
         doc.add_paragraph("=" * 40)
 
-        try:
-            doc.save(config.OUTPUT_WORD_FILE)
-            self.log("💾 Đã lưu kết quả thành công!")
-        except Exception as e:
-            self.log(f"❌ Lỗi khi lưu file Word: {e}")
-        finally:
-            self.log("✅ Hoàn thành xử lý video, tiếp tục với video tiếp theo!")
+        # Trong title_mode với GPT, caller sẽ thêm nội dung GPT rồi mới save — tránh double save
+        if not (config.USE_TITLE_MODE and not config.SKIP_GPT_PROCESSING):
+            try:
+                doc.save(config.OUTPUT_WORD_FILE)
+                self.log("💾 Đã lưu kết quả thành công!")
+            except Exception as e:
+                self.log(f"❌ Lỗi khi lưu file Word: {e}")
+        self.log("✅ Hoàn thành xử lý video, tiếp tục với video tiếp theo!")
 
     def process_video(self, index: int, link: str, doc: Document, driver, browser):
         self._check_stop_requested()
@@ -375,7 +375,7 @@ class GetTextService:
             title_suggestion = None
         else:
             self.log(f"⚠️ Video {video_number} không có transcript, bỏ qua gửi đến ChatGPT.")
-            refined_text = "Dây là video quá dài để lấy nội dung."
+            refined_text = "Đây là video quá dài để lấy nội dung."
             title_suggestion = None
 
         self.export_word(doc, video_number, link, title, transcript, refined_text, title_suggestion)
@@ -512,7 +512,8 @@ class GetTextService:
                     if config.device == "cuda":
                         config.torch.cuda.empty_cache()
 
-            processed_count += 1
+            if transcript_file is not None:
+                processed_count += 1
 
         processed_links = links_for_run[:processed_count]
         remaining_after_run = links_for_run[processed_count:] + remaining_links

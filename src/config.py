@@ -15,6 +15,7 @@ from config import (
 from profiles_config import FIREFOX_PROFILE_PATH
 
 FFMPEG_PATH = shutil.which("ffmpeg")
+FFPROBE_PATH = shutil.which("ffprobe")
 
 CHUNK_LENGTH_MS = 3 * 60 * 1000  # 3 phút/đoạn
 DEFAULT_MAX_CHUNKS = 2  # Mặc định nhận diện 5 đoạn đầu

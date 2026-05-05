@@ -9,10 +9,26 @@ from pydub import AudioSegment
 from src import config
 from src.notifications import play_sound
 
+# Tham số cố định cho faster-whisper — module-level để không tái tạo mỗi lần gọi
+_TRANSCRIBE_OPTS = dict(
+    language="vi",
+    condition_on_previous_text=False,
+    temperature=0,
+    beam_size=5,
+    initial_prompt="Đây là nội dung tiếng Việt.",
+    no_speech_threshold=0.6,
+    compression_ratio_threshold=2.4,
+    vad_filter=True,
+    vad_parameters=dict(min_silence_duration_ms=500),
+)
+
+
+def _segments_to_text(segments) -> str:
+    return " ".join(seg.text.strip() for seg in segments)
+
 
 def extract_audio(video_path, output_wav):
-    """Trích xuất âm thanh từ video"""
-    command = [config.FFMPEG_PATH, "-i", video_path, "-ac", "1", "-ar", "16000", "-y", output_wav, "-vn"]
+    command = [config.FFMPEG_PATH, "-i", video_path, "-ac", "1", "-ar", "16000", "-y", "-vn", output_wav]
     try:
         subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         print(f"✅ Âm thanh đã trích xuất thành công: {output_wav}")
@@ -23,32 +39,61 @@ def extract_audio(video_path, output_wav):
         return None
 
 
-def extract_audioTIKTOK(video_path, audio_path):
-    """Trích xuất âm thanh từ video"""
-    command = [config.FFMPEG_PATH, "-i", video_path, "-ac", "1", "-ar", "16000", "-y", audio_path, "-vn"]
+def get_audio_duration(audio_path):
+    """Lấy thời lượng file audio bằng ffprobe — không load file vào RAM."""
+    if config.FFPROBE_PATH:
+        try:
+            result = subprocess.run(
+                [
+                    config.FFPROBE_PATH, "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    audio_path,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            return float(result.stdout.strip())
+        except Exception as e:
+            print(f"❌ Lỗi khi lấy thời lượng file audio: {e}")
+            play_sound("error")
+            return None
+    # Fallback khi ffprobe không có trong PATH
     try:
-        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        print(f"✅ Âm thanh đã trích xuất thành công: {audio_path}")
-        return audio_path
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Lỗi khi trích xuất âm thanh: {e}")
+        return len(AudioSegment.from_file(audio_path)) / 1000
+    except Exception as e:
+        print(f"❌ Lỗi khi lấy thời lượng file audio: {e}")
         play_sound("error")
         return None
 
 
 def split_audio(audio_path, chunk_length_ms=180000, max_chunks=None):
-    """Chia file audio thành các đoạn nhỏ; giới hạn số đoạn nếu max_chunks được đặt."""
+    """Chia file audio thành các đoạn nhỏ bằng ffmpeg — không load toàn bộ file vào RAM."""
     try:
-        audio = AudioSegment.from_file(audio_path)
+        duration = get_audio_duration(audio_path)
+        if duration is None:
+            return []
+        chunk_length_s = chunk_length_ms / 1000
         chunks = []
-        for idx, start_ms in enumerate(range(0, len(audio), chunk_length_ms)):
+        start_s = 0.0
+        idx = 0
+        while start_s < duration:
             if max_chunks is not None and idx >= max_chunks:
                 break
-            end_ms = start_ms + chunk_length_ms
-            chunk = audio[start_ms:end_ms]
             chunk_path = f"{audio_path}_chunk_{idx}.wav"
-            chunk.export(chunk_path, format="wav")
+            command = [
+                config.FFMPEG_PATH, "-y",
+                "-ss", str(start_s),
+                "-t", str(chunk_length_s),
+                "-i", audio_path,
+                "-ac", "1", "-ar", "16000", "-vn",
+                chunk_path,
+            ]
+            subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             chunks.append(chunk_path)
+            start_s += chunk_length_s
+            idx += 1
         return chunks
     except Exception as e:
         print(f"❌ Lỗi khi chia nhỏ file âm thanh: {e}")
@@ -56,22 +101,10 @@ def split_audio(audio_path, chunk_length_ms=180000, max_chunks=None):
         return []
 
 
-def get_audio_duration(audio_path):
-    """Lấy thời lượng của file audio (đơn vị giây)."""
-    try:
-        audio = AudioSegment.from_file(audio_path)
-        return len(audio) / 1000
-    except Exception as e:
-        print(f"❌ Lỗi khi lấy thời lượng file audio: {e}")
-        play_sound("error")
-        return None
-
-
 def detect_repetition(transcript):
     if not transcript:
         return False
 
-    # ✅ Điều kiện đặc biệt: chứa từ khoá quảng bá spam
     spam_keywords = [
         "Hãy subscribe cho kênh Ghiền Mì Gõ để",
         "hãy subscribe cho kênh ghiền mì gõ để",
@@ -84,12 +117,10 @@ def detect_repetition(transcript):
             play_sound("warning")
             return True
 
-    words = transcript.split()
     sentences = re.split(r"[\n.!?]", transcript)
     sentences = [s.strip() for s in sentences if s.strip()]
 
-    # 🔹 Phát hiện câu lặp liên tiếp
-    repeat_threshold = 3  # Nếu một câu giống nhau lặp liên tiếp 3 lần → lỗi
+    repeat_threshold = 3
     repeat_count = 1
     last_sentence = None
 
@@ -105,7 +136,6 @@ def detect_repetition(transcript):
             play_sound("warning")
             return False
 
-    # 🔹 Giữ lại kiểm tra tổng thể
     sentence_counts = Counter(sentences)
     repeated_sentences = sum(1 for count in sentence_counts.values() if count > 2)
     if len(sentences) > 0 and (repeated_sentences / len(sentences)) > 0.1:
@@ -123,7 +153,7 @@ def transcribe_whisper(
     save_chunk_transcripts=False,
     chunk_text_prefix=None,
 ):
-    """Nhận diện giọng nói bằng Whisper; hỗ trợ chia nhỏ và chỉ lấy max_chunks đoạn đầu."""
+    """Nhận diện giọng nói bằng faster-whisper; hỗ trợ chia nhỏ và giới hạn số đoạn."""
 
     print("📝 Đang kiểm tra thời lượng file âm thanh...")
 
@@ -165,39 +195,22 @@ def transcribe_whisper(
         )
         print("✅ Model đã tải thành công.")
 
-    TRANSCRIBE_OPTS = dict(
-        language="vi",
-        condition_on_previous_text=False,
-        temperature=0,
-        beam_size=5,
-        initial_prompt="Đây là nội dung tiếng Việt.",
-        no_speech_threshold=0.6,
-        compression_ratio_threshold=2.4,
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
-    )
-
-    def _segments_to_text(segments):
-        return " ".join(seg.text.strip() for seg in segments)
-
     def transcribe_one(path):
-        segments, _ = config.model.transcribe(path, **TRANSCRIBE_OPTS)
+        segments, _ = config.model.transcribe(path, **_TRANSCRIBE_OPTS)
         text_local = _segments_to_text(segments)
         if detect_repetition(text_local):
             print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3'...")
-            model_name2 = "large-v3"
             if config.model2 is None:
                 print("⏳ Đang tải model large-v3 (lần đầu tiên sẽ mất 5-10 phút, vui lòng chờ...)...")
                 print("🗑️ Giải phóng model hiện tại để tiết kiệm VRAM...")
                 del config.model
                 config.model = None
                 config.model2 = None
-
                 config.torch.cuda.empty_cache()
                 gc.collect()
                 try:
                     config.model2 = config.WhisperModel(
-                        model_name2,
+                        "large-v3",
                         device=config.device,
                         compute_type=config.compute_type,
                         download_root=config.WHISPER_MODEL_PATH,
@@ -214,7 +227,7 @@ def transcribe_whisper(
                     )
                     return text_local.strip()
             print("🔄 Đang nhận diện lại với model large-v3...")
-            segments2, _ = config.model2.transcribe(path, **TRANSCRIBE_OPTS)
+            segments2, _ = config.model2.transcribe(path, **_TRANSCRIBE_OPTS)
             text_local = _segments_to_text(segments2)
             if config.device == "cuda":
                 config.torch.cuda.empty_cache()
@@ -239,7 +252,7 @@ def transcribe_whisper(
                     chunk_txt_path = f"{chunk_text_prefix}_chunk_{idx}.txt"
                     with open(chunk_txt_path, "w", encoding="utf-8") as chunk_file:
                         chunk_file.write(text_chunk)
-                    print(f"Da luu transcript tung doan: {chunk_txt_path}")
+                    print(f"✅ Đã lưu transcript đoạn {idx}: {chunk_txt_path}")
             except Exception as e:
                 print(f"❌ Lỗi khi xử lý đoạn {idx}: {e}")
             finally:
@@ -266,10 +279,8 @@ def transcribe_whisper(
 
 
 def format_transcript_by_spaces(transcript, spaces_per_line=15):
-    """Định dạng transcript để xuống dòng sau mỗi 15 dấu cách."""
     space_count = 0
     formatted_text = ""
-
     for char in transcript:
         formatted_text += char
         if char == " ":
@@ -277,5 +288,4 @@ def format_transcript_by_spaces(transcript, spaces_per_line=15):
         if space_count == spaces_per_line:
             formatted_text += "\n"
             space_count = 0
-
     return formatted_text
