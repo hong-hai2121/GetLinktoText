@@ -53,12 +53,13 @@ class GetTextService:
 
     def initialize_whisper(self):
         import torch as _torch
-        import whisper as _whisper
+        from faster_whisper import WhisperModel as _WhisperModel
 
         config.torch = _torch
-        config.whisper = _whisper
-        config.device = "cuda" if config.torch.cuda.is_available() else "cpu"
-        self.log(f"✅ Whisper sẽ chạy trên {'GPU' if config.device=='cuda' else 'CPU'}")
+        config.WhisperModel = _WhisperModel
+        config.device = "cuda" if _torch.cuda.is_available() else "cpu"
+        config.compute_type = "float16" if config.device == "cuda" else "int8"
+        self.log(f"✅ Whisper sẽ chạy trên {'GPU' if config.device=='cuda' else 'CPU'} ({config.compute_type})")
 
     def load_model(self, selected_model: str):
         if config.model is None or selected_model != config.MODEL_NAME:
@@ -70,8 +71,11 @@ class GetTextService:
                 gc.collect()
 
             config.MODEL_NAME = selected_model
-            config.model = config.whisper.load_model(config.MODEL_NAME, download_root=config.WHISPER_MODEL_PATH).to(
-                config.device
+            config.model = config.WhisperModel(
+                config.MODEL_NAME,
+                device=config.device,
+                compute_type=config.compute_type,
+                download_root=config.WHISPER_MODEL_PATH,
             )
             self.log(f"✅ Đã tải model '{config.MODEL_NAME}' thành công")
 

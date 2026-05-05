@@ -58,8 +58,9 @@ BLACKLIST_KEYWORDS = []
 # runtime state
 model = None
 model2 = None
-whisper = None
+WhisperModel = None
 torch = None
+compute_type = "int8"
 device = "cpu"
 
 

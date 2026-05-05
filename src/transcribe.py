@@ -139,9 +139,9 @@ def transcribe_whisper(
         use_chunks = True
         max_chunks = None
 
-    # Xóa model2 khi quay lại medium (an toàn hơn: set None + giải phóng VRAM)
+    # Xóa model2 khi quay lại primary model
     if config.model2 is not None:
-        print("🗑️ Đang xóa model large-v3 khỏi bộ nhớ GPU để quay lại medium...")
+        print("🗑️ Đang xóa model large-v3 khỏi bộ nhớ GPU...")
         try:
             config.model2 = None
         except Exception as e:
@@ -154,13 +154,16 @@ def transcribe_whisper(
         gc.collect()
         print("✅ Model large-v3 đã được xóa.")
 
-    # Đảm bảo model medium có sẵn
+    # Đảm bảo primary model có sẵn
     if config.model is None:
-        print("🔄 Đang tải lại model medium...")
-        config.model = config.whisper.load_model(config.MODEL_NAME, download_root=config.WHISPER_MODEL_PATH).to(
-            config.device
+        print("🔄 Đang tải lại model...")
+        config.model = config.WhisperModel(
+            config.MODEL_NAME,
+            device=config.device,
+            compute_type=config.compute_type,
+            download_root=config.WHISPER_MODEL_PATH,
         )
-        print("✅ Model medium đã tải thành công.")
+        print("✅ Model đã tải thành công.")
 
     TRANSCRIBE_OPTS = dict(
         language="vi",
@@ -170,17 +173,22 @@ def transcribe_whisper(
         initial_prompt="Đây là nội dung tiếng Việt.",
         no_speech_threshold=0.6,
         compression_ratio_threshold=2.4,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
     )
 
+    def _segments_to_text(segments):
+        return " ".join(seg.text.strip() for seg in segments)
+
     def transcribe_one(path):
-        result_local = config.model.transcribe(path, **TRANSCRIBE_OPTS)
-        text_local = result_local["text"]
+        segments, _ = config.model.transcribe(path, **TRANSCRIBE_OPTS)
+        text_local = _segments_to_text(segments)
         if detect_repetition(text_local):
             print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3'...")
             model_name2 = "large-v3"
             if config.model2 is None:
                 print("⏳ Đang tải model large-v3 (lần đầu tiên sẽ mất 5-10 phút, vui lòng chờ...)...")
-                print("🗑️ Giải phóng model medium để tiết kiệm VRAM...")
+                print("🗑️ Giải phóng model hiện tại để tiết kiệm VRAM...")
                 del config.model
                 config.model = None
                 config.model2 = None
@@ -188,20 +196,28 @@ def transcribe_whisper(
                 config.torch.cuda.empty_cache()
                 gc.collect()
                 try:
-                    config.model2 = config.whisper.load_model(model_name2, download_root=config.WHISPER_MODEL_PATH).to(
-                        config.device
+                    config.model2 = config.WhisperModel(
+                        model_name2,
+                        device=config.device,
+                        compute_type=config.compute_type,
+                        download_root=config.WHISPER_MODEL_PATH,
                     )
                     print("✅ Model large-v3 đã tải thành công!")
                 except Exception as e:
                     print(f"❌ Lỗi khi tải model large-v3: {e}")
-                    print("⚠️ Quay lại model medium...")
-                    config.model = config.whisper.load_model(
-                        config.MODEL_NAME, download_root=config.WHISPER_MODEL_PATH
-                    ).to(config.device)
+                    print("⚠️ Quay lại model ban đầu...")
+                    config.model = config.WhisperModel(
+                        config.MODEL_NAME,
+                        device=config.device,
+                        compute_type=config.compute_type,
+                        download_root=config.WHISPER_MODEL_PATH,
+                    )
                     return text_local.strip()
             print("🔄 Đang nhận diện lại với model large-v3...")
-            text_local = config.model2.transcribe(path, **TRANSCRIBE_OPTS)["text"]
-            config.torch.cuda.empty_cache()
+            segments2, _ = config.model2.transcribe(path, **TRANSCRIBE_OPTS)
+            text_local = _segments_to_text(segments2)
+            if config.device == "cuda":
+                config.torch.cuda.empty_cache()
             gc.collect()
         return text_local.strip()
 
