@@ -162,8 +162,18 @@ def transcribe_whisper(
         )
         print("✅ Model medium đã tải thành công.")
 
+    TRANSCRIBE_OPTS = dict(
+        language="vi",
+        condition_on_previous_text=False,
+        temperature=0,
+        beam_size=5,
+        initial_prompt="Đây là nội dung tiếng Việt.",
+        no_speech_threshold=0.6,
+        compression_ratio_threshold=2.4,
+    )
+
     def transcribe_one(path):
-        result_local = config.model.transcribe(path, language="vi")
+        result_local = config.model.transcribe(path, **TRANSCRIBE_OPTS)
         text_local = result_local["text"]
         if detect_repetition(text_local):
             print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3'...")
@@ -190,7 +200,7 @@ def transcribe_whisper(
                     ).to(config.device)
                     return text_local.strip()
             print("🔄 Đang nhận diện lại với model large-v3...")
-            text_local = config.model2.transcribe(path, language="vi")["text"]
+            text_local = config.model2.transcribe(path, **TRANSCRIBE_OPTS)["text"]
             config.torch.cuda.empty_cache()
             gc.collect()
         return text_local.strip()
