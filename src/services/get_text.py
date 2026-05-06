@@ -316,8 +316,14 @@ class GetTextService:
 
         doc.add_paragraph("=" * 40)
 
-        # Trong title_mode với GPT, caller sẽ thêm nội dung GPT rồi mới save — tránh double save
-        if not (config.USE_TITLE_MODE and not config.SKIP_GPT_PROCESSING):
+        # title_only/full với GPT: caller thêm GPT rồi mới save — tránh double save
+        # content_only và các chế độ khác: save ngay tại đây
+        skip_save = (
+            config.USE_TITLE_MODE
+            and not config.SKIP_GPT_PROCESSING
+            and config.TITLE_MODE_SUBMODE != "content_only"
+        )
+        if not skip_save:
             try:
                 doc.save(config.OUTPUT_WORD_FILE)
                 self.log("💾 Đã lưu kết quả thành công!")
@@ -436,7 +442,12 @@ class GetTextService:
                 if current_transcript:
                     self._check_stop_requested()
                     if config.TITLE_MODE_SUBMODE == "content_only":
-                        self.log(f"\n📝 Chế độ Nội dung: đã lưu transcript cho video {idx}, bỏ qua gửi GPT.")
+                        self.log(f"\n📝 Chế độ Nội dung: lưu nội dung video {idx} vào Word...")
+                        try:
+                            doc.save(config.OUTPUT_WORD_FILE)
+                            self.log(f"💾 Đã lưu kết quả vào {config.OUTPUT_WORD_FILE}")
+                        except Exception as e:
+                            self.log(f"❌ Lỗi khi lưu file Word: {e}")
                         try:
                             os.remove(transcript_file)
                             self.log(f"🗑️ Đã xóa file transcript: {transcript_file}")
