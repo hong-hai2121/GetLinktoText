@@ -33,8 +33,10 @@ def launch_gui():
                 browser_client.FIREFOX_INIT_IN_PROGRESS = False
             browser_client.FIREFOX_INIT_EVENT.set()
 
-    firefox_thread = threading.Thread(target=open_firefox_async, daemon=True)
-    firefox_thread.start()
+    # Tự động mở Firefox khi khởi động - hiện tắt (đặt AUTO_LAUNCH_FIREFOX=True để bật lại)
+    if config.AUTO_LAUNCH_FIREFOX:
+        firefox_thread = threading.Thread(target=open_firefox_async, daemon=True)
+        firefox_thread.start()
 
     print("🎨 Đang khởi động giao diện...")
     import tkinter as tk

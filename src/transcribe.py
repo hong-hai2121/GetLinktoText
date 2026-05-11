@@ -198,7 +198,8 @@ def transcribe_whisper(
     def transcribe_one(path):
         segments, _ = config.model.transcribe(path, **_TRANSCRIBE_OPTS)
         text_local = _segments_to_text(segments)
-        if detect_repetition(text_local):
+        # Chuyển model khi lặp từ - hiện tắt (đặt ENABLE_MODEL_SWITCH_ON_REPEAT=True để bật lại)
+        if config.ENABLE_MODEL_SWITCH_ON_REPEAT and detect_repetition(text_local):
             print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3'...")
             if config.model2 is None:
                 print("⏳ Đang tải model large-v3 (lần đầu tiên sẽ mất 5-10 phút, vui lòng chờ...)...")

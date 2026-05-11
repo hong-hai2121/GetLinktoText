@@ -28,6 +28,12 @@ SKIP_GPT_PROCESSING = False
 SKIP_LONG_VIDEOS = False
 LONG_VIDEO_THRESHOLD_SECONDS = 15 * 60
 
+# Tắt chuyển model khi phát hiện lặp từ (đặt True để bật lại)
+ENABLE_MODEL_SWITCH_ON_REPEAT = False
+
+# Tắt tự động mở Firefox khi khởi động (đặt True để bật lại)
+AUTO_LAUNCH_FIREFOX = False
+
 CHECK_TITLE_BLACKLIST = False  # Đổi thành False nếu không muốn kiểm tra tiêu đề True
 BLACKLIST_KEYWORDS2 = [
     "da căng bóng",

@@ -22,7 +22,7 @@ class GetTextApp:
 
         self.title_mode_var = tk.BooleanVar(value=False)
         self.title_submode_var = tk.StringVar(value="full")
-        self.skip_gpt_var = tk.BooleanVar(value=False)
+        self.skip_gpt_var = tk.BooleanVar(value=True)
         self.skip_long_video_var = tk.BooleanVar(value=False)
         self.move_processed_links_var = tk.BooleanVar(value=False)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
