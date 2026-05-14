@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "TCB Transaction Scraper",
+  "version": "1.0.0",
+  "description": "Tự động cào dữ liệu giao dịch từ Techcombank Business và xuất CSV",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.techcombank.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.techcombank.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TCB Transaction Scraper"
+  }
+}

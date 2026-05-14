@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TCB Transaction Scraper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      background: #f5f7fa;
+      color: #1a2332;
+      width: 300px;
+      min-height: 200px;
+    }
+
+    .header {
+      background: #e31837;
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.3px; }
+    .header .logo { font-size: 18px; font-weight: 700; }
+
+    .body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Status card */
+    .status-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .status-row:last-child { margin-bottom: 0; }
+
+    .label { color: #64748b; }
+    .value { font-weight: 600; color: #1a2332; }
+    .value.accent { color: #e31837; }
+
+    /* Progress bar */
+    .progress-wrap {
+      background: #e2e8f0;
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: #e31837;
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .progress-text {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 5px;
+      min-height: 16px;
+    }
+
+    /* Page selector */
+    .page-select-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .page-select-card .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .page-options {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .page-chip {
+      padding: 4px 10px;
+      border-radius: 99px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .page-chip:hover { border-color: #e31837; color: #e31837; }
+
+    .page-chip.active {
+      background: #e31837;
+      border-color: #e31837;
+      color: #fff;
+    }
+
+    .page-custom-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .page-custom-row label {
+      font-size: 12px;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    .page-input {
+      width: 64px;
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a2332;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .page-input:focus { border-color: #e31837; }
+    .page-input:disabled { background: #f1f5f9; color: #94a3b8; }
+
+    .page-unit { font-size: 12px; color: #64748b; }
+
+    /* Buttons */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 9px 14px;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+      text-align: center;
+    }
+
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary { background: #e31837; color: #fff; }
+    .btn-primary:not(:disabled):hover { background: #c01230; }
+
+    .btn-secondary { background: #fff; color: #1a2332; border: 1px solid #cbd5e1; }
+    .btn-secondary:not(:disabled):hover { background: #f1f5f9; }
+
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:not(:disabled):hover { background: #15803d; }
+
+    .btn-danger { background: #fff; color: #dc2626; border: 1px solid #fca5a5; }
+    .btn-danger:not(:disabled):hover { background: #fef2f2; }
+
+    .btn-row { display: flex; gap: 8px; }
+    .btn-row .btn { flex: 1; }
+
+    /* Indicator dot */
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+      margin-right: 6px;
+    }
+
+    .dot.running { background: #16a34a; animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .state-label { font-size: 12px; display: flex; align-items: center; }
+
+    /* Error */
+    #errorMsg {
+      display: none;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #dc2626;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">T</div>
+    <h1>TCB Transaction Scraper</h1>
+  </div>
+
+  <div class="body">
+    <!-- Status card -->
+    <div class="status-card">
+      <div class="status-row">
+        <span class="label">Trạng thái</span>
+        <span class="state-label">
+          <span class="dot" id="dot"></span>
+          <span id="stateText">Sẵn sàng</span>
+        </span>
+      </div>
+      <div class="status-row">
+        <span class="label">Giao dịch đã cào</span>
+        <span class="value accent" id="countText">0</span>
+      </div>
+      <div class="status-row">
+        <span class="label">Trang hiện tại</span>
+        <span class="value" id="pageText">—</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+
+    <!-- Page selector -->
+    <div class="page-select-card">
+      <div class="card-title">Số trang cần cào</div>
+      <div class="page-options">
+        <button class="page-chip" data-pages="1">1 trang</button>
+        <button class="page-chip" data-pages="3">3 trang</button>
+        <button class="page-chip" data-pages="5">5 trang</button>
+        <button class="page-chip" data-pages="10">10 trang</button>
+        <button class="page-chip active" data-pages="0">Tất cả</button>
+      </div>
+      <div class="page-custom-row">
+        <label for="pageInput">Hoặc nhập:</label>
+        <input id="pageInput" class="page-input" type="number" min="1" max="999" placeholder="—" />
+        <span class="page-unit">trang</span>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorMsg"></div>
+
+    <!-- Main action -->
+    <button class="btn btn-primary" id="btnStart">Bắt đầu cào</button>
+
+    <!-- Secondary actions -->
+    <div class="btn-row">
+      <button class="btn btn-success" id="btnDownload" disabled>Tải CSV</button>
+      <button class="btn btn-danger"  id="btnClear"    disabled>Xóa dữ liệu</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
