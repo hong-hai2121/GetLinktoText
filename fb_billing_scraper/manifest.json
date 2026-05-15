@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "FB Billing Scraper",
+  "version": "1.0.0",
+  "description": "Cào dữ liệu billing từ Facebook Business và xuất CSV",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://business.facebook.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://business.facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FB Billing Scraper"
+  }
+}
