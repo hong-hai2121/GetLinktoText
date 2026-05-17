@@ -1,20 +1,29 @@
 {
   "manifest_version": 3,
   "name": "TCB Transaction Scraper",
-  "version": "1.0.0",
-  "description": "Tự động cào dữ liệu giao dịch từ Techcombank Business và xuất CSV",
+  "version": "1.1.0",
+  "description": "Tự động cào dữ liệu giao dịch từ Techcombank Business và xuất Excel / Google Sheets",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "identity"
   ],
   "host_permissions": [
-    "*://*.techcombank.com/*"
+    "*://*.techcombank.com/*",
+    "https://sheets.googleapis.com/*"
   ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.techcombank.com/*"],
-      "js": ["content.js"],
+      "js": ["xlsx.min.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

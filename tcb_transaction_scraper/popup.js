@@ -4,6 +4,7 @@
   // ─── DOM refs ─────────────────────────────────────────────────────────────
   const btnStart    = document.getElementById('btnStart');
   const btnDownload = document.getElementById('btnDownload');
+  const btnSheet    = document.getElementById('btnSheet');
   const btnClear    = document.getElementById('btnClear');
   const dot         = document.getElementById('dot');
   const stateText   = document.getElementById('stateText');
@@ -91,6 +92,7 @@
       : `Trang ${page}`;
 
     btnDownload.disabled = dataCount === 0;
+    btnSheet.disabled    = dataCount === 0;
     btnClear.disabled    = dataCount === 0;
   }
 
@@ -121,6 +123,7 @@
     try {
       await sendToContent(tabId, { type: 'GET_STATUS' });
     } catch (_) {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['xlsx.min.js'] });
       await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
       await new Promise(r => setTimeout(r, 150));
     }
@@ -189,9 +192,36 @@
       progressBar.style.width  = '0%';
       progressText.textContent = '';
       btnDownload.disabled     = true;
+      btnSheet.disabled        = true;
       btnClear.disabled        = true;
     } catch (err) {
       showError('Không thể xóa dữ liệu.');
+    }
+  });
+
+  btnSheet.addEventListener('click', async () => {
+    clearError();
+    btnSheet.disabled = true;
+    btnSheet.textContent = 'Đang ghi...';
+    try {
+      const tab = await getActiveTab();
+      await ensureContentScript(tab.id);
+      const { transactions } = await sendToContent(tab.id, { type: 'GET_DATA' });
+      if (!transactions?.length) {
+        showError('Không có dữ liệu để ghi.');
+        return;
+      }
+      const res = await chrome.runtime.sendMessage({ type: 'WRITE_TO_SHEET', transactions });
+      if (res?.ok) {
+        progressText.textContent = `Đã ghi ${res.count} dòng vào Google Sheet.`;
+      } else {
+        showError(res?.reason ?? 'Ghi Sheet thất bại.');
+      }
+    } catch (err) {
+      showError('Lỗi: ' + err.message);
+    } finally {
+      btnSheet.disabled = dataCount === 0;
+      btnSheet.textContent = 'Ghi vào Google Sheet';
     }
   });
 
@@ -230,6 +260,7 @@
         if (status.page > 1) pageText.textContent = `Trang ${status.page}`;
         if (status.maxPages > 0) setActiveChip(status.maxPages);
         btnDownload.disabled = dataCount === 0;
+        btnSheet.disabled    = dataCount === 0;
         btnClear.disabled    = dataCount === 0;
       }
     } catch (_) {

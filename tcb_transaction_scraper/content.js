@@ -114,13 +114,13 @@
     if (amountEl) {
       const sign    = amountEl.querySelector('.sign')?.textContent.trim()    ?? '';
       const integer = amountEl.querySelector('.integer')?.textContent.trim() ?? '';
-      amount = sign + integer;
+      amount = (sign === '+' ? '' : sign) + integer;
     }
 
     const description = getText('[data-role="table-details-description-section"] [data-role="section-content"]');
 
-    // Parse ref after '#' e.g. #GZZVVPV8P2 → GZZVVPV8P2
-    const refMatch = description.match(/#([A-Z0-9]+)/);
+    // Parse ref after '#' or '*' e.g. #GZZVVPV8P2 or *3LVXDQZGX2 → code part
+    const refMatch = description.match(/[#*]([A-Z0-9]+)/);
     const refFromDesc = refMatch ? refMatch[1] : '';
 
     // Parse card number after 'SO THE ' e.g. SO THE 402156...2175 → 402156...2175
@@ -140,75 +140,71 @@
     };
   }
 
-  // ─── CSV export ───────────────────────────────────────────────────────────
+  // ─── Excel export (SheetJS .xlsx) ────────────────────────────────────────
 
-  function buildCSV(transactions) {
-    const header = [
-      'Ngày GD',
-      'Tên',
-      'Số TK',
-      'Ngân hàng',
-      'Số tham chiếu',
-      'Số tiền',
-      'Số dư cuối',
-      'Mã FACEBK',
-      'App Code',
-      'Nội dung đầy đủ',
-    ].join(',');
+  const HEADERS = [
+    'Ngày GD',
+    'Tên',
+    'Số TK',
+    'Ngân hàng',
+    'Số tham chiếu',
+    'Số tiền',
+    'Số dư cuối',
+    'Mã FACEBK',
+    'App Code',
+    'Nội dung đầy đủ',
+  ];
 
-    const escape = (v) => {
-      const s = String(v ?? '').replace(/"/g, '""');
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-    };
+  function downloadExcel(transactions) {
+    const rows = transactions.map(t => [
+      t.customerDate,
+      t.name,
+      t.accountNumber,
+      t.bankName,
+      t.reference,
+      t.amount,
+      t.closingBalance,
+      t.refFromDesc,
+      t.cardNumber,
+      t.description,
+    ]);
 
-    const rows = transactions.map(t =>
-      [
-        t.customerDate,
-        t.name,
-        t.accountNumber,
-        t.bankName,
-        t.reference,
-        t.amount,
-        t.closingBalance,
-        t.refFromDesc,
-        t.cardNumber,
-        t.description,
-      ].map(escape).join(',')
-    );
+    const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
 
-    return [header, ...rows].join('\n');
-  }
+    // Bold header row
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[addr]) ws[addr].s = { font: { bold: true } };
+    }
 
-  function downloadCSV(transactions) {
-    const csv = buildCSV(transactions);
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `tcb_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Giao dịch');
+    XLSX.writeFile(wb, `tcb_transactions_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   // ─── Core scraping logic ──────────────────────────────────────────────────
 
   async function scrapePage() {
-    const rows = Array.from(
-      document.querySelectorAll('tr[aria-label="click transaction for more details"]')
-    );
+    const rowCount = document.querySelectorAll(
+      'tr[aria-label="click transaction for more details"]'
+    ).length;
 
-    if (rows.length === 0) return false;
+    if (rowCount === 0) return false;
 
-    for (let i = 0; i < rows.length; i++) {
+    for (let i = 0; i < rowCount; i++) {
       if (!state.running) return false;
 
-      const row = rows[i];
+      // Re-query each iteration — Angular re-renders the list after each modal close
+      const row = document.querySelectorAll(
+        'tr[aria-label="click transaction for more details"]'
+      )[i];
+      if (!row) continue;
+
       state.processed++;
 
       sendProgress(
-        `Trang ${state.currentPage} — giao dịch ${i + 1}/${rows.length}`,
+        `Trang ${state.currentPage} — giao dịch ${i + 1}/${rowCount}`,
         state.processed,
         state.total,
       );
@@ -259,27 +255,34 @@
       'tr[aria-label="click transaction for more details"]'
     )?.textContent;
 
+    let pageChanged = false;
+
+    // Set up observer BEFORE clicking so we don't miss fast page transitions
+    const changePromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => { observer.disconnect(); resolve(); }, 8000);
+      const observer = new MutationObserver(() => {
+        const newFirst = document.querySelector(
+          'tr[aria-label="click transaction for more details"]'
+        )?.textContent;
+        if (newFirst && newFirst !== currentFirstRow) {
+          pageChanged = true;
+          clearTimeout(timeout);
+          observer.disconnect();
+          resolve();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+
     nextBtn.click();
 
     try {
-      await delay(500);
-      await new Promise((resolve) => {
-        const timeout = setTimeout(() => { observer.disconnect(); resolve(); }, 5000);
-        const observer = new MutationObserver(() => {
-          const newFirst = document.querySelector(
-            'tr[aria-label="click transaction for more details"]'
-          )?.textContent;
-          if (newFirst && newFirst !== currentFirstRow) {
-            clearTimeout(timeout);
-            observer.disconnect();
-            resolve();
-          }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      });
+      await changePromise;
     } catch (err) {
       console.warn('[TCB Scraper] Pagination error:', err.message);
     }
+
+    if (!pageChanged) return false;
 
     state.currentPage++;
     return true;
@@ -323,7 +326,7 @@
     const total = state.transactions.length;
     sendProgress(`Hoàn thành! Đã cào ${total} giao dịch.`, total, total);
 
-    if (total > 0) downloadCSV(state.transactions);
+    if (total > 0) downloadExcel(state.transactions);
   }
 
   // ─── Message listener ─────────────────────────────────────────────────────
@@ -356,11 +359,15 @@
 
       case 'DOWNLOAD_CSV':
         if (state.transactions.length > 0) {
-          downloadCSV(state.transactions);
+          downloadExcel(state.transactions);
           sendResponse({ ok: true });
         } else {
           sendResponse({ ok: false, reason: 'No data' });
         }
+        break;
+
+      case 'GET_DATA':
+        sendResponse({ ok: true, transactions: state.transactions });
         break;
 
       case 'CLEAR_DATA':

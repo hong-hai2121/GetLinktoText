@@ -183,6 +183,9 @@
     .btn-danger { background: #fff; color: #dc2626; border: 1px solid #fca5a5; }
     .btn-danger:not(:disabled):hover { background: #fef2f2; }
 
+    .btn-sheet { background: #fff; color: #1a73e8; border: 1px solid #93c5fd; }
+    .btn-sheet:not(:disabled):hover { background: #eff6ff; }
+
     .btn-row { display: flex; gap: 8px; }
     .btn-row .btn { flex: 1; }
 
@@ -272,9 +275,12 @@
 
     <!-- Secondary actions -->
     <div class="btn-row">
-      <button class="btn btn-success" id="btnDownload" disabled>Tải CSV</button>
+      <button class="btn btn-success" id="btnDownload" disabled>Tải Excel</button>
       <button class="btn btn-danger"  id="btnClear"    disabled>Xóa dữ liệu</button>
     </div>
+
+    <!-- Google Sheets -->
+    <button class="btn btn-sheet" id="btnSheet" disabled>Ghi vào Google Sheet</button>
   </div>
 
   <script src="popup.js"></script>
