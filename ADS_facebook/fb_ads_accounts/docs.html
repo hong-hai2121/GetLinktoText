@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tài liệu — FB Ads Accounts Pipeline</title>
+<style>
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --border:    #2a2d3a;
+    --accent:    #4f8ef7;
+    --accent2:   #7c5cbf;
+    --green:     #3ecf8e;
+    --yellow:    #f0a500;
+    --red:       #e05260;
+    --text:      #d4d8e8;
+    --muted:     #7a7f96;
+    --code-bg:   #131620;
+    --fn-bg:     #1e2235;
+    --radius:    8px;
+    --font-mono: "Fira Code", "Cascadia Code", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  nav {
+    width: 260px;
+    min-width: 260px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 0;
+  }
+
+  nav .logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  nav .logo h1 { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
+  nav .logo p  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  nav a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 20px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: all .15s;
+    border-left: 2px solid transparent;
+  }
+
+  nav a:hover      { color: var(--text); background: rgba(255,255,255,.04); }
+  nav a.active     { color: var(--accent); border-left-color: var(--accent); background: rgba(79,142,247,.07); }
+  nav .section-hd  { padding: 14px 20px 4px; font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+
+  /* ── Main content ── */
+  main {
+    flex: 1;
+    padding: 40px 48px;
+    max-width: 1100px;
+  }
+
+  /* ── Headings ── */
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 48px 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; color: var(--accent); }
+  h4 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  p { margin-bottom: 12px; font-size: 14px; }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: .3px;
+  }
+  .tag-blue   { background: rgba(79,142,247,.15);  color: var(--accent); }
+  .tag-purple { background: rgba(124,92,191,.15);  color: #a78bfa; }
+  .tag-green  { background: rgba(62,207,142,.15);  color: var(--green); }
+  .tag-yellow { background: rgba(240,165,0,.15);   color: var(--yellow); }
+  .tag-red    { background: rgba(224,82,96,.15);   color: var(--red); }
+
+  /* ── File cards ── */
+  .file-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+
+  .file-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,.02);
+  }
+
+  .file-card-header .fname {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .file-card-body { padding: 20px; }
+
+  /* ── Function list ── */
+  .fn-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+  .fn-item {
+    background: var(--fn-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+  }
+
+  .fn-sig {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #7dd3fc;
+    margin-bottom: 4px;
+  }
+
+  .fn-sig .fn-name { color: #fbbf24; }
+  .fn-sig .fn-param { color: #a5b4fc; }
+  .fn-sig .fn-ret   { color: var(--green); }
+  .fn-desc { font-size: 13px; color: var(--text); }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+
+  pre code {
+    color: var(--text);
+  }
+
+  .kw   { color: #c792ea; }
+  .str  { color: #c3e88d; }
+  .cmt  { color: #546e7a; font-style: italic; }
+  .fn   { color: #82aaff; }
+  .num  { color: #f78c6c; }
+  .cls  { color: #ffcb6b; }
+  .var  { color: var(--text); }
+
+  /* ── Workflow steps ── */
+  .workflow { display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    position: relative;
+  }
+
+  .step-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .step-connector {
+    width: 2px;
+    flex: 1;
+    background: var(--border);
+    min-height: 20px;
+  }
+
+  .step:last-child .step-connector { display: none; }
+
+  .step-body {
+    padding: 2px 0 24px;
+  }
+
+  .step-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .step-desc  { font-size: 13px; color: var(--muted); }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 12px 0;
+  }
+
+  th {
+    text-align: left;
+    padding: 9px 12px;
+    background: rgba(255,255,255,.04);
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  td code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+
+  /* ── API box ── */
+  .api-box {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin: 8px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .api-method { color: var(--green); font-weight: 700; }
+  .api-url    { color: var(--accent); }
+  .api-param  { display: block; color: var(--muted); margin-top: 6px; }
+  .api-param span { color: var(--text); }
+
+  /* ── Column grid ── */
+  .col-grid {
+    display: grid;
+    grid-template-columns: 40px 60px 1fr 1fr;
+    gap: 0;
+    font-size: 12.5px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+
+  .col-grid .gh { background: rgba(255,255,255,.05); padding: 7px 10px; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  .col-grid .gc { padding: 6px 10px; border-top: 1px solid rgba(255,255,255,.04); }
+  .col-grid .gc:nth-child(4n+1) { color: var(--muted); }
+  .col-grid .gc.campaign-only   { background: rgba(79,142,247,.06); }
+  .col-grid .gc.metrics         { background: rgba(62,207,142,.05); }
+  .col-grid .gc.creative        { background: rgba(124,92,191,.05); }
+
+  /* ── Notice ── */
+  .notice {
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin: 12px 0;
+    display: flex;
+    gap: 10px;
+  }
+
+  .notice-info   { background: rgba(79,142,247,.1);  border: 1px solid rgba(79,142,247,.3); }
+  .notice-warn   { background: rgba(240,165,0,.1);   border: 1px solid rgba(240,165,0,.3); }
+  .notice-green  { background: rgba(62,207,142,.1);  border: 1px solid rgba(62,207,142,.3); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════════════════════════════════ SIDEBAR ══ -->
+<nav>
+  <div class="logo">
+    <h1>FB ADS PIPELINE</h1>
+    <p>fb_ads_accounts / docs</p>
+  </div>
+
+  <div class="section-hd">Tổng quan</div>
+  <a href="#overview">Kiến trúc hệ thống</a>
+  <a href="#workflow">Quy trình chạy</a>
+  <a href="#columns">Cấu trúc cột Sheet</a>
+
+  <div class="section-hd">File Python</div>
+  <a href="#main-py">main.py</a>
+  <a href="#get-campaigns">get_campaigns.py</a>
+  <a href="#get-details">get_details.py</a>
+
+  <div class="section-hd">API Reference</div>
+  <a href="#api-ref">Meta Graph API</a>
+  <a href="#metrics">Metrics &amp; Tính toán</a>
+
+  <div class="section-hd">Output</div>
+  <a href="#json-files">File JSON</a>
+  <a href="#sheet-structure">Google Sheet</a>
+</nav>
+
+<!-- ══════════════════════════════════════════════════ MAIN ══ -->
+<main>
+
+<!-- ─────────────────────────────── OVERVIEW ─── -->
+<section id="overview">
+  <h1>Facebook Ads Pipeline</h1>
+  <p>Hệ thống tự động lấy dữ liệu quảng cáo Facebook qua <strong>Meta Graph API v20.0</strong> và ghi vào <strong>Google Sheets</strong> theo cấu trúc cây Campaign → Adset → Ad.</p>
+
+  <h2>Kiến trúc hệ thống</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:16px 0;">
+    <div class="file-card">
+      <div class="file-card-header"><span class="fname">main.py</span><span class="tag tag-blue">Phase 0</span></div>
+      <div class="file-card-body">
+        <p>Lấy danh sách <strong>tài khoản quảng cáo</strong> từ Meta API và ghi vào sheet <code>TKQC API</code>.</p>
+        <p>Người dùng đánh <strong>TRUE</strong> vào cột <code>Chọn Lấy Camp</code> để chọn tài khoản cần theo dõi.</p>
+      </div>
+    </div>
+    <div class="file-card">
+      <div class="file-card-header"><span class="fname">get_campaigns.py</span><span class="tag tag-yellow">Phase 1</span></div>
+      <div class="file-card-body">
+        <p>Lấy danh sách <strong>campaign</strong> của các tài khoản được chọn và ghi 1 dòng/campaign vào tab tài khoản, kèm <strong>metrics tháng này</strong>.</p>
+        <p>Người dùng đánh <strong>TRUE</strong> vào <code>Chọn Lấy Chi Tiết</code> để chọn campaign xem chi tiết.</p>
+      </div>
+    </div>
+    <div class="file-card">
+      <div class="file-card-header"><span class="fname">get_details.py</span><span class="tag tag-green">Phase 2</span></div>
+      <div class="file-card-body">
+        <p>Mở rộng các campaign được chọn thành cây <strong>Campaign → Adset → Ad</strong>, kèm creative và metrics cấp Ad.</p>
+        <p>Import toàn bộ shared code từ <code>get_campaigns.py</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="notice notice-info">
+    <div>ℹ️</div>
+    <div><strong>Dependency:</strong> <code>get_details.py</code> import từ <code>get_campaigns.py</code>. Cả hai file phải nằm cùng thư mục. <code>main.py</code> độc lập hoàn toàn.</div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── WORKFLOW ─── -->
+<section id="workflow">
+  <h2>Quy trình chạy</h2>
+
+  <div class="workflow">
+    <div class="step">
+      <div class="step-line"><div class="step-dot">0</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Chạy <code>python main.py</code></div>
+        <div class="step-desc">Lấy danh sách tất cả tài khoản quảng cáo trong Business Manager → ghi vào sheet <strong>TKQC API</strong>. Đánh <strong>TRUE</strong> vào cột <code>Chọn Lấy Camp</code> cho tài khoản muốn theo dõi.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="background:var(--yellow)">1</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Chạy <code>python get_campaigns.py</code></div>
+        <div class="step-desc">Với mỗi tài khoản được chọn: gọi API lấy campaigns + insights tháng này → ghi mỗi campaign thành 1 dòng vào tab tài khoản. Cột <code>Chọn Lấy Chi Tiết</code> được giữ nguyên. Đánh <strong>TRUE</strong> vào campaign muốn xem chi tiết.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="background:var(--green)">2</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Chạy <code>python get_details.py</code></div>
+        <div class="step-desc">Với các campaign được chọn: gọi API lấy adsets, ads, creative, insights cấp Ad → ghi lại toàn bộ sheet theo cây Campaign → Adset → Ad.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="background:var(--accent2)">↻</div></div>
+      <div class="step-body">
+        <div class="step-title">Lặp lại hàng ngày / theo lịch</div>
+        <div class="step-desc">Chạy Phase 1 hàng ngày để cập nhật metrics. Chạy Phase 2 khi cần xem chi tiết creative hoặc hiệu quả từng Ad.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── COLUMNS ─── -->
+<section id="columns">
+  <h2>Cấu trúc cột Google Sheet — 37 cột (A–AK)</h2>
+
+  <div class="col-grid">
+    <div class="gh">Cột</div><div class="gh">#</div><div class="gh">Tên</div><div class="gh">Ghi chú</div>
+
+    <div class="gc campaign-only">A</div><div class="gc campaign-only">1</div><div class="gc campaign-only"><code>Chọn Lấy Chi Tiết</code></div><div class="gc campaign-only">TRUE/FALSE — chỉ dòng Campaign. Người dùng tự đánh.</div>
+    <div class="gc">B</div><div class="gc">2</div><div class="gc"><code>Cấp</code></div><div class="gc">Campaign / Adset / Ad</div>
+    <div class="gc">C</div><div class="gc">3</div><div class="gc"><code>Campaign ID</code></div><div class="gc">ID Facebook — có ở mọi cấp</div>
+    <div class="gc">D</div><div class="gc">4</div><div class="gc"><code>Campaign Name</code></div><div class="gc">Tên campaign — có ở mọi cấp</div>
+    <div class="gc">E</div><div class="gc">5</div><div class="gc"><code>Adset ID</code></div><div class="gc">Trống ở dòng Campaign</div>
+    <div class="gc">F</div><div class="gc">6</div><div class="gc"><code>Adset Name</code></div><div class="gc">Trống ở dòng Campaign</div>
+    <div class="gc">G</div><div class="gc">7</div><div class="gc"><code>Ad ID</code></div><div class="gc">Chỉ có ở dòng Ad</div>
+    <div class="gc">H</div><div class="gc">8</div><div class="gc"><code>Ad Name</code></div><div class="gc">Chỉ có ở dòng Ad</div>
+    <div class="gc creative">I</div><div class="gc creative">9</div><div class="gc creative"><code>Creative ID</code></div><div class="gc creative">Chỉ có ở dòng Ad</div>
+    <div class="gc creative">J</div><div class="gc creative">10</div><div class="gc creative"><code>Page ID</code></div><div class="gc creative">Lấy từ object_story_spec hoặc effective_object_story_id</div>
+    <div class="gc creative">K</div><div class="gc creative">11</div><div class="gc creative"><code>Post ID</code></div><div class="gc creative">Phần sau dấu _ của effective_object_story_id</div>
+    <div class="gc creative">L</div><div class="gc creative">12</div><div class="gc creative"><code>Nội Dung Quảng Cáo</code></div><div class="gc creative">body / message của creative</div>
+    <div class="gc creative">M</div><div class="gc creative">13</div><div class="gc creative"><code>Tiêu Đề</code></div><div class="gc creative">title / name của creative</div>
+    <div class="gc creative">N</div><div class="gc creative">14</div><div class="gc creative"><code>Mô Tả</code></div><div class="gc creative">description của link_data / video_data</div>
+    <div class="gc creative">O</div><div class="gc creative">15</div><div class="gc creative"><code>Link</code></div><div class="gc creative">link_url hoặc link_data.link</div>
+    <div class="gc creative">P</div><div class="gc creative">16</div><div class="gc creative"><code>CTA</code></div><div class="gc creative">call_to_action.type</div>
+    <div class="gc creative">Q</div><div class="gc creative">17</div><div class="gc creative"><code>Thumbnail URL</code></div><div class="gc creative">URL hình thu nhỏ của creative</div>
+    <div class="gc">R</div><div class="gc">18</div><div class="gc"><code>Trạng Thái</code></div><div class="gc">Đang chạy / Tạm dừng / Đã xóa / Đã lưu trữ</div>
+    <div class="gc metrics">S</div><div class="gc metrics">19</div><div class="gc metrics"><code>Spend Tháng Này</code></div><div class="gc metrics">Tổng chi tiêu tháng hiện tại — API trả về</div>
+    <div class="gc metrics">T</div><div class="gc metrics">20</div><div class="gc metrics"><code>Lượt Hiển Thị</code></div><div class="gc metrics">impressions — API</div>
+    <div class="gc metrics">U</div><div class="gc metrics">21</div><div class="gc metrics"><code>Lượt Click</code></div><div class="gc metrics">clicks — API</div>
+    <div class="gc metrics">V</div><div class="gc metrics">22</div><div class="gc metrics"><code>CTR (%)</code></div><div class="gc metrics">Click-Through Rate — API, fallback: clicks/impr×100</div>
+    <div class="gc metrics">W</div><div class="gc metrics">23</div><div class="gc metrics"><code>CPC</code></div><div class="gc metrics">Cost Per Click — API, fallback: spend/clicks</div>
+    <div class="gc metrics">X</div><div class="gc metrics">24</div><div class="gc metrics"><code>CPM</code></div><div class="gc metrics">Cost Per 1000 Impressions — API, fallback: spend/impr×1000</div>
+    <div class="gc metrics">Y</div><div class="gc metrics">25</div><div class="gc metrics"><code>Tiếp Cận</code></div><div class="gc metrics">reach — API</div>
+    <div class="gc metrics">Z</div><div class="gc metrics">26</div><div class="gc metrics"><code>Tần Suất</code></div><div class="gc metrics">frequency — API, fallback: impr/reach</div>
+    <div class="gc metrics">AA</div><div class="gc metrics">27</div><div class="gc metrics"><code>Số Inbox</code></div><div class="gc metrics">Tổng inbox actions (messaging_started, first_reply…)</div>
+    <div class="gc metrics">AB</div><div class="gc metrics">28</div><div class="gc metrics"><code>CPI</code></div><div class="gc metrics">Cost Per Inbox = spend / số_inbox</div>
+    <div class="gc metrics">AC</div><div class="gc metrics">29</div><div class="gc metrics"><code>Số Lead</code></div><div class="gc metrics">Tổng lead actions (lead, lead_grouped, pixel_lead)</div>
+    <div class="gc metrics">AD</div><div class="gc metrics">30</div><div class="gc metrics"><code>CPL</code></div><div class="gc metrics">Cost Per Lead = spend / số_lead</div>
+    <div class="gc metrics">AE</div><div class="gc metrics">31</div><div class="gc metrics"><code>Số Đơn Hàng</code></div><div class="gc metrics">Tổng purchase actions</div>
+    <div class="gc metrics">AF</div><div class="gc metrics">32</div><div class="gc metrics"><code>CPS</code></div><div class="gc metrics">Cost Per Sale = spend / số_đơn</div>
+    <div class="gc metrics">AG</div><div class="gc metrics">33</div><div class="gc metrics"><code>Doanh Thu</code></div><div class="gc metrics">action_values của purchase types</div>
+    <div class="gc metrics">AH</div><div class="gc metrics">34</div><div class="gc metrics"><code>ROAS</code></div><div class="gc metrics">purchase_roas — API, fallback: revenue/spend</div>
+    <div class="gc metrics">AI</div><div class="gc metrics">35</div><div class="gc metrics"><code>Kết Quả</code></div><div class="gc metrics">Primary optimization result — xác định từ cost_per_action_type theo RESULT_TYPES priority</div>
+    <div class="gc metrics">AJ</div><div class="gc metrics">36</div><div class="gc metrics"><code>Chi Phí / Kết Quả</code></div><div class="gc metrics">cpkq từ cost_per_action_type — API đã tính sẵn</div>
+    <div class="gc">AK</div><div class="gc">37</div><div class="gc"><code>Cập Nhật Lúc</code></div><div class="gc">Timestamp lúc chạy script</div>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
+    <span class="tag tag-blue" style="padding:4px 10px;">■ Chỉ dòng Campaign</span>
+    <span class="tag tag-purple" style="padding:4px 10px;">■ Chỉ dòng Ad (Creative)</span>
+    <span class="tag tag-green" style="padding:4px 10px;">■ Metrics (mọi cấp)</span>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── MAIN.PY ─── -->
+<section id="main-py">
+  <h2>main.py — Phase 0: Danh sách tài khoản</h2>
+  <p>Lấy toàn bộ tài khoản quảng cáo của User/Business và ghi vào sheet <strong>TKQC API</strong>. Chạy một lần hoặc khi cần refresh danh sách tài khoản.</p>
+
+  <h3>Constants</h3>
+  <table>
+    <tr><th>Tên</th><th>Giá trị</th><th>Mô tả</th></tr>
+    <tr><td><code>SPREADSHEET_ID</code></td><td><code>"1zZ7H9lj…"</code></td><td>ID Google Spreadsheet chứa toàn bộ dữ liệu</td></tr>
+    <tr><td><code>SHEET_NAME</code></td><td><code>"TKQC API"</code></td><td>Tên sheet danh sách tài khoản</td></tr>
+    <tr><td><code>ACCESS_TOKEN</code></td><td>Facebook User Token</td><td>Token có quyền <code>ads_read</code></td></tr>
+    <tr><td><code>ACCOUNT_STATUS_MAP</code></td><td>dict</td><td>Map mã trạng thái số → tiếng Việt</td></tr>
+    <tr><td><code>ZERO_DECIMAL_CURRENCIES</code></td><td>set</td><td>Tiền tệ không chia 100 (VND, JPY…)</td></tr>
+  </table>
+
+  <h3>Hàm chính</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">connect_sheet</span>(<span class="fn-param">credentials_file="service_account.json"</span>) <span class="fn-ret">→ Worksheet</span></div>
+      <div class="fn-desc">Kết nối Google Sheets bằng service account, trả về worksheet "TKQC API".</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">read_existing_selections</span>(<span class="fn-param">worksheet</span>) <span class="fn-ret">→ dict[str, bool]</span></div>
+      <div class="fn-desc">Đọc cột "Chọn Lấy Camp" hiện tại để giữ lại khi ghi đè — trả về <code>{account_id: True/False}</code>.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_ad_accounts</span>(<span class="fn-param">access_token</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">Gọi <code>/me/adaccounts</code> với pagination, lấy fields: id, name, account_status, currency, timezone_name, amount_spent, balance, business.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">format_money</span>(<span class="fn-param">amount_raw, currency</span>) <span class="fn-ret">→ str</span></div>
+      <div class="fn-desc">Format tiền tệ — chia 100 nếu không phải zero-decimal currency. VND hiển thị ₫.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">write_to_sheet</span>(<span class="fn-param">worksheet, accounts, selections</span>) <span class="fn-ret">→ None</span></div>
+      <div class="fn-desc">Ghi header + data, sắp xếp theo Business Name → Account Name, giữ nguyên cột "Chọn Lấy Camp".</div>
+    </div>
+  </div>
+
+  <h3>Sheet TKQC API — 11 cột</h3>
+  <table>
+    <tr><th>Cột</th><th>Tên</th><th>Nguồn</th></tr>
+    <tr><td>A</td><td>ID Tài Khoản</td><td>act_xxxxxxxx từ API</td></tr>
+    <tr><td>B</td><td>Tên Tài Khoản</td><td>API</td></tr>
+    <tr><td>C</td><td>ID Business</td><td>API — business.id</td></tr>
+    <tr><td>D</td><td>Tên Business</td><td>API — business.name</td></tr>
+    <tr><td>E</td><td>Trạng Thái</td><td>ACCOUNT_STATUS_MAP[account_status]</td></tr>
+    <tr><td>F</td><td>Tiền Tệ</td><td>API</td></tr>
+    <tr><td>G</td><td>Múi Giờ</td><td>API — timezone_name</td></tr>
+    <tr><td>H</td><td>Đã Chi</td><td>API — amount_spent (format_money)</td></tr>
+    <tr><td>I</td><td>Số Dư</td><td>API — balance (format_money)</td></tr>
+    <tr><td>J</td><td><strong>Chọn Lấy Camp</strong></td><td>Người dùng đánh TRUE → get_campaigns.py xử lý</td></tr>
+    <tr><td>K</td><td>Cập Nhật Lúc</td><td>Timestamp</td></tr>
+  </table>
+</section>
+
+<!-- ─────────────────────────────── GET_CAMPAIGNS ─── -->
+<section id="get-campaigns">
+  <h2>get_campaigns.py — Phase 1: Danh sách Campaign</h2>
+  <p>Ghi danh sách campaign kèm metrics tháng này vào tab tài khoản. Các module khác import constants và shared functions từ file này.</p>
+
+  <div class="notice notice-warn">
+    ⚡ <strong>Import hub:</strong> <code>get_details.py</code> import toàn bộ shared code từ file này. Không xóa hoặc rename hàm public.
+  </div>
+
+  <h3>Constants quan trọng</h3>
+  <table>
+    <tr><th>Tên</th><th>Loại</th><th>Mô tả</th></tr>
+    <tr><td><code>INBOX_TYPES</code></td><td>list[str]</td><td>action_type của Inbox (messaging_started, first_reply, new_connections, depth_2…)</td></tr>
+    <tr><td><code>LEAD_TYPES</code></td><td>list[str]</td><td>action_type của Lead (lead, lead_grouped, pixel_lead)</td></tr>
+    <tr><td><code>PURCHASE_TYPES</code></td><td>list[str]</td><td>action_type của Purchase (purchase, pixel_purchase, omni_purchase, onsite_purchase)</td></tr>
+    <tr><td><code>RESULT_TYPES</code></td><td>list[str]</td><td>Thứ tự ưu tiên: INBOX → LEAD → PURCHASE → engagement. Dùng để xác định "Kết Quả" chính.</td></tr>
+    <tr><td><code>HEADERS</code></td><td>list[str]</td><td>37 tên cột A–AK cho tab tài khoản</td></tr>
+    <tr><td><code>_INSIGHTS_FIELDS</code></td><td>str</td><td>Fields gửi cho Insights API — dùng chung cho cả campaign và ad level</td></tr>
+  </table>
+
+  <h3>Hàm Google Sheets</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">connect_spreadsheet</span>(<span class="fn-param">credentials_file</span>) <span class="fn-ret">→ Spreadsheet</span></div>
+      <div class="fn-desc">Kết nối bằng service account, trả về Spreadsheet object (không phải worksheet cụ thể).</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">get_selected_accounts</span>(<span class="fn-param">spreadsheet</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">Đọc sheet TKQC API, trả về <code>[{id, name, currency}]</code> cho các tài khoản có "Chọn Lấy Camp" = TRUE.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">read_detail_selections</span>(<span class="fn-param">worksheet</span>) <span class="fn-ret">→ dict[str, bool]</span></div>
+      <div class="fn-desc">Đọc cột "Chọn Lấy Chi Tiết" trong tab tài khoản. Chỉ đọc dòng Campaign. Trả về <code>{campaign_id: bool}</code>.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">get_or_create_worksheet</span>(<span class="fn-param">spreadsheet, title</span>) <span class="fn-ret">→ Worksheet</span></div>
+      <div class="fn-desc">Lấy worksheet theo tên, tạo mới (5000 rows × 37 cols) nếu chưa có. Tự sanitize tên (bỏ ký tự đặc biệt).</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">write_to_sheet</span>(<span class="fn-param">worksheet, rows</span>) <span class="fn-ret">→ None</span></div>
+      <div class="fn-desc">Ghi HEADERS vào A1, xóa A2:AK{last_row}, rồi ghi rows từ A2. Dùng <code>col_to_letter(37)</code> → "AK".</div>
+    </div>
+  </div>
+
+  <h3>Hàm Facebook API</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">paginate</span>(<span class="fn-param">url, params</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">Vòng lặp theo <code>paging.next</code> cho đến khi hết trang. Raise RuntimeError nếu API trả về lỗi.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_campaigns</span>(<span class="fn-param">account_id</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">GET <code>/act_{id}/campaigns</code> — fields: id, name, status. Limit 100/trang.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_insights_campaign_level</span>(<span class="fn-param">account_id</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">GET <code>/act_{id}/insights</code> — level=campaign, date_preset=this_month, limit 500. Trả về 1 dòng/campaign.</div>
+    </div>
+  </div>
+
+  <h3>Hàm Metrics</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">parse_insight_metrics</span>(<span class="fn-param">insight: dict</span>) <span class="fn-ret">→ dict</span></div>
+      <div class="fn-desc">Chuyển raw insight API thành dict chuẩn hóa (float). Tự tính CTR/CPC/CPM/freq nếu API không trả về. Bao gồm: spend, impr, clicks, ctr, cpc, cpm, reach, freq, inbox, cpi, leads, cpl, purchases, cps, revenue, roas, ket_qua, cpkq.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">aggregate_metrics</span>(<span class="fn-param">metrics_list: list[dict]</span>) <span class="fn-ret">→ dict</span></div>
+      <div class="fn-desc">Tổng hợp metrics từ nhiều Ad để tính Adset tổng. Sum các giá trị thô (spend, impr, clicks, reach, inbox, leads, purchases, revenue, ket_qua), tính lại tỷ lệ. Dùng trong <code>get_details.py</code>.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">_get_primary_result</span>(<span class="fn-param">insight: dict</span>) <span class="fn-ret">→ tuple[float, float]</span></div>
+      <div class="fn-desc">Xác định "Kết Quả" chính bằng cách dùng <code>cost_per_action_type</code> (API tính sẵn) theo thứ tự ưu tiên RESULT_TYPES. Trả về <code>(ket_qua_count, chi_phi_ket_qua)</code>.</div>
+    </div>
+  </div>
+
+  <h3>API calls trong main()</h3>
+  <div class="api-box">
+    <span class="api-method">GET</span> <span class="api-url">/{account_id}/campaigns</span>
+    <span class="api-param">fields: <span>id,name,status</span></span>
+    <span class="api-param">limit: <span>100</span></span>
+  </div>
+  <div class="api-box">
+    <span class="api-method">GET</span> <span class="api-url">/{account_id}/insights</span>
+    <span class="api-param">level: <span>campaign</span></span>
+    <span class="api-param">date_preset: <span>this_month</span></span>
+    <span class="api-param">fields: <span>campaign_id, spend, impressions, clicks, ctr, cpc, cpm, reach, frequency, actions, action_values, purchase_roas, cost_per_action_type</span></span>
+  </div>
+
+  <h3>Output files</h3>
+  <table>
+    <tr><th>File</th><th>Nội dung</th></tr>
+    <tr><td><code>campaigns.json</code></td><td>Danh sách campaign theo tài khoản, kèm <code>_api</code> metadata</td></tr>
+    <tr><td><code>insights_campaign.json</code></td><td>Raw insights từ API, kèm <code>_api</code> metadata</td></tr>
+  </table>
+</section>
+
+<!-- ─────────────────────────────── GET_DETAILS ─── -->
+<section id="get-details">
+  <h2>get_details.py — Phase 2: Chi tiết Adset / Ad</h2>
+  <p>Mở rộng cây cho các campaign được chọn. <strong>Import toàn bộ shared code từ get_campaigns.py</strong> để tránh trùng lặp code.</p>
+
+  <pre><code><span class="kw">from</span> get_campaigns <span class="kw">import</span> (
+    BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
+    connect_spreadsheet, get_selected_accounts, read_detail_selections,
+    get_or_create_worksheet, sanitize_sheet_name, write_to_sheet,
+    paginate, fetch_campaigns, fetch_insights_campaign_level,
+    parse_insight_metrics, aggregate_metrics,
+    _insights_cols, _campaign_row, save_json,
+)</code></pre>
+
+  <h3>Hàm Facebook API</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_adsets</span>(<span class="fn-param">campaign_id</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">GET <code>/{campaign_id}/adsets</code> — fields: id, name, status.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_ads</span>(<span class="fn-param">adset_id</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">GET <code>/{adset_id}/ads</code> — fields: id, name, status, creative{id, name, object_story_spec, body, title, link_url, thumbnail_url, effective_object_story_id}.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">fetch_insights_ad_level</span>(<span class="fn-param">account_id</span>) <span class="fn-ret">→ list[dict]</span></div>
+      <div class="fn-desc">GET <code>/act_{id}/insights</code> — level=ad, date_preset=this_month. Lấy toàn bộ tài khoản, lọc theo ad_id sau.</div>
+    </div>
+  </div>
+
+  <h3>Hàm Creative</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">extract_creative_info</span>(<span class="fn-param">creative: dict</span>) <span class="fn-ret">→ dict</span></div>
+      <div class="fn-desc">Bóc creative_id, page_id, post_id, body, title, description, link, cta, thumbnail_url từ object_story_spec. Post ID lấy từ phần sau <code>_</code> của effective_object_story_id.</div>
+    </div>
+  </div>
+
+  <h3>Hàm Row builders</h3>
+  <div class="fn-list">
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">_adset_row</span>(<span class="fn-param">camp_id, camp_name, adset, m, currency, now_str</span>) <span class="fn-ret">→ list (37 phần tử)</span></div>
+      <div class="fn-desc">Dòng Adset — cột A trống, B="Adset", creative trống, metrics từ aggregate_metrics().</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">_ad_row</span>(<span class="fn-param">camp_id, camp_name, adset_id, adset_name, ad, m, currency, now_str</span>) <span class="fn-ret">→ list (37 phần tử)</span></div>
+      <div class="fn-desc">Dòng Ad — đầy đủ creative (I–Q), metrics cấp ad.</div>
+    </div>
+    <div class="fn-item">
+      <div class="fn-sig"><span class="fn-name">build_rows</span>(<span class="fn-param">campaigns, camp_insights_map, adset_data_map, ad_insights_map, detail_selections, currency, now_str</span>) <span class="fn-ret">→ list[list]</span></div>
+      <div class="fn-desc">Xây toàn bộ danh sách dòng. Với campaign KHÔNG được chọn: chỉ có 1 dòng Campaign. Với campaign được chọn: 1 Campaign + N×(1 Adset + M×Ad). Sắp xếp: ACTIVE trước, rồi theo tên.</div>
+    </div>
+  </div>
+
+  <h3>Luồng main() của get_details.py</h3>
+  <div class="workflow">
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">1</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Đọc detail_selections từ sheet hiện tại</div>
+        <div class="step-desc"><code>read_detail_selections(ws)</code> → <code>{campaign_id: True/False}</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">2</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Bỏ qua nếu không có campaign nào TRUE</div>
+        <div class="step-desc">Không tốn API call.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">3</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Fetch lại campaigns + campaign insights</div>
+        <div class="step-desc">Cần để vẽ toàn bộ cây (cả campaign không được chọn cũng cần có dòng).</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">4</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Fetch ad-level insights (1 lần cho toàn tài khoản)</div>
+        <div class="step-desc">Lấy toàn bộ, map theo ad_id sau — tránh gọi nhiều API nhỏ.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">5</div><div class="step-connector"></div></div>
+      <div class="step-body">
+        <div class="step-title">Fetch adsets + ads chỉ cho campaign được chọn</div>
+        <div class="step-desc">Vòng lặp: <code>fetch_adsets(camp_id)</code> → với mỗi adset: <code>fetch_ads(adset_id)</code> → gán <code>adset["_ads"] = ads</code>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-line"><div class="step-dot" style="font-size:9px">6</div></div>
+      <div class="step-body">
+        <div class="step-title">build_rows() → write_to_sheet() → save_json()</div>
+        <div class="step-desc">Ghi đè toàn bộ sheet. Lưu adsets.json, ads.json, insights_ad.json.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>API calls trong main()</h3>
+  <div class="api-box">
+    <span class="api-method">GET</span> <span class="api-url">/{account_id}/insights</span>
+    <span class="api-param">level: <span>ad</span></span>
+    <span class="api-param">date_preset: <span>this_month</span></span>
+    <span class="api-param">fields: <span>ad_id, adset_id, campaign_id, spend, impressions, clicks, ctr, cpc, cpm, reach, frequency, actions, action_values, purchase_roas, cost_per_action_type</span></span>
+  </div>
+  <div class="api-box">
+    <span class="api-method">GET</span> <span class="api-url">/{campaign_id}/adsets</span>
+    <span class="api-param">fields: <span>id, name, status</span></span>
+  </div>
+  <div class="api-box">
+    <span class="api-method">GET</span> <span class="api-url">/{adset_id}/ads</span>
+    <span class="api-param">fields: <span>id, name, status, creative{id, name, object_story_spec, body, title, link_url, thumbnail_url, effective_object_story_id}</span></span>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── API REF ─── -->
+<section id="api-ref">
+  <h2>Meta Graph API Reference</h2>
+
+  <h3>Endpoint tổng quát</h3>
+  <p>Base URL: <code>https://graph.facebook.com/v20.0</code></p>
+
+  <table>
+    <tr><th>Endpoint</th><th>Dùng bởi</th><th>Mô tả</th></tr>
+    <tr><td><code>/me/adaccounts</code></td><td>main.py</td><td>Danh sách tài khoản của user</td></tr>
+    <tr><td><code>/act_{id}/campaigns</code></td><td>get_campaigns.py, get_details.py</td><td>Campaigns của tài khoản</td></tr>
+    <tr><td><code>/act_{id}/insights?level=campaign</code></td><td>get_campaigns.py, get_details.py</td><td>Insights tổng hợp cấp campaign</td></tr>
+    <tr><td><code>/act_{id}/insights?level=ad</code></td><td>get_details.py</td><td>Insights từng ad (1 call cho toàn tài khoản)</td></tr>
+    <tr><td><code>/{campaign_id}/adsets</code></td><td>get_details.py</td><td>Adsets của campaign</td></tr>
+    <tr><td><code>/{adset_id}/ads</code></td><td>get_details.py</td><td>Ads của adset kèm creative</td></tr>
+  </table>
+
+  <h3>Pagination</h3>
+  <p>Tất cả API call đi qua hàm <code>paginate()</code> trong get_campaigns.py. Hàm này follow <code>paging.next</code> cho đến khi <code>None</code>.</p>
+</section>
+
+<!-- ─────────────────────────────── METRICS ─── -->
+<section id="metrics">
+  <h2>Metrics &amp; Tính toán</h2>
+
+  <h3>Metrics API trả về trực tiếp</h3>
+  <table>
+    <tr><th>Field API</th><th>Cột Sheet</th><th>Ghi chú</th></tr>
+    <tr><td><code>spend</code></td><td>Spend Tháng Này</td><td>Tổng chi tiêu, đơn vị gốc (VND không chia 100)</td></tr>
+    <tr><td><code>impressions</code></td><td>Lượt Hiển Thị</td><td></td></tr>
+    <tr><td><code>clicks</code></td><td>Lượt Click</td><td></td></tr>
+    <tr><td><code>ctr</code></td><td>CTR (%)</td><td>Fallback: clicks/impressions×100</td></tr>
+    <tr><td><code>cpc</code></td><td>CPC</td><td>Fallback: spend/clicks</td></tr>
+    <tr><td><code>cpm</code></td><td>CPM</td><td>Fallback: spend/impressions×1000</td></tr>
+    <tr><td><code>reach</code></td><td>Tiếp Cận</td><td></td></tr>
+    <tr><td><code>frequency</code></td><td>Tần Suất</td><td>Fallback: impressions/reach</td></tr>
+    <tr><td><code>purchase_roas</code></td><td>ROAS</td><td>Fallback: revenue/spend</td></tr>
+    <tr><td><code>cost_per_action_type</code></td><td>Chi Phí / Kết Quả</td><td>API đã tính theo optimization event</td></tr>
+  </table>
+
+  <h3>Metrics tính từ actions array</h3>
+  <table>
+    <tr><th>Cột</th><th>Cách tính</th><th>action_type khớp</th></tr>
+    <tr><td>Số Inbox</td><td><code>_sum_actions(actions, INBOX_TYPES)</code></td><td>messaging_conversation_started_7d, messaging_first_reply, messaging_new_connections, messaging_user_depth_2_message_send</td></tr>
+    <tr><td>CPI</td><td><code>spend / inbox</code></td><td>—</td></tr>
+    <tr><td>Số Lead</td><td><code>_sum_actions(actions, LEAD_TYPES)</code></td><td>lead, lead_grouped, pixel_lead</td></tr>
+    <tr><td>CPL</td><td><code>spend / leads</code></td><td>—</td></tr>
+    <tr><td>Số Đơn Hàng</td><td><code>_sum_actions(actions, PURCHASE_TYPES)</code></td><td>purchase, pixel_purchase, omni_purchase, onsite_purchase</td></tr>
+    <tr><td>CPS</td><td><code>spend / purchases</code></td><td>—</td></tr>
+    <tr><td>Doanh Thu</td><td><code>_sum_actions(action_values, PURCHASE_TYPES)</code></td><td>(từ action_values)</td></tr>
+    <tr><td>Kết Quả</td><td><code>_get_primary_result(insight)</code></td><td>Theo thứ tự RESULT_TYPES từ cost_per_action_type</td></tr>
+  </table>
+
+  <h3>Logic xác định "Kết Quả"</h3>
+  <div class="notice notice-info">
+    ℹ️ Facebook Ads Manager hiển thị "Kết quả" dựa trên <strong>optimization_goal của adset</strong>. Vì API không trả về optimization_goal trong insights, chúng ta xấp xỉ bằng cách dùng <code>cost_per_action_type</code> (đã được Facebook tính sẵn) theo thứ tự ưu tiên RESULT_TYPES.
+  </div>
+  <pre><code><span class="cmt"># Thứ tự ưu tiên:</span>
+RESULT_TYPES = INBOX_TYPES + LEAD_TYPES + PURCHASE_TYPES + [
+    <span class="str">"post_engagement"</span>, <span class="str">"page_engagement"</span>, <span class="str">"link_click"</span>,
+    <span class="str">"video_view"</span>, <span class="str">"app_install"</span>
+]
+
+<span class="cmt"># Tìm action_type đầu tiên có cost > 0 trong RESULT_TYPES</span>
+<span class="kw">for</span> atype <span class="kw">in</span> RESULT_TYPES:
+    cpx = cost_map.get(atype, <span class="num">0.0</span>)
+    <span class="kw">if</span> cpx > <span class="num">0</span>:
+        <span class="kw">return</span> action_map.get(atype, <span class="num">0.0</span>), cpx</code></pre>
+
+  <h3>Adset metrics — cách tổng hợp</h3>
+  <p>Không có API call cấp adset. Adset metrics được tính bằng cách <strong>sum ad-level metrics</strong> trong Python.</p>
+  <pre><code>ad_metrics_list = [parse_insight_metrics(ad_insights_map.get(ad_id, {})) <span class="kw">for</span> ad <span class="kw">in</span> sorted_ads]
+adset_m = aggregate_metrics(ad_metrics_list)</code></pre>
+  <p>Các giá trị thô (spend, impr, clicks, reach, inbox, leads, purchases, revenue, ket_qua) được cộng lại. Tỷ lệ (CTR, CPC, CPM, freq, CPI, CPL, CPS, ROAS, cpkq) được tính lại từ các giá trị tổng.</p>
+</section>
+
+<!-- ─────────────────────────────── JSON FILES ─── -->
+<section id="json-files">
+  <h2>File JSON output</h2>
+
+  <p>Tất cả file JSON có block <code>_api</code> ở đầu mô tả endpoint đã gọi.</p>
+
+  <table>
+    <tr><th>File</th><th>Ghi bởi</th><th>Nội dung</th></tr>
+    <tr><td><code>ad_accounts.json</code></td><td>main.py</td><td>Raw response /me/adaccounts</td></tr>
+    <tr><td><code>campaigns.json</code></td><td>get_campaigns.py</td><td><code>{acc_name: [campaigns]}</code> — id, name, status</td></tr>
+    <tr><td><code>insights_campaign.json</code></td><td>get_campaigns.py</td><td><code>{acc_name: [insights]}</code> — 1 record/campaign</td></tr>
+    <tr><td><code>adsets.json</code></td><td>get_details.py</td><td><code>{acc_name: [adsets]}</code> — chỉ campaign được chọn</td></tr>
+    <tr><td><code>ads.json</code></td><td>get_details.py</td><td><code>{acc_name: [ads]}</code> — kèm creative đầy đủ</td></tr>
+    <tr><td><code>insights_ad.json</code></td><td>get_details.py</td><td><code>{acc_name: [insights]}</code> — 1 record/ad</td></tr>
+  </table>
+
+  <h3>Cấu trúc _api block</h3>
+  <pre><code>{
+  <span class="str">"_api"</span>: {
+    <span class="str">"endpoint"</span>: <span class="str">"GET https://graph.facebook.com/v20.0/act_{id}/insights"</span>,
+    <span class="str">"level"</span>:    <span class="str">"campaign"</span>,
+    <span class="str">"date_preset"</span>: <span class="str">"this_month"</span>,
+    <span class="str">"fields"</span>:   <span class="str">"campaign_id,spend,impressions,..."</span>,
+    <span class="str">"note"</span>:     <span class="str">"Insights cấp campaign tháng này"</span>
+  },
+  <span class="str">"Tên Tài Khoản"</span>: [...]
+}</code></pre>
+</section>
+
+<!-- ─────────────────────────────── SHEET STRUCTURE ─── -->
+<section id="sheet-structure">
+  <h2>Cấu trúc Google Sheet</h2>
+
+  <h3>Sheet "TKQC API"</h3>
+  <p>Được ghi bởi <code>main.py</code>. Người dùng đánh TRUE vào cột <strong>Chọn Lấy Camp</strong>.</p>
+
+  <h3>Tab tài khoản (tên tài khoản quảng cáo)</h3>
+  <p>Được ghi bởi <code>get_campaigns.py</code> và <code>get_details.py</code>. Mỗi lần ghi đè toàn bộ (giữ lại cột A — Chọn Lấy Chi Tiết).</p>
+
+  <div class="notice notice-green">
+    ✓ <strong>Luồng giữ lựa chọn:</strong> Cả get_campaigns.py và get_details.py đều gọi <code>read_detail_selections(ws)</code> TRƯỚC khi ghi, lấy giá trị TRUE/FALSE hiện tại rồi điền lại vào cột A khi build rows. Người dùng không mất lựa chọn khi refresh.
+  </div>
+
+  <h3>Phân biệt các cấp dòng</h3>
+  <table>
+    <tr><th>Cột A</th><th>Cột B (Cấp)</th><th>Ghi chú</th></tr>
+    <tr><td>TRUE / FALSE</td><td><code>Campaign</code></td><td>Người dùng tự sửa cột A để chọn lấy chi tiết</td></tr>
+    <tr><td>(trống)</td><td><code>Adset</code></td><td>Chỉ xuất hiện sau khi chạy get_details.py</td></tr>
+    <tr><td>(trống)</td><td><code>Ad</code></td><td>Chỉ xuất hiện sau khi chạy get_details.py</td></tr>
+  </table>
+
+  <h3>Yêu cầu</h3>
+  <table>
+    <tr><th>File</th><th>Yêu cầu</th></tr>
+    <tr><td><code>service_account.json</code></td><td>Google Service Account có quyền Editor trên Spreadsheet</td></tr>
+    <tr><td>Google Sheet permissions</td><td>Chia sẻ với email service account dạng <code>xxx@project.iam.gserviceaccount.com</code></td></tr>
+    <tr><td>Facebook Token</td><td>User/System Token với quyền <code>ads_read</code>, <code>ads_management</code></td></tr>
+  </table>
+
+  <h3>Cài đặt</h3>
+  <pre><code>pip install -r requirements.txt
+
+<span class="cmt"># requirements.txt:</span>
+gspread==6.1.2
+google-auth==2.29.0
+requests==2.31.0</code></pre>
+</section>
+
+<div style="height:60px;"></div>
+</main>
+</div>
+
+<script>
+  // Active nav link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links    = document.querySelectorAll('nav a[href^="#"]');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.25 });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

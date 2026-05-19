@@ -1,8 +1,12 @@
 """
-Đọc sheet TKQC API → tìm tài khoản có cột "Chọn Lấy Camp" = TRUE
-→ Lấy danh sách Campaign tháng này, ghi vào tab tài khoản
-→ Với Campaign có "Chọn Lấy Chi Tiết" = TRUE:
-   lấy Adset / Ad / Creative + insights level=ad rồi chèn cây bên dưới
+Phase 1 – Lấy danh sách Campaign tháng này cho các tài khoản được chọn
+         trong sheet TKQC API (cột "Chọn Lấy Camp" = TRUE).
+
+Ghi mỗi campaign thành 1 dòng vào tab tài khoản trong Google Sheets,
+kèm metrics cấp campaign (spend, impressions, CTR, CPM …).
+
+Cột "Chọn Lấy Chi Tiết" được giữ nguyên giá trị cũ để không mất lựa chọn.
+→ Chạy get_details.py sau đó để mở rộng Adset / Ad cho các campaign được chọn.
 """
 
 import re
@@ -27,9 +31,9 @@ ZERO_DECIMAL_CURRENCIES = {
 }
 
 STATUS_MAP = {
-    "ACTIVE": "Đang chạy",
-    "PAUSED": "Tạm dừng",
-    "DELETED": "Đã xóa",
+    "ACTIVE":   "Đang chạy",
+    "PAUSED":   "Tạm dừng",
+    "DELETED":  "Đã xóa",
     "ARCHIVED": "Đã lưu trữ",
 }
 
@@ -52,11 +56,11 @@ PURCHASE_TYPES = [
     "onsite_conversion.purchase",
 ]
 
-# Ưu tiên xác định "Kết Quả" chính của chiến dịch (inbox → lead → purchase → engagement)
+# Ưu tiên xác định "Kết Quả" chính (purchase → lead → inbox → engagement)
 RESULT_TYPES = (
-    INBOX_TYPES
+    PURCHASE_TYPES
     + LEAD_TYPES
-    + PURCHASE_TYPES
+    + INBOX_TYPES
     + ["post_engagement", "page_engagement", "link_click", "video_view", "app_install"]
 )
 
@@ -88,15 +92,17 @@ HEADERS = [
     "CPM",                   # X  24
     "Tiếp Cận",              # Y  25
     "Tần Suất",              # Z  26
-    "CPI",                   # AA 27
-    "CPL",                   # AB 28
-    "Số Đơn Hàng",           # AC 29
-    "CPS",                   # AD 30
-    "Doanh Thu",             # AE 31
-    "ROAS",                  # AF 32
-    "Kết Quả",               # AG 33  – primary optimization result của campaign
-    "Chi Phí / Kết Quả",     # AH 34
-    "Cập Nhật Lúc",          # AI 35
+    "Số Inbox",              # AA 27
+    "CPI",                   # AB 28
+    "Số Lead",               # AC 29
+    "CPL",                   # AD 30
+    "Số Đơn Hàng",           # AE 31
+    "CPS",                   # AF 32
+    "Doanh Thu",             # AG 33
+    "ROAS",                  # AH 34
+    "Kết Quả",               # AI 35  – primary optimization result
+    "Chi Phí / Kết Quả",     # AJ 36
+    "Cập Nhật Lúc",          # AK 37
 ]
 
 SCOPES = [
@@ -105,6 +111,23 @@ SCOPES = [
 ]
 
 _CHON_VALUES = ("TRUE", "ĐÚNG", "1", "X", "✓")
+
+# ── Khoảng thời gian báo cáo ──────────────────────────────────────────────────
+# Mặc định khi chạy thẳng bằng python get_campaigns.py.
+# Khi chạy qua launcher.py, giá trị sẽ được ghi vào config.py và đọc ở đây.
+try:
+    from config import DATE_PRESET, TIME_RANGE   # ghi bởi launcher.py
+except ImportError:
+    DATE_PRESET = "this_month"                   # preset mặc định
+    TIME_RANGE: dict = {}                        # chỉ dùng khi DATE_PRESET = ""
+
+
+def _date_params() -> dict:
+    """Trả về dict tham số ngày để truyền vào Insights API."""
+    if DATE_PRESET:
+        return {"date_preset": DATE_PRESET}
+    return {"time_range": json.dumps(TIME_RANGE)}
+
 
 # Fields gửi cho Insights API (dùng chung cho campaign và ad level)
 _INSIGHTS_FIELDS = (
@@ -116,7 +139,7 @@ _INSIGHTS_FIELDS = (
 # ── Google Sheets ──────────────────────────────────────────────────────────────
 
 def col_to_letter(n: int) -> str:
-    """Chuyển số cột 1-based sang ký hiệu A1 (vd: 27 → 'AA', 35 → 'AI')."""
+    """Chuyển số cột 1-based sang ký hiệu A1 (vd: 27 → 'AA', 37 → 'AK')."""
     result = ""
     while n > 0:
         n, rem = divmod(n - 1, 26)
@@ -132,7 +155,7 @@ def connect_spreadsheet(credentials_file: str = "service_account.json"):
 
 
 def get_selected_accounts(spreadsheet) -> list[dict]:
-    """Đọc sheet TKQC API, trả về list {id, name, currency} của các tài khoản được chọn."""
+    """Đọc sheet TKQC API, trả về list {id, name, currency} của tài khoản được chọn."""
     ws = spreadsheet.worksheet(AD_ACCOUNTS_SHEET)
     all_values = ws.get_all_values()
     if len(all_values) < 2:
@@ -140,10 +163,10 @@ def get_selected_accounts(spreadsheet) -> list[dict]:
 
     header = all_values[0]
     try:
-        id_col = header.index("ID Tài Khoản")
-        name_col = header.index("Tên Tài Khoản")
+        id_col       = header.index("ID Tài Khoản")
+        name_col     = header.index("Tên Tài Khoản")
         currency_col = header.index("Tiền Tệ")
-        chon_col = header.index("Chọn Lấy Camp")
+        chon_col     = header.index("Chọn Lấy Camp")
     except ValueError as e:
         raise RuntimeError(f"Sheet '{AD_ACCOUNTS_SHEET}' thiếu cột: {e}. Hãy chạy main.py trước.")
 
@@ -151,8 +174,8 @@ def get_selected_accounts(spreadsheet) -> list[dict]:
     for row in all_values[1:]:
         chon_val = row[chon_col].strip().upper() if chon_col < len(row) else ""
         if chon_val in _CHON_VALUES:
-            acc_id = row[id_col].strip() if id_col < len(row) else ""
-            acc_name = row[name_col].strip() if name_col < len(row) else ""
+            acc_id   = row[id_col].strip()       if id_col       < len(row) else ""
+            acc_name = row[name_col].strip()     if name_col     < len(row) else ""
             currency = row[currency_col].strip() if currency_col < len(row) else "VND"
             if acc_id:
                 selected.append({"id": acc_id, "name": acc_name, "currency": currency})
@@ -171,8 +194,8 @@ def read_detail_selections(worksheet) -> dict[str, bool]:
 
     header = all_values[0]
     try:
-        chon_col = header.index("Chọn Lấy Chi Tiết")
-        cap_col = header.index("Cấp")
+        chon_col    = header.index("Chọn Lấy Chi Tiết")
+        cap_col     = header.index("Cấp")
         camp_id_col = header.index("Campaign ID")
     except ValueError:
         return {}
@@ -182,7 +205,7 @@ def read_detail_selections(worksheet) -> dict[str, bool]:
         cap = row[cap_col].strip() if cap_col < len(row) else ""
         if cap != "Campaign":
             continue
-        camp_id = row[camp_id_col].strip() if camp_id_col < len(row) else ""
+        camp_id  = row[camp_id_col].strip() if camp_id_col < len(row) else ""
         chon_val = row[chon_col].strip().upper() if chon_col < len(row) else ""
         if camp_id:
             selections[camp_id] = chon_val in _CHON_VALUES
@@ -200,6 +223,16 @@ def get_or_create_worksheet(spreadsheet, title: str):
     if safe_title in existing:
         return existing[safe_title]
     return spreadsheet.add_worksheet(title=safe_title, rows=5000, cols=len(HEADERS))
+
+
+def write_to_sheet(worksheet, rows: list[list]):
+    last_col = col_to_letter(len(HEADERS))
+    worksheet.update("A1", [HEADERS])
+    last_row = worksheet.row_count
+    if last_row >= 2:
+        worksheet.batch_clear([f"A2:{last_col}{last_row}"])
+    if rows:
+        worksheet.update("A2", rows)
 
 
 # ── Facebook Graph API ─────────────────────────────────────────────────────────
@@ -221,33 +254,9 @@ def paginate(url: str, params: dict) -> list[dict]:
 def fetch_campaigns(account_id: str) -> list[dict]:
     url = f"https://graph.facebook.com/{FB_API_VERSION}/{account_id}/campaigns"
     params = {
-        "fields": "id,name,status",
+        "fields":       "id,name,status",
         "access_token": ACCESS_TOKEN,
-        "limit": 100,
-    }
-    return paginate(url, params)
-
-
-def fetch_adsets(campaign_id: str) -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{campaign_id}/adsets"
-    params = {
-        "fields": "id,name,status",
-        "access_token": ACCESS_TOKEN,
-        "limit": 100,
-    }
-    return paginate(url, params)
-
-
-def fetch_ads(adset_id: str) -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{adset_id}/ads"
-    params = {
-        "fields": (
-            "id,name,status,"
-            "creative{id,name,object_story_spec,body,title,"
-            "link_url,thumbnail_url,effective_object_story_id}"
-        ),
-        "access_token": ACCESS_TOKEN,
-        "limit": 100,
+        "limit":        100,
     }
     return paginate(url, params)
 
@@ -255,72 +264,13 @@ def fetch_ads(adset_id: str) -> list[dict]:
 def fetch_insights_campaign_level(account_id: str) -> list[dict]:
     url = f"https://graph.facebook.com/{FB_API_VERSION}/{account_id}/insights"
     params = {
-        "level": "campaign",
-        "date_preset": "this_month",
-        "fields": f"campaign_id,{_INSIGHTS_FIELDS}",
+        "level":        "campaign",
+        **_date_params(),
+        "fields":       f"campaign_id,{_INSIGHTS_FIELDS}",
         "access_token": ACCESS_TOKEN,
-        "limit": 500,
+        "limit":        500,
     }
     return paginate(url, params)
-
-
-def fetch_insights_ad_level(account_id: str) -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{account_id}/insights"
-    params = {
-        "level": "ad",
-        "date_preset": "this_month",
-        "fields": f"ad_id,adset_id,campaign_id,{_INSIGHTS_FIELDS}",
-        "access_token": ACCESS_TOKEN,
-        "limit": 500,
-    }
-    return paginate(url, params)
-
-
-def extract_creative_info(creative: dict) -> dict:
-    if not creative:
-        return {}
-
-    oss = creative.get("object_story_spec") or {}
-    link_data = oss.get("link_data") or {}
-    video_data = oss.get("video_data") or {}
-
-    page_id = oss.get("page_id", "")
-    post_id = ""
-    effective_id = creative.get("effective_object_story_id", "")
-    if effective_id and "_" in effective_id:
-        parts = effective_id.split("_", 1)
-        if not page_id:
-            page_id = parts[0]
-        post_id = parts[1]
-
-    body = (
-        creative.get("body")
-        or link_data.get("message")
-        or video_data.get("message")
-        or ""
-    )
-    title = (
-        creative.get("title")
-        or link_data.get("name")
-        or video_data.get("title")
-        or creative.get("name", "")
-    )
-    description = link_data.get("description") or video_data.get("description") or ""
-    link = creative.get("link_url") or link_data.get("link") or ""
-    cta_obj = link_data.get("call_to_action") or video_data.get("call_to_action") or {}
-    cta = cta_obj.get("type", "") if cta_obj else ""
-
-    return {
-        "creative_id": creative.get("id", ""),
-        "page_id": page_id,
-        "post_id": post_id,
-        "body": body,
-        "title": title,
-        "description": description,
-        "link": link,
-        "cta": cta,
-        "thumbnail_url": creative.get("thumbnail_url", ""),
-    }
 
 
 # ── Insights metrics ───────────────────────────────────────────────────────────
@@ -350,8 +300,8 @@ def _get_primary_result(insight: dict) -> tuple[float, float]:
     """Xác định Kết Quả chính và Chi Phí / Kết Quả từ cost_per_action_type.
 
     Facebook Ads Manager hiển thị "Kết quả" dựa trên optimization event của adset.
-    Chúng ta xấp xỉ bằng cách dùng cost_per_action_type (do API tính sẵn) theo
-    thứ tự ưu tiên RESULT_TYPES, rồi lấy count từ actions.
+    Xấp xỉ bằng cách dùng cost_per_action_type (API đã tính sẵn) theo thứ tự
+    ưu tiên RESULT_TYPES, rồi lấy count từ actions.
 
     Returns: (ket_qua_count, chi_phi_ket_qua)
     """
@@ -372,8 +322,8 @@ def _get_primary_result(insight: dict) -> tuple[float, float]:
 def parse_insight_metrics(insight: dict) -> dict:
     """Chuyển raw insight dict từ API thành dict metrics chuẩn hóa (float).
     Dùng cho cả campaign-level và ad-level insights."""
-    spend = safe_float(insight.get("spend"))
-    impr  = safe_float(insight.get("impressions"))
+    spend  = safe_float(insight.get("spend"))
+    impr   = safe_float(insight.get("impressions"))
     clicks = safe_float(insight.get("clicks"))
     reach  = safe_float(insight.get("reach"))
 
@@ -392,16 +342,15 @@ def parse_insight_metrics(insight: dict) -> dict:
     if freq == 0 and reach > 0:
         freq = impr / reach
 
-    actions      = insight.get("actions") or []
-    action_vals  = insight.get("action_values") or []
-    roas_arr     = insight.get("purchase_roas") or []
+    actions     = insight.get("actions") or []
+    action_vals = insight.get("action_values") or []
+    roas_arr    = insight.get("purchase_roas") or []
 
     inbox     = _sum_actions(actions, INBOX_TYPES)
     leads     = _sum_actions(actions, LEAD_TYPES)
     purchases = _sum_actions(actions, PURCHASE_TYPES)
     revenue   = _sum_actions(action_vals, PURCHASE_TYPES)
 
-    # ROAS: ưu tiên giá trị API (đã tính sẵn), fallback tính từ revenue/spend
     roas = _sum_actions(roas_arr, PURCHASE_TYPES)
     if roas == 0 and spend > 0 and revenue > 0:
         roas = revenue / spend
@@ -431,43 +380,42 @@ def parse_insight_metrics(insight: dict) -> dict:
 
 
 def aggregate_metrics(metrics_list: list[dict]) -> dict:
-    """Tổng hợp metrics từ nhiều Ad thành metrics Adset."""
-    spend = sum(m["spend"] for m in metrics_list)
-    impr  = sum(m["impr"]  for m in metrics_list)
-    clicks = sum(m["clicks"] for m in metrics_list)
-    reach  = sum(m["reach"]  for m in metrics_list)
+    """Tổng hợp metrics từ nhiều Ad thành metrics Adset (dùng bởi get_details.py)."""
+    spend     = sum(m["spend"]     for m in metrics_list)
+    impr      = sum(m["impr"]      for m in metrics_list)
+    clicks    = sum(m["clicks"]    for m in metrics_list)
+    reach     = sum(m["reach"]     for m in metrics_list)
     inbox     = sum(m["inbox"]     for m in metrics_list)
     leads     = sum(m["leads"]     for m in metrics_list)
     purchases = sum(m["purchases"] for m in metrics_list)
     revenue   = sum(m["revenue"]   for m in metrics_list)
+    ket_qua   = sum(m["ket_qua"]   for m in metrics_list)
 
-    ket_qua = sum(m["ket_qua"] for m in metrics_list)
     return {
         "spend":     spend,
         "impr":      impr,
         "clicks":    clicks,
-        "ctr":       clicks / impr  * 100 if impr   > 0 else 0.0,
-        "cpc":       spend  / clicks      if clicks > 0 else 0.0,
-        "cpm":       spend  / impr  * 1000 if impr  > 0 else 0.0,
+        "ctr":       clicks / impr   * 100  if impr      > 0 else 0.0,
+        "cpc":       spend  / clicks        if clicks    > 0 else 0.0,
+        "cpm":       spend  / impr   * 1000 if impr      > 0 else 0.0,
         "reach":     reach,
-        "freq":      impr   / reach       if reach  > 0 else 0.0,
+        "freq":      impr   / reach         if reach     > 0 else 0.0,
         "inbox":     inbox,
-        "cpi":       spend  / inbox       if inbox  > 0 else 0.0,
+        "cpi":       spend  / inbox         if inbox     > 0 else 0.0,
         "leads":     leads,
-        "cpl":       spend  / leads       if leads  > 0 else 0.0,
+        "cpl":       spend  / leads         if leads     > 0 else 0.0,
         "purchases": purchases,
-        "cps":       spend  / purchases   if purchases > 0 else 0.0,
+        "cps":       spend  / purchases     if purchases > 0 else 0.0,
         "revenue":   revenue,
-        "roas":      revenue / spend      if spend  > 0 else 0.0,
+        "roas":      revenue / spend        if spend     > 0 else 0.0,
         "ket_qua":   ket_qua,
-        "cpkq":      spend / ket_qua      if ket_qua > 0 else 0.0,
+        "cpkq":      spend  / ket_qua       if ket_qua   > 0 else 0.0,
     }
 
 
 # ── Formatting ─────────────────────────────────────────────────────────────────
 
 def fmt_money(value: float, currency: str) -> str:
-    """Format giá trị float (đã ở đơn vị thực, không chia 100)."""
     currency = currency.upper()
     formatted = f"{int(round(value)):,}".replace(",", ".")
     return f"{formatted} ₫" if currency == "VND" else f"{formatted} {currency}"
@@ -485,162 +433,50 @@ def fmt_pct(v: float) -> str:
 
 
 def _insights_cols(m: dict, currency: str) -> list:
-    """16 giá trị cho cột S–AH (Spend → Chi Phí / Kết Quả)."""
-    def money(v):  return fmt_money(v, currency) if v > 0 else ""
-    def count(v):  return fmt_num(v) if v > 0 else ""
+    """18 giá trị cho cột S–AJ (Spend → Chi Phí / Kết Quả)."""
+    def money(v): return fmt_money(v, currency) if v > 0 else ""
+    def count(v): return fmt_num(v)             if v > 0 else ""
 
     return [
-        fmt_money(m["spend"],   currency),   # S  Spend (hiện cả khi = 0)
-        fmt_num(m["impr"]),                  # T  Lượt Hiển Thị
-        fmt_num(m["clicks"]),                # U  Lượt Click
-        fmt_pct(m["ctr"]),                   # V  CTR
-        money(m["cpc"]),                     # W  CPC
-        money(m["cpm"]),                     # X  CPM
-        fmt_num(m["reach"]),                 # Y  Tiếp Cận
-        fmt_pct(m["freq"]) if m["freq"] > 0 else "",  # Z  Tần Suất
-        money(m["cpi"]),                     # AA CPI
-        money(m["cpl"]),                     # AB CPL
-        count(m["purchases"]),               # AC Số Đơn Hàng
-        money(m["cps"]),                     # AD CPS
-        money(m["revenue"]),                 # AE Doanh Thu
-        f"{m['roas']:.2f}" if m["roas"] > 0 else "",  # AF ROAS
-        count(m["ket_qua"]),                 # AG Kết Quả
-        money(m["cpkq"]),                    # AH Chi Phí / Kết Quả
+        fmt_money(m["spend"],  currency),                          # S  Spend
+        fmt_num(m["impr"]),                                        # T  Lượt Hiển Thị
+        fmt_num(m["clicks"]),                                      # U  Lượt Click
+        fmt_pct(m["ctr"]),                                         # V  CTR
+        money(m["cpc"]),                                           # W  CPC
+        money(m["cpm"]),                                           # X  CPM
+        fmt_num(m["reach"]),                                       # Y  Tiếp Cận
+        fmt_pct(m["freq"]) if m["freq"] > 0 else "",               # Z  Tần Suất
+        count(m["inbox"]),                                         # AA Số Inbox
+        money(m["cpi"]),                                           # AB CPI
+        count(m["leads"]),                                         # AC Số Lead
+        money(m["cpl"]),                                           # AD CPL
+        count(m["purchases"]),                                     # AE Số Đơn Hàng
+        money(m["cps"]),                                           # AF CPS
+        money(m["revenue"]),                                       # AG Doanh Thu
+        f"{m['roas']:.2f}" if m["roas"] > 0 else "",               # AH ROAS
+        count(m["ket_qua"]),                                       # AI Kết Quả
+        money(m["cpkq"]),                                          # AJ Chi Phí / Kết Quả
     ]
 
 
-# ── Build rows ─────────────────────────────────────────────────────────────────
+# ── Row builder ────────────────────────────────────────────────────────────────
 
-def _campaign_row(camp_id, camp_name, is_selected, m: dict, status: str,
-                  currency: str, now_str: str) -> list:
-    """Dòng Campaign — 35 cột."""
+def _campaign_row(camp_id, camp_name, is_selected, m: dict,
+                  status: str, currency: str, now_str: str) -> list:
+    """Dòng Campaign — 37 cột."""
     return [
         "TRUE" if is_selected else "FALSE",  # A
         "Campaign",                           # B
         camp_id,                              # C
         camp_name,                            # D
-        "", "",                               # E F Adset
-        "", "",                               # G H Ad
-        "", "", "", "", "", "", "", "", "",   # I..Q Creative (9)
+        "", "",                               # E F  Adset
+        "", "",                               # G H  Ad
+        "", "", "", "", "", "", "", "", "",   # I..Q Creative (9 ô)
         STATUS_MAP.get(status, status),       # R
-    ] + _insights_cols(m, currency) + [now_str]  # S..AH + AI
+    ] + _insights_cols(m, currency) + [now_str]  # S..AJ + AK
 
 
-def _adset_row(camp_id, camp_name, adset, m: dict, currency: str, now_str: str) -> list:
-    """Dòng Adset — tổng hợp từ Ads — 35 cột."""
-    return [
-        "",                                                          # A
-        "Adset",                                                     # B
-        camp_id,                                                     # C
-        camp_name,                                                   # D
-        adset.get("id", ""),                                         # E
-        adset.get("name", ""),                                       # F
-        "", "",                                                      # G H Ad
-        "", "", "", "", "", "", "", "", "",                          # I..Q Creative
-        STATUS_MAP.get(adset.get("status", ""), adset.get("status", "")),  # R
-    ] + _insights_cols(m, currency) + [now_str]
-
-
-def _ad_row(camp_id, camp_name, adset_id, adset_name, ad, m: dict,
-            currency: str, now_str: str) -> list:
-    """Dòng Ad — đầy đủ creative + insights — 35 cột."""
-    c = extract_creative_info(ad.get("creative") or {})
-    return [
-        "",                            # A
-        "Ad",                          # B
-        camp_id,                       # C
-        camp_name,                     # D
-        adset_id,                      # E
-        adset_name,                    # F
-        ad.get("id", ""),              # G
-        ad.get("name", ""),            # H
-        c.get("creative_id", ""),      # I
-        c.get("page_id", ""),          # J
-        c.get("post_id", ""),          # K
-        c.get("body", ""),             # L
-        c.get("title", ""),            # M
-        c.get("description", ""),      # N
-        c.get("link", ""),             # O
-        c.get("cta", ""),              # P
-        c.get("thumbnail_url", ""),    # Q
-        STATUS_MAP.get(ad.get("status", ""), ad.get("status", "")),  # R
-    ] + _insights_cols(m, currency) + [now_str]
-
-
-def build_rows(
-    campaigns: list[dict],
-    camp_insights_map: dict,
-    adset_data_map: dict,
-    ad_insights_map: dict,
-    detail_selections: dict,
-    currency: str,
-    now_str: str,
-) -> list[list]:
-    status_order = {"ACTIVE": 0, "PAUSED": 1, "ARCHIVED": 2, "DELETED": 3}
-    sorted_camps = sorted(
-        campaigns,
-        key=lambda c: (status_order.get(c.get("status", ""), 9), c.get("name", "")),
-    )
-
-    rows = []
-    for camp in sorted_camps:
-        camp_id = camp.get("id", "")
-        camp_name = camp.get("name", "")
-        is_selected = detail_selections.get(camp_id, False)
-
-        camp_m = parse_insight_metrics(camp_insights_map.get(camp_id, {}))
-        rows.append(_campaign_row(
-            camp_id, camp_name, is_selected,
-            camp_m, camp.get("status", ""), currency, now_str,
-        ))
-
-        if not is_selected:
-            continue
-
-        adsets = adset_data_map.get(camp_id, [])
-        sorted_adsets = sorted(
-            adsets,
-            key=lambda a: (status_order.get(a.get("status", ""), 9), a.get("name", "")),
-        )
-
-        for adset in sorted_adsets:
-            adset_id = adset.get("id", "")
-            adset_name = adset.get("name", "")
-            ads = adset.get("_ads", [])
-            sorted_ads = sorted(
-                ads,
-                key=lambda a: (status_order.get(a.get("status", ""), 9), a.get("name", "")),
-            )
-
-            # Tổng hợp metrics Adset từ các Ad
-            ad_metrics_list = [
-                parse_insight_metrics(ad_insights_map.get(ad.get("id", ""), {}))
-                for ad in sorted_ads
-            ]
-            adset_m = aggregate_metrics(ad_metrics_list) if ad_metrics_list else parse_insight_metrics({})
-
-            rows.append(_adset_row(camp_id, camp_name, adset, adset_m, currency, now_str))
-
-            for ad, ad_m in zip(sorted_ads, ad_metrics_list):
-                rows.append(_ad_row(
-                    camp_id, camp_name, adset_id, adset_name,
-                    ad, ad_m, currency, now_str,
-                ))
-
-    return rows
-
-
-def write_to_sheet(worksheet, rows: list[list]):
-    last_col = col_to_letter(len(HEADERS))
-    worksheet.update("A1", [HEADERS])
-    last_row = worksheet.row_count
-    if last_row >= 2:
-        worksheet.batch_clear([f"A2:{last_col}{last_row}"])
-    if rows:
-        worksheet.update("A2", rows)
-
-
-# ── Main ───────────────────────────────────────────────────────────────────────
+# ── JSON output ────────────────────────────────────────────────────────────────
 
 def save_json(data: dict, filename: str, api_info: dict | None = None):
     """Ghi JSON, chèn block _api ở đầu nếu có api_info."""
@@ -654,6 +490,8 @@ def save_json(data: dict, filename: str, api_info: dict | None = None):
     print(f"  JSON → {out_path}")
 
 
+# ── Main ───────────────────────────────────────────────────────────────────────
+
 def main():
     month_label = datetime.now().strftime("%m/%Y")
     print("Kết nối Google Sheets...")
@@ -662,27 +500,25 @@ def main():
     print(f"Đọc danh sách tài khoản được chọn từ sheet '{AD_ACCOUNTS_SHEET}'...")
     selected_accounts = get_selected_accounts(spreadsheet)
     if not selected_accounts:
-        print("Không có tài khoản nào được chọn. Hãy đánh TRUE vào cột 'Chọn Lấy Camp' trong sheet TKQC API.")
+        print("Không có tài khoản nào được chọn. Hãy đánh TRUE vào cột 'Chọn Lấy Camp'.")
         return
     print(f"Tìm thấy {len(selected_accounts)} tài khoản được chọn.")
 
-    dump_campaigns: dict[str, list] = {}
-    dump_adsets: dict[str, list] = {}
-    dump_ads: dict[str, list] = {}
-    dump_insights_camp: dict[str, list] = {}
-    dump_insights_ad: dict[str, list] = {}
+    dump_campaigns:      dict[str, list] = {}
+    dump_insights_camp:  dict[str, list] = {}
 
     for acc in selected_accounts:
-        acc_id = acc["id"]
+        acc_id   = acc["id"]
         acc_name = acc["name"]
         currency = acc["currency"]
         print(f"\n[{acc_name}] Xử lý tháng {month_label}...")
 
         ws = get_or_create_worksheet(spreadsheet, acc_name)
 
+        # Giữ nguyên lựa chọn chi tiết hiện tại
         detail_selections = read_detail_selections(ws)
-        selected_camp_ids = {cid for cid, v in detail_selections.items() if v}
-        print(f"  → {len(selected_camp_ids)} campaign được chọn lấy chi tiết: {selected_camp_ids or '(chưa có)'}")
+        selected_count = sum(1 for v in detail_selections.values() if v)
+        print(f"  → {selected_count} campaign đang được chọn lấy chi tiết (giữ nguyên).")
 
         # ── API 1: Campaigns ──────────────────────────────────────────────────
         campaigns = fetch_campaigns(acc_id)
@@ -695,44 +531,25 @@ def main():
         print(f"  → {len(camp_insights)} dòng insights campaign.")
         dump_insights_camp[acc_name] = camp_insights
 
-        # ── API 3+4: Adset / Ad / Insights ad cho campaign được chọn ─────────
-        adset_data_map: dict[str, list] = {}
-        raw_adsets: list[dict] = []
-        raw_ads: list[dict] = []
-        ad_insights_map: dict[str, dict] = {}
-
-        if selected_camp_ids:
-            ad_insights = fetch_insights_ad_level(acc_id)
-            ad_insights_map = {r["ad_id"]: r for r in ad_insights if "ad_id" in r}
-            dump_insights_ad[acc_name] = ad_insights
-            print(f"  → {len(ad_insights)} dòng insights ad.")
-
-            total_adsets = total_ads = 0
-            for camp in campaigns:
-                camp_id = camp.get("id", "")
-                if camp_id not in selected_camp_ids:
-                    continue
-
-                adsets = fetch_adsets(camp_id)
-                for adset in adsets:
-                    raw_adsets.append({k: v for k, v in adset.items() if k != "_ads"})
-                    ads = fetch_ads(adset["id"])
-                    raw_ads.extend(ads)
-                    adset["_ads"] = ads
-                    total_ads += len(ads)
-                adset_data_map[camp_id] = adsets
-                total_adsets += len(adsets)
-
-            print(f"  → {total_adsets} adsets, {total_ads} ads.")
-
-        dump_adsets[acc_name] = raw_adsets
-        dump_ads[acc_name] = raw_ads
-
-        now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        rows = build_rows(
-            campaigns, camp_insights_map, adset_data_map,
-            ad_insights_map, detail_selections, currency, now_str,
+        # Build và ghi Campaign rows
+        status_order = {"ACTIVE": 0, "PAUSED": 1, "ARCHIVED": 2, "DELETED": 3}
+        sorted_camps = sorted(
+            campaigns,
+            key=lambda c: (status_order.get(c.get("status", ""), 9), c.get("name", "")),
         )
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        rows = [
+            _campaign_row(
+                camp.get("id", ""),
+                camp.get("name", ""),
+                detail_selections.get(camp.get("id", ""), False),
+                parse_insight_metrics(camp_insights_map.get(camp.get("id", ""), {})),
+                camp.get("status", ""),
+                currency,
+                now_str,
+            )
+            for camp in sorted_camps
+        ]
         write_to_sheet(ws, rows)
         print(f"  → Đã ghi {len(rows)} dòng vào tab '{sanitize_sheet_name(acc_name)}'.")
 
@@ -743,29 +560,12 @@ def main():
         "fields":   "id,name,status",
         "note":     "Toàn bộ campaign của tài khoản",
     })
-    save_json(dump_adsets, "adsets.json", {
-        "endpoint": f"GET {base_url}/{{campaign_id}}/adsets",
-        "fields":   "id,name,status",
-        "note":     "Adsets của các campaign được chọn lấy chi tiết",
-    })
-    save_json(dump_ads, "ads.json", {
-        "endpoint": f"GET {base_url}/{{adset_id}}/ads",
-        "fields":   "id,name,status,creative{id,name,object_story_spec,body,title,link_url,thumbnail_url,effective_object_story_id}",
-        "note":     "Ads kèm creative của các adset được chọn",
-    })
     save_json(dump_insights_camp, "insights_campaign.json", {
-        "endpoint":      f"GET {base_url}/act_{{account_id}}/insights",
-        "level":         "campaign",
-        "date_preset":   "this_month",
-        "fields":        f"campaign_id,{_INSIGHTS_FIELDS}",
-        "note":          "Insights cấp campaign tháng này — dùng cho dòng Campaign trong sheet",
-    })
-    save_json(dump_insights_ad, "insights_ad.json", {
-        "endpoint":      f"GET {base_url}/act_{{account_id}}/insights",
-        "level":         "ad",
-        "date_preset":   "this_month",
-        "fields":        f"ad_id,adset_id,campaign_id,{_INSIGHTS_FIELDS}",
-        "note":          "Insights cấp ad tháng này — dùng cho dòng Ad, tổng hợp Adset",
+        "endpoint":    f"GET {base_url}/act_{{account_id}}/insights",
+        "level":       "campaign",
+        "date_preset": "this_month",
+        "fields":      f"campaign_id,{_INSIGHTS_FIELDS}",
+        "note":        "Insights cấp campaign tháng này — dùng cho dòng Campaign trong sheet",
     })
     print("\nHoàn thành!")
 
