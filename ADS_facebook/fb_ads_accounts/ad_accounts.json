@@ -5,8 +5,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Bangkok",
-    "amount_spent": "105150",
-    "balance": "2754919",
+    "amount_spent": "364712",
+    "balance": "258997",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
@@ -18,8 +18,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "36066305",
-    "balance": "576881",
+    "amount_spent": "36218683",
+    "balance": "728072",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -57,8 +57,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "120515094",
-    "balance": "10594412",
+    "amount_spent": "120910560",
+    "balance": "408505",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -70,8 +70,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "235469154",
-    "balance": "8762365",
+    "amount_spent": "236216548",
+    "balance": "743834",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -96,8 +96,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Singapore",
-    "amount_spent": "6202428",
-    "balance": "140686",
+    "amount_spent": "7525912",
+    "balance": "422982",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -109,8 +109,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Singapore",
-    "amount_spent": "152300332",
-    "balance": "11349561",
+    "amount_spent": "160263474",
+    "balance": "2686746",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -122,8 +122,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Singapore",
-    "amount_spent": "15408246",
-    "balance": "4651154",
+    "amount_spent": "18774113",
+    "balance": "8017336",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -161,8 +161,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "12774025",
-    "balance": "2998542",
+    "amount_spent": "14177770",
+    "balance": "4400637",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
@@ -187,8 +187,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "8114264",
-    "balance": "29773810",
+    "amount_spent": "14080897",
+    "balance": "2721302",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -200,8 +200,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "7484512",
-    "balance": "12096827",
+    "amount_spent": "12734079",
+    "balance": "5109583",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -213,8 +213,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Choibalsan",
-    "amount_spent": "7739278",
-    "balance": "2249690",
+    "amount_spent": "8071755",
+    "balance": "2581834",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -226,8 +226,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "9437671",
-    "balance": "1740818",
+    "amount_spent": "11004084",
+    "balance": "767406",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
@@ -265,8 +265,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "4218442",
-    "balance": "2385211",
+    "amount_spent": "4620963",
+    "balance": "2787898",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -278,8 +278,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "33312131",
-    "balance": "3840900",
+    "amount_spent": "34823539",
+    "balance": "5348720",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -291,8 +291,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "158243557",
-    "balance": "458131",
+    "amount_spent": "158339881",
+    "balance": "4268172",
     "business": {
       "id": "1260043232161309",
       "name": "Bs BACH new"
@@ -304,8 +304,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "67132173",
-    "balance": "821272",
+    "amount_spent": "67794152",
+    "balance": "1482809",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -317,8 +317,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Choibalsan",
-    "amount_spent": "11139306",
-    "balance": "239731",
+    "amount_spent": "11986990",
+    "balance": "1085532",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -343,8 +343,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "America/Los_Angeles",
-    "amount_spent": "51340850",
-    "balance": "1808564",
+    "amount_spent": "51709275",
+    "balance": "218417",
     "business": {
       "id": "355478044159276",
       "name": "BÁC SĨ HỘI"
@@ -356,8 +356,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Ho_Chi_Minh",
-    "amount_spent": "4408488",
-    "balance": "1512718",
+    "amount_spent": "4618483",
+    "balance": "171039",
     "business": {
       "id": "106935085547717",
       "name": "BM +8 Chạy BS Hội"
@@ -382,8 +382,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Hong_Kong",
-    "amount_spent": "12614749",
-    "balance": "3753019",
+    "amount_spent": "15803261",
+    "balance": "2699510",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
@@ -395,8 +395,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Bangkok",
-    "amount_spent": "412098",
-    "balance": "270230",
+    "amount_spent": "747142",
+    "balance": "331503",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
@@ -456,8 +456,8 @@
     "account_status": 1,
     "currency": "VND",
     "timezone_name": "Asia/Bangkok",
-    "amount_spent": "41257",
-    "balance": "1122193",
+    "amount_spent": "103866",
+    "balance": "725418",
     "business": {
       "id": "1396708858100346",
       "name": "BM BS Hội - Hưng Việt"
