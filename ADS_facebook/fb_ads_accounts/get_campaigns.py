@@ -64,45 +64,33 @@ RESULT_TYPES = (
     + ["post_engagement", "page_engagement", "link_click", "video_view", "app_install"]
 )
 
-# A–AK = 37 cột
+# A–AB = 28 cột (Creative đã chuyển sang tab riêng)
 HEADERS = [
     "Chọn Lấy Chi Tiết",   # A   1  – chỉ dòng Campaign mới có giá trị
-    "Cấp",                   # B   2
-    "Campaign ID",           # C   3
-    "Campaign Name",         # D   4
-    "Adset ID",              # E   5
-    "Adset Name",            # F   6
-    "Ad ID",                 # G   7
-    "Ad Name",               # H   8
-    "Creative ID",           # I   9
-    "Page ID",               # J  10
-    "Post ID",               # K  11
-    "Nội Dung Quảng Cáo",   # L  12
-    "Tiêu Đề",               # M  13
-    "Mô Tả",                 # N  14
-    "Link",                  # O  15
-    "CTA",                   # P  16
-    "Thumbnail URL",         # Q  17
-    "Trạng Thái",            # R  18
-    "Spend Tháng Này",       # S  19
-    "Lượt Hiển Thị",         # T  20
-    "Lượt Click",            # U  21
-    "CTR (%)",               # V  22
-    "CPC",                   # W  23
-    "CPM",                   # X  24
-    "Tiếp Cận",              # Y  25
-    "Tần Suất",              # Z  26
-    "Số Inbox",              # AA 27
-    "CPI",                   # AB 28
-    "Số Lead",               # AC 29
-    "CPL",                   # AD 30
-    "Số Đơn Hàng",           # AE 31
-    "CPS",                   # AF 32
-    "Doanh Thu",             # AG 33
-    "ROAS",                  # AH 34
-    "Kết Quả",               # AI 35  – primary optimization result
-    "Chi Phí / Kết Quả",     # AJ 36
-    "Cập Nhật Lúc",          # AK 37
+    "Cấp",                   # B   2  – "Campaign" / "Adset" / "Ad"
+    "Campaign ID",           # C   3  – Campaign ID (giữ nguyên ở mọi cấp)
+    "Tên",                   # D   4  – Campaign / Adset / Ad Name tùy Cấp
+    "Trạng Thái",            # E   5
+    "Spend Tháng Này",       # F   6
+    "Lượt Hiển Thị",         # G   7
+    "Lượt Click",            # H   8
+    "CTR (%)",               # I   9
+    "CPC",                   # J  10
+    "CPM",                   # K  11
+    "Tiếp Cận",              # L  12
+    "Tần Suất",              # M  13
+    "Số Inbox",              # N  14
+    "CPI",                   # O  15
+    "Số Lead",               # P  16
+    "CPL",                   # Q  17
+    "Số Đơn Hàng",           # R  18
+    "CPS",                   # S  19
+    "Doanh Thu",             # T  20
+    "ROAS",                  # U  21
+    "Kết Quả",               # V  22
+    "Chi Phí / Kết Quả",     # W  23
+    "Chi Phí Campaign",      # X  24  – số nguyên, chỉ dòng Campaign
+    "Cập Nhật Lúc",          # Y  25
 ]
 
 SCOPES = [
@@ -226,11 +214,8 @@ def get_or_create_worksheet(spreadsheet, title: str):
 
 
 def write_to_sheet(worksheet, rows: list[list]):
-    last_col = col_to_letter(len(HEADERS))
+    worksheet.clear()
     worksheet.update("A1", [HEADERS])
-    last_row = worksheet.row_count
-    if last_row >= 2:
-        worksheet.batch_clear([f"A2:{last_col}{last_row}"])
     if rows:
         worksheet.update("A2", rows)
 
@@ -433,29 +418,29 @@ def fmt_pct(v: float) -> str:
 
 
 def _insights_cols(m: dict, currency: str) -> list:
-    """18 giá trị cho cột S–AJ (Spend → Chi Phí / Kết Quả)."""
+    """18 giá trị cho cột F–W (Spend → Chi Phí / Kết Quả)."""
     def money(v): return fmt_money(v, currency) if v > 0 else ""
     def count(v): return fmt_num(v)             if v > 0 else ""
 
     return [
-        fmt_money(m["spend"],  currency),                          # S  Spend
-        fmt_num(m["impr"]),                                        # T  Lượt Hiển Thị
-        fmt_num(m["clicks"]),                                      # U  Lượt Click
-        fmt_pct(m["ctr"]),                                         # V  CTR
-        money(m["cpc"]),                                           # W  CPC
-        money(m["cpm"]),                                           # X  CPM
-        fmt_num(m["reach"]),                                       # Y  Tiếp Cận
-        fmt_pct(m["freq"]) if m["freq"] > 0 else "",               # Z  Tần Suất
-        count(m["inbox"]),                                         # AA Số Inbox
-        money(m["cpi"]),                                           # AB CPI
-        count(m["leads"]),                                         # AC Số Lead
-        money(m["cpl"]),                                           # AD CPL
-        count(m["purchases"]),                                     # AE Số Đơn Hàng
-        money(m["cps"]),                                           # AF CPS
-        money(m["revenue"]),                                       # AG Doanh Thu
-        f"{m['roas']:.2f}" if m["roas"] > 0 else "",               # AH ROAS
-        count(m["ket_qua"]),                                       # AI Kết Quả
-        money(m["cpkq"]),                                          # AJ Chi Phí / Kết Quả
+        fmt_money(m["spend"],  currency),                          # J  Spend
+        fmt_num(m["impr"]),                                        # K  Lượt Hiển Thị
+        fmt_num(m["clicks"]),                                      # L  Lượt Click
+        fmt_pct(m["ctr"]),                                         # M  CTR
+        money(m["cpc"]),                                           # N  CPC
+        money(m["cpm"]),                                           # O  CPM
+        fmt_num(m["reach"]),                                       # P  Tiếp Cận
+        fmt_pct(m["freq"]) if m["freq"] > 0 else "",               # Q  Tần Suất
+        count(m["inbox"]),                                         # R  Số Inbox
+        money(m["cpi"]),                                           # S  CPI
+        count(m["leads"]),                                         # T  Số Lead
+        money(m["cpl"]),                                           # U  CPL
+        count(m["purchases"]),                                     # V  Số Đơn Hàng
+        money(m["cps"]),                                           # W  CPS
+        money(m["revenue"]),                                       # X  Doanh Thu
+        f"{m['roas']:.2f}" if m["roas"] > 0 else "",               # Y  ROAS
+        count(m["ket_qua"]),                                       # Z  Kết Quả
+        money(m["cpkq"]),                                          # AA Chi Phí / Kết Quả
     ]
 
 
@@ -463,17 +448,17 @@ def _insights_cols(m: dict, currency: str) -> list:
 
 def _campaign_row(camp_id, camp_name, is_selected, m: dict,
                   status: str, currency: str, now_str: str) -> list:
-    """Dòng Campaign — 37 cột."""
+    """Dòng Campaign — 25 cột."""
     return [
         "TRUE" if is_selected else "FALSE",  # A
         "Campaign",                           # B
-        camp_id,                              # C
-        camp_name,                            # D
-        "", "",                               # E F  Adset
-        "", "",                               # G H  Ad
-        "", "", "", "", "", "", "", "", "",   # I..Q Creative (9 ô)
-        STATUS_MAP.get(status, status),       # R
-    ] + _insights_cols(m, currency) + [now_str]  # S..AJ + AK
+        camp_id,                              # C  Campaign ID
+        camp_name,                            # D  Tên
+        STATUS_MAP.get(status, status),       # E
+    ] + _insights_cols(m, currency) + [
+        int(round(m["spend"])) if m["spend"] > 0 else "",  # X  Chi Phí Campaign (số nguyên)
+        now_str,                                            # Y  Cập Nhật Lúc
+    ]
 
 
 # ── JSON output ────────────────────────────────────────────────────────────────

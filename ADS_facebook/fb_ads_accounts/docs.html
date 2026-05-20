@@ -340,6 +340,11 @@
   <a href="#api-ref">Meta Graph API</a>
   <a href="#metrics">Metrics &amp; Tính toán</a>
 
+  <div class="section-hd">Field Mapping</div>
+  <a href="#field-tree">Cây Campaign/Adset/Ad</a>
+  <a href="#field-creative">Sheet Creative</a>
+  <a href="#field-missing">Trường không có trong JSON</a>
+
   <div class="section-hd">Output</div>
   <a href="#json-files">File JSON</a>
   <a href="#sheet-structure">Google Sheet</a>
@@ -818,6 +823,84 @@ RESULT_TYPES = INBOX_TYPES + LEAD_TYPES + PURCHASE_TYPES + [
   <pre><code>ad_metrics_list = [parse_insight_metrics(ad_insights_map.get(ad_id, {})) <span class="kw">for</span> ad <span class="kw">in</span> sorted_ads]
 adset_m = aggregate_metrics(ad_metrics_list)</code></pre>
   <p>Các giá trị thô (spend, impr, clicks, reach, inbox, leads, purchases, revenue, ket_qua) được cộng lại. Tỷ lệ (CTR, CPC, CPM, freq, CPI, CPL, CPS, ROAS, cpkq) được tính lại từ các giá trị tổng.</p>
+</section>
+
+<!-- ─────────────────────────────── FIELD MAPPING ─── -->
+<section id="field-tree">
+  <h2>Field Mapping — Cây Campaign / Adset / Ad (28 cột A–AB)</h2>
+  <p>Bảng dưới cho biết mỗi cột lấy dữ liệu từ thuộc tính JSON nào và endpoint nào.</p>
+
+  <table>
+    <tr><th>Cột</th><th>Tên</th><th>Cấp</th><th>JSON property</th><th>Endpoint</th><th>Ghi chú</th></tr>
+    <tr><td>A</td><td>Chọn Lấy Chi Tiết</td><td>Campaign</td><td><em>không có</em></td><td>—</td><td>Người dùng tự đánh TRUE/FALSE</td></tr>
+    <tr><td>B</td><td>Cấp</td><td>Tất cả</td><td><em>không có</em></td><td>—</td><td>Script tự gán: "Campaign" / "Adset" / "Ad"</td></tr>
+    <tr><td>C</td><td>Campaign ID</td><td>Tất cả</td><td><code>campaigns[].id</code></td><td><code>/{account_id}/campaigns</code></td><td></td></tr>
+    <tr><td>D</td><td>Campaign Name</td><td>Tất cả</td><td><code>campaigns[].name</code></td><td><code>/{account_id}/campaigns</code></td><td></td></tr>
+    <tr><td>E</td><td>Adset ID</td><td>Adset, Ad</td><td><code>adsets[].id</code></td><td><code>/{campaign_id}/adsets</code></td><td>Trống ở dòng Campaign</td></tr>
+    <tr><td>F</td><td>Adset Name</td><td>Adset, Ad</td><td><code>adsets[].name</code></td><td><code>/{campaign_id}/adsets</code></td><td>Trống ở dòng Campaign</td></tr>
+    <tr><td>G</td><td>Ad ID</td><td>Ad</td><td><code>ads[].id</code></td><td><code>/{adset_id}/ads</code></td><td>Trống ở Campaign / Adset</td></tr>
+    <tr><td>H</td><td>Ad Name</td><td>Ad</td><td><code>ads[].name</code></td><td><code>/{adset_id}/ads</code></td><td>Trống ở Campaign / Adset</td></tr>
+    <tr><td>I</td><td>Trạng Thái</td><td>Tất cả</td><td><code>[].status</code></td><td>tương ứng mỗi cấp</td><td>Map sang tiếng Việt qua <code>STATUS_MAP</code></td></tr>
+    <tr><td>J</td><td>Spend Tháng Này</td><td>Tất cả</td><td><code>insights[].spend</code></td><td><code>/{account_id}/insights</code></td><td>Đơn vị gốc (VND không chia 100)</td></tr>
+    <tr><td>K</td><td>Lượt Hiển Thị</td><td>Tất cả</td><td><code>insights[].impressions</code></td><td><code>/{account_id}/insights</code></td><td></td></tr>
+    <tr><td>L</td><td>Lượt Click</td><td>Tất cả</td><td><code>insights[].clicks</code></td><td><code>/{account_id}/insights</code></td><td></td></tr>
+    <tr><td>M</td><td>CTR (%)</td><td>Tất cả</td><td><code>insights[].ctr</code></td><td><code>/{account_id}/insights</code></td><td>Fallback: <code>clicks / impressions × 100</code></td></tr>
+    <tr><td>N</td><td>CPC</td><td>Tất cả</td><td><code>insights[].cpc</code></td><td><code>/{account_id}/insights</code></td><td>Fallback: <code>spend / clicks</code></td></tr>
+    <tr><td>O</td><td>CPM</td><td>Tất cả</td><td><code>insights[].cpm</code></td><td><code>/{account_id}/insights</code></td><td>Fallback: <code>spend / impressions × 1000</code></td></tr>
+    <tr><td>P</td><td>Tiếp Cận</td><td>Tất cả</td><td><code>insights[].reach</code></td><td><code>/{account_id}/insights</code></td><td></td></tr>
+    <tr><td>Q</td><td>Tần Suất</td><td>Tất cả</td><td><code>insights[].frequency</code></td><td><code>/{account_id}/insights</code></td><td>Fallback: <code>impressions / reach</code></td></tr>
+    <tr><td>R</td><td>Số Inbox</td><td>Tất cả</td><td><code>insights[].actions[action_type∈INBOX_TYPES].value</code></td><td><code>/{account_id}/insights</code></td><td>Tổng value các INBOX_TYPES</td></tr>
+    <tr><td>S</td><td>CPI</td><td>Tất cả</td><td><em>tính toán</em></td><td>—</td><td><code>spend / inbox</code></td></tr>
+    <tr><td>T</td><td>Số Lead</td><td>Tất cả</td><td><code>insights[].actions[action_type∈LEAD_TYPES].value</code></td><td><code>/{account_id}/insights</code></td><td>Tổng value các LEAD_TYPES</td></tr>
+    <tr><td>U</td><td>CPL</td><td>Tất cả</td><td><em>tính toán</em></td><td>—</td><td><code>spend / leads</code></td></tr>
+    <tr><td>V</td><td>Số Đơn Hàng</td><td>Tất cả</td><td><code>insights[].actions[action_type∈PURCHASE_TYPES].value</code></td><td><code>/{account_id}/insights</code></td><td>Tổng value các PURCHASE_TYPES</td></tr>
+    <tr><td>W</td><td>CPS</td><td>Tất cả</td><td><em>tính toán</em></td><td>—</td><td><code>spend / purchases</code></td></tr>
+    <tr><td>X</td><td>Doanh Thu</td><td>Tất cả</td><td><code>insights[].action_values[action_type∈PURCHASE_TYPES].value</code></td><td><code>/{account_id}/insights</code></td><td>Tổng giá trị purchase từ <code>action_values</code></td></tr>
+    <tr><td>Y</td><td>ROAS</td><td>Tất cả</td><td><code>insights[].purchase_roas[].value</code></td><td><code>/{account_id}/insights</code></td><td>Fallback: <code>revenue / spend</code></td></tr>
+    <tr><td>Z</td><td>Kết Quả</td><td>Tất cả</td><td><code>insights[].cost_per_action_type</code> + <code>actions</code></td><td><code>/{account_id}/insights</code></td><td>Count của action_type đầu tiên có cost &gt; 0 theo PURCHASE→LEAD→INBOX→engagement</td></tr>
+    <tr><td>AA</td><td>Chi Phí / Kết Quả</td><td>Tất cả</td><td><code>insights[].cost_per_action_type[].value</code></td><td><code>/{account_id}/insights</code></td><td>API đã tính sẵn — cùng action_type với Kết Quả</td></tr>
+    <tr><td>AB</td><td>Cập Nhật Lúc</td><td>Tất cả</td><td><em>không có</em></td><td>—</td><td>Timestamp lúc script chạy</td></tr>
+  </table>
+
+  <h3>Metrics Adset — tổng hợp từ Ad</h3>
+  <div class="notice notice-info">
+    ℹ️ Không có API call riêng cho Adset insights. Metrics Adset được <strong>tổng hợp từ Ad-level insights</strong> bằng <code>aggregate_metrics()</code>:
+    cộng trực tiếp <code>spend, impressions, clicks, reach, inbox, leads, purchases, revenue, ket_qua</code>;
+    tính lại <code>ctr, cpc, cpm, frequency, cpi, cpl, cps, roas, cpkq</code> từ các tổng.
+  </div>
+</section>
+
+<section id="field-creative">
+  <h2>Field Mapping — Sheet Creative (6 cột A–F)</h2>
+  <p>Tab <code>{Tên TK} - Creative</code> — ghi bởi <code>get_details.py</code>.</p>
+
+  <table>
+    <tr><th>Cột</th><th>Tên</th><th>JSON property</th><th>Endpoint</th><th>Ghi chú</th></tr>
+    <tr><td>A</td><td>Creative ID</td><td><code>ads[].creative.id</code></td><td><code>/{adset_id}/ads</code></td><td></td></tr>
+    <tr><td>B</td><td>Ad ID</td><td><code>ads[].id</code></td><td><code>/{adset_id}/ads</code></td><td></td></tr>
+    <tr><td>C</td><td>Ad Name</td><td><code>ads[].name</code></td><td><code>/{adset_id}/ads</code></td><td></td></tr>
+    <tr><td>D</td><td>Nội Dung Quảng Cáo</td><td><code>ads[].creative.body</code></td><td><code>/{adset_id}/ads</code></td><td>Text nội dung bài quảng cáo</td></tr>
+    <tr><td>E</td><td>Tiêu Đề</td><td><code>ads[].creative.title</code></td><td><code>/{adset_id}/ads</code></td><td></td></tr>
+    <tr><td>F</td><td>Ghi Chú</td><td><em>không có</em></td><td>—</td><td>Người dùng tự điền, giữ nguyên khi refresh</td></tr>
+  </table>
+</section>
+
+<section id="field-missing">
+  <h2>Trường được request nhưng KHÔNG có trong JSON response</h2>
+  <p>Các field dưới đây được khai báo trong <code>fields</code> của API call nhưng thực tế không trả về (tùy loại creative / cài đặt tài khoản):</p>
+
+  <table>
+    <tr><th>Field request</th><th>Thuộc tính mong muốn</th><th>Lý do không có</th></tr>
+    <tr><td><code>creative{object_story_spec}</code></td><td>page_id, link_data, video_data</td><td>Không trả về cho creative dạng post thông thường</td></tr>
+    <tr><td><code>creative{link_url}</code></td><td>Link đích</td><td>Chỉ có trong link ad — không có với post ad</td></tr>
+    <tr><td><code>object_story_spec.link_data.description</code></td><td>Mô Tả</td><td>Phụ thuộc <code>object_story_spec</code> — không trả về</td></tr>
+    <tr><td><code>object_story_spec.link_data.call_to_action.type</code></td><td>CTA</td><td>Phụ thuộc <code>object_story_spec</code> — không trả về</td></tr>
+  </table>
+
+  <div class="notice notice-warn">
+    ⚡ <strong>Page ID</strong> và <strong>Post ID</strong> vẫn có thể trích xuất từ <code>effective_object_story_id</code>
+    (format: <code>{page_id}_{post_id}</code>) nhưng hiện tại không đưa vào sheet.
+  </div>
 </section>
 
 <!-- ─────────────────────────────── JSON FILES ─── -->
