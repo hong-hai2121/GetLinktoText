@@ -4,7 +4,24 @@
     "fields": "id,name,status",
     "note": "Adsets của các campaign được chọn lấy chi tiết"
   },
+  "Quang Anh-1 (+8 08/05/2026)": [
+    {
+      "id": "120241896526560138",
+      "name": "[13/5] LM - 5 Dấu hiệu Thực quản bị Tổn Thương",
+      "status": "PAUSED"
+    }
+  ],
   "Quang Anh-2 (+7 08/05/2026)": [
+    {
+      "id": "120244218132520194",
+      "name": "[8/5] LM - Feed Ợ Chua",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120244220646880194",
+      "name": "[8/5] LM - Chi Phí Cao Thế",
+      "status": "ACTIVE"
+    },
     {
       "id": "120244692422490194",
       "name": "[15/5] LM - 90% 3sai lầm - (35+)",

@@ -984,108 +984,6 @@
     sendProgress(`Hoàn thành! Đã cào ${n} chi tiết.`, n, n);
   }
 
-  // ── CSV export ─────────────────────────────────────────────────────────────
-
-  function esc(v) {
-    const s = String(v ?? '').replace(/"/g, '""');
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-  }
-
-  function buildListCSV() {
-    const header = 'ID giao dịch,Ngày thanh toán,Số tiền,Phương thức TT,Số tham chiếu thẻ,Trạng thái,ID hóa đơn VAT';
-    const rows = state.scrapedList.map(t =>
-      [t.txId, t.date, t.amount, t.paymentMethod, t.reference, t.status, t.vatId].map(esc).join(',')
-    );
-    return [header, ...rows].join('\n');
-  }
-
-  function buildDetailCSV() {
-    const header = [
-      'ID giao dịch',
-      'Ngày thanh toán',
-      'Giờ thanh toán',
-      'Số tham chiếu',
-      'Tổng tiền giao dịch',
-      'Số tiền phân bổ',
-      'Tài khoản quảng cáo',
-      '4 số cuối thẻ',
-      'Tên chiến dịch',
-      'Tên nhóm quảng cáo',
-      'ID nhóm quảng cáo',
-      'Kết quả',
-      'Thời gian tính phí',
-      'Phương thức thanh toán',
-      'Trạng thái',
-      'Thuế',
-      'Lý do lập hóa đơn',
-      'Loại kết quả',
-      'Ghi chú',
-    ].join(',');
-
-    const rows = [];
-
-    for (const d of state.scrapedDetail) {
-      if (d.error) {
-        const errRow = new Array(19).fill('');
-        errRow[0]  = d.listTxId;
-        errRow[18] = 'LỖI: ' + d.error;
-        rows.push(errRow.map(esc).join(','));
-        continue;
-      }
-
-      const txBase = [
-        d.txId || d.listTxId,             // ID giao dịch
-        d.paymentDate || '',               // Ngày thanh toán
-        d.paymentTime || '',               // Giờ thanh toán
-        d.reference || '',                 // Số tham chiếu
-        d.totalAmount || d.amount || '',   // Tổng tiền giao dịch
-      ];
-      const txTail = [
-        d.paymentMethod || '',             // Phương thức thanh toán
-        d.status || '',                    // Trạng thái
-        d.tax || '',                       // Thuế
-        d.reason || '',                    // Lý do lập hóa đơn
-      ];
-
-      const makeRow = (soTienPhanBo, tenChienDich, tenNhom, idNhom, thoiGian, ketQua, loaiKetQua, ghiChu) =>
-        [...txBase, soTienPhanBo, d.accountId || '', d.cardLast4 || '', tenChienDich, tenNhom, idNhom, ketQua, thoiGian, ...txTail, loaiKetQua, ghiChu].map(esc).join(',');
-
-      if (!d.campaigns || !d.campaigns.length) {
-        rows.push(makeRow('', '', '', '', '', '', '', d.note || ''));
-        continue;
-      }
-
-      for (const camp of d.campaigns) {
-        if (!camp.adGroups.length) {
-          rows.push(makeRow('', camp.campaignName, '', '', camp.timePeriod, '', '', d.note || ''));
-          continue;
-        }
-        for (const ag of camp.adGroups) {
-          rows.push(makeRow(ag.amount, camp.campaignName, ag.name, ag.id, camp.timePeriod, ag.result, ag.resultType, ag.note || d.note || ''));
-        }
-      }
-    }
-
-    return [header, ...rows].join('\n');
-  }
-
-  function downloadFile(content, filename) {
-    const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  function exportCSV() {
-    const date = new Date().toISOString().slice(0, 10);
-    if (state.scrapedList.length > 0)
-      downloadFile(buildListCSV(), `fb_billing_list_${date}.csv`);
-    if (state.scrapedDetail.length > 0)
-      setTimeout(() => downloadFile(buildDetailCSV(), `fb_billing_detail_${date}.csv`), 600);
-  }
 
   // ── Message listener ───────────────────────────────────────────────────────
 
@@ -1131,8 +1029,7 @@
         break;
 
       case 'EXPORT_CSV':
-        exportCSV();
-        sendResponse({ ok: true });
+        sendResponse({ ok: true, list: state.scrapedList, detail: state.scrapedDetail });
         break;
 
       case 'CLEAR_DATA':

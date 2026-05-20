@@ -4,7 +4,130 @@
     "fields": "id,name,status,creative{id,name,object_story_spec,body,title,link_url,thumbnail_url,effective_object_story_id}",
     "note": "Ads kèm creative của các adset được chọn"
   },
+  "Quang Anh-1 (+8 08/05/2026)": [
+    {
+      "id": "120241896526550138",
+      "name": "[13/5] LM - 5 Dấu hiệu Thực quản bị Tổn Thương",
+      "status": "ACTIVE",
+      "creative": {
+        "id": "2071403090463938",
+        "name": "Nhắn Số Điện Thoại Tư Vấn 1:1 >>> 2026-05-12-6d63881b8a7ad5ff317e65190fe30994",
+        "object_story_spec": {
+          "page_id": "807248629135034",
+          "video_data": {
+            "video_id": "1503391831188222",
+            "call_to_action": {
+              "type": "MESSAGE_PAGE",
+              "value": {
+                "app_destination": "MESSENGER",
+                "link": "https://fb.com/messenger_doc/"
+              }
+            },
+            "image_url": "https://www.facebook.com/ads/image/?d=AQLKB9EvgiYOqajAt58W5P9Ng7bcVu9EnBh_OoQTyz3Tak11TZ-vJei6QdJF2_c47VyaGgV1lJnwDwJxUSELjVCsrI9pQ9VyjCrtEfTEYvGs1p-d6UxdlGC_oeyTBpYoG5g6hy72TkqSsq0b1r3tP90N",
+            "image_hash": "25ecaaf9c4b335f7c66cfa1f143744e7",
+            "page_welcome_message": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"image\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"ice_breakers\":null,\"text\":\"Bác Sĩ Hội Chào {{user_first_name}}, Anh/Chị chia sẻ giúp BS Số Điện Thoại + Tình Trạng Dạ Dày để Trung Tâm Tiêu Hóa liên hệ và tư vấn trực tiếp cho mình?\"}},\"user_edit\":true,\"autofill_message_edited\":false,\"ice_breakers_edited\":false,\"welcome_message_edited\":true,\"surface\":\"boosted_post\",\"ig_boost_ctx_convo_starter_update_status\":\"\\\"\\\"\",\"lwi_web_ai_generated_icebreakers_enabled\":false,\"ai_generated_icebreaker_toggle_enabled\":true,\"is_call_prompt_enabled\":false,\"performance_booster_enabled\":true,\"ctm_deprecate_quick_replies_enabled\":false,\"template_id\":\"1641974530369679\",\"image_format\":{\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"generic\",\"elements\":[{\"buttons\":[],\"image_hash\":\"910485275151165:9c20941e9fe1aa1172d2c8561058767a\"}]}},\"text\":\"Bác Sĩ Hội Chào {{user_first_name}}, Anh/Chị chia sẻ giúp BS Số Điện Thoại + Tình Trạng Dạ Dày để Trung Tâm Tiêu Hóa liên hệ và tư vấn trực tiếp cho mình?\"},\"customer_action_type\":\"ice_breakers\"},\"has_ai_generated_welcome_message\":false,\"video_format\":{\"message\":{\"text\":\"Bác Sĩ Hội Chào {{user_first_name}}, Anh/Chị chia sẻ giúp BS Số Điện Thoại + Tình Trạng Dạ Dày để Trung Tâm Tiêu Hóa liên hệ và tư vấn trực tiếp cho mình?\"}},\"template_version\":2,\"is_user_editing\":false,\"ai_gen_welcome_message_model_version\":\"V1\",\"auto_follow_up\":{\"text\":\"Bạn còn thắc mắc gì về vấn đề dạ dày không? Hãy để lại câu hỏi, Bác Sĩ Hội sẽ trả lời trong livestream sắp tới.\"}}"
+          }
+        },
+        "body": "🚨 5 DẤU HIỆU CẢNH BÁO THỰC QUẢN ĐANG BỊ TỔN THƯƠNG\n⚠️ Nhiều người chỉ nghĩ là “trào ngược nhẹ” nên chủ quan\n❗ Nhưng nếu kéo dài, niêm mạc thực quản có thể tổn thương ngày càng nặng hơn\n📌 Nếu bạn đang có từ 3/5 dấu hiệu dưới đây bạn đã bước vào giai đoạn \"NGUY HIỂM\"→ cần kiểm tra & điều trị ngay:\n1️⃣ Cảm giác ợ nóng, nóng rát sau xương ức\n2️⃣ Ợ chua, trào ngược dạ dày thường xuyên\n3️⃣ Khó nuốt, nuốt vướng ở cổ họng\n4️⃣ Ho khan kéo dài, khàn tiếng lâu ngày\n5️⃣ Hơi thở có mùi hôi khó chịu dù vệ sinh kỹ\n⛔ Đừng chủ quan vì nhiều trường hợp:\n👉 Uống thuốc thấy đỡ tạm → rồi tái phát liên tục\n👉 Để lâu → thực quản viêm nặng, tổn thương niêm mạc kéo dài\n💬 Muốn cải thiện lâu dài cần:\n✔️ Đánh giá đúng mức độ trào ngược – tổn thương thực quản\n✔️ Điều trị đúng nguyên nhân – không chỉ dập triệu chứng\n✔️ Phục hồi niêm mạc từ Gốc & điều chỉnh ăn uống, sinh hoạt\n✨ Bác sĩ theo sát 1:1 – lộ trình cá nhân hóa theo từng tình trạng\n📩 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n👉 Được bác sĩ tư vấn trực tiếp hướng điều trị phù hợp\n⚠️ Có 3/5 dấu hiệu trên → đừng tiếp tục chần chừ kẻo càng về sau càng khó kiểm soát 🔥",
+        "title": "Nhắn Số Điện Thoại Tư Vấn 1:1 >>>",
+        "thumbnail_url": "https://scontent.fhan5-8.fna.fbcdn.net/v/t15.5256-10/698425780_1011265924589201_6864401284661742600_n.jpg?_nc_cat=108&ccb=1-7&_nc_eui2=AeH6M0RsgZHgKoVQ0jdFL3xfa6oGxNOnBYRrqgbE06cFhKw7bP68gMaU4B_HLgzn9tfMRp96N_6DoVaykQthCxoO&_nc_ohc=5llqrDuapD4Q7kNvwExobyP&_nc_oc=Adr0zGuSJXJZ1XgEJnjWFmGlsgp_rXeVwFGS-c2sb3lpRkOnbBFv-bkDqgZY-JDOjf0&_nc_zt=23&_nc_ht=scontent.fhan5-8.fna&edm=APG_qckEAAAA&_nc_gid=F49w3h_OcJ7IXss9qkYXzg&_nc_tpa=Q5bMBQEujci30BuWGli2HO7TH7sEhtzOjR9LWk1fPV4kztDNjOtZ536xa3nQbasq5_cgTo9AJZSA1oAiTA&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=d2b52d&_nc_sid=58080a&oh=00_Af5lxlhiVvcwQs4hU5rFbsBBSgVCbNsGWPGhkBnV2KJ39g&oe=6A13923A",
+        "effective_object_story_id": "807248629135034_122135933001028755"
+      },
+      "_camp_id": "120241896526540138",
+      "_adset_name": "[13/5] LM - 5 Dấu hiệu Thực quản bị Tổn Thương"
+    }
+  ],
   "Quang Anh-2 (+7 08/05/2026)": [
+    {
+      "id": "120244691725140194",
+      "name": "[8/5] LM - Feed Ợ Chua - Bản sao 2",
+      "status": "PAUSED",
+      "creative": {
+        "id": "969112075527450",
+        "name": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉 2026-05-07-d1112da823ab3e3b94fd7d97eeb69e9d",
+        "body": "Ợ Hơi – Ợ Chua – Buồn Nôn: Dấu Hiệu Dạ Dày Đang Kêu Cứu! \n❌ Tự mua th.u.ốc uống nhưng không dứt điểm \n❌ Nghe mẹo truyền miệng, áp dụng sai cách \n❌ Không có lộ trình điều tr.ị rõ ràng, khoa học \n👉 Ăn uống thất thường, sinh hoạt thiếu kiểm soát\n→ khiến niêm mạc dạ dày ngày càng tổn thương\nGIẢI PHÁP TỪ Bác Sĩ HỘI – ĐIỀU TRỊ TỪ GỐC\n1️⃣ Xác định chính xác nguyên nhân gây b.ệnh\n2️⃣ Xây dựng phác đồ cá nhân hóa theo từng tình trạng - không dùng đơn thuốc chung\n3️⃣ Phục hồi toàn diện –chặn đứng tái phát\n💬 Đừng chịu đựng thêm!\n📩 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n👉 Được tư vấn đúng bệnh – đúng mức độ\n=•=•=•=•=•=•=•=•=•=•==•==•=\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏛 Địa chỉ: Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n☎️ Hotline: 0969.092.113",
+        "title": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉",
+        "thumbnail_url": "https://scontent.fhan5-10.fna.fbcdn.net/v/t15.5256-10/669239195_928258886500408_2257088291819148473_n.jpg?_nc_cat=101&ccb=1-7&_nc_eui2=AeGuk-JEKQh7Rwl5y_GWtm13y5FBkcpJY1jLkUGRykljWFpKI_V8LXm25avPSEv4tM_VuLh8c5a3AEW0Drak0kaT&_nc_ohc=6YBYDw1W-UgQ7kNvwHVoqXs&_nc_oc=AdqdN05dBa__Bq4ACJY78rg-SoOrX4n87lwr2KMXG3NqunT9otvkBqhpK3yQY4N-6bk&_nc_zt=23&_nc_ht=scontent.fhan5-10.fna&edm=APG_qckEAAAA&_nc_gid=1KKCN7EZ5O2GbySdCkrH2g&_nc_tpa=Q5bMBQHrjozqQ6hO66xtcBqmoN4zAxQGSL3B6_EcgD0h1ap0klERxntxB4l0fkM3o3yV4E4pQUq3ZUWM-A&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=d2b52d&_nc_sid=58080a&oh=00_Af4KTk5aCIZYgnABROXOA3sJwxjlu8RnXud1SZuZd_ibtg&oe=6A1399A1",
+        "effective_object_story_id": "807248629135034_122132593863028755"
+      },
+      "_camp_id": "120244218132530194",
+      "_adset_name": "[8/5] LM - Feed Ợ Chua"
+    },
+    {
+      "id": "120244218132510194",
+      "name": "[8/5] LM - Feed Ợ Chua",
+      "status": "PAUSED",
+      "creative": {
+        "id": "969112075527450",
+        "name": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉 2026-05-07-d1112da823ab3e3b94fd7d97eeb69e9d",
+        "body": "Ợ Hơi – Ợ Chua – Buồn Nôn: Dấu Hiệu Dạ Dày Đang Kêu Cứu! \n❌ Tự mua th.u.ốc uống nhưng không dứt điểm \n❌ Nghe mẹo truyền miệng, áp dụng sai cách \n❌ Không có lộ trình điều tr.ị rõ ràng, khoa học \n👉 Ăn uống thất thường, sinh hoạt thiếu kiểm soát\n→ khiến niêm mạc dạ dày ngày càng tổn thương\nGIẢI PHÁP TỪ Bác Sĩ HỘI – ĐIỀU TRỊ TỪ GỐC\n1️⃣ Xác định chính xác nguyên nhân gây b.ệnh\n2️⃣ Xây dựng phác đồ cá nhân hóa theo từng tình trạng - không dùng đơn thuốc chung\n3️⃣ Phục hồi toàn diện –chặn đứng tái phát\n💬 Đừng chịu đựng thêm!\n📩 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n👉 Được tư vấn đúng bệnh – đúng mức độ\n=•=•=•=•=•=•=•=•=•=•==•==•=\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏛 Địa chỉ: Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n☎️ Hotline: 0969.092.113",
+        "title": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉",
+        "thumbnail_url": "https://scontent.fhan5-10.fna.fbcdn.net/v/t15.5256-10/669239195_928258886500408_2257088291819148473_n.jpg?_nc_cat=101&ccb=1-7&_nc_eui2=AeGuk-JEKQh7Rwl5y_GWtm13y5FBkcpJY1jLkUGRykljWFpKI_V8LXm25avPSEv4tM_VuLh8c5a3AEW0Drak0kaT&_nc_ohc=6YBYDw1W-UgQ7kNvwHVoqXs&_nc_oc=AdqdN05dBa__Bq4ACJY78rg-SoOrX4n87lwr2KMXG3NqunT9otvkBqhpK3yQY4N-6bk&_nc_zt=23&_nc_ht=scontent.fhan5-10.fna&edm=APG_qckEAAAA&_nc_gid=1KKCN7EZ5O2GbySdCkrH2g&_nc_tpa=Q5bMBQHrjozqQ6hO66xtcBqmoN4zAxQGSL3B6_EcgD0h1ap0klERxntxB4l0fkM3o3yV4E4pQUq3ZUWM-A&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=d2b52d&_nc_sid=58080a&oh=00_Af4KTk5aCIZYgnABROXOA3sJwxjlu8RnXud1SZuZd_ibtg&oe=6A1399A1",
+        "effective_object_story_id": "807248629135034_122132593863028755"
+      },
+      "_camp_id": "120244218132530194",
+      "_adset_name": "[8/5] LM - Feed Ợ Chua"
+    },
+    {
+      "id": "120244691715800194",
+      "name": "[8/5] LM - Feed Ợ Chua - Bản sao",
+      "status": "ACTIVE",
+      "creative": {
+        "id": "969112075527450",
+        "name": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉 2026-05-07-d1112da823ab3e3b94fd7d97eeb69e9d",
+        "body": "Ợ Hơi – Ợ Chua – Buồn Nôn: Dấu Hiệu Dạ Dày Đang Kêu Cứu! \n❌ Tự mua th.u.ốc uống nhưng không dứt điểm \n❌ Nghe mẹo truyền miệng, áp dụng sai cách \n❌ Không có lộ trình điều tr.ị rõ ràng, khoa học \n👉 Ăn uống thất thường, sinh hoạt thiếu kiểm soát\n→ khiến niêm mạc dạ dày ngày càng tổn thương\nGIẢI PHÁP TỪ Bác Sĩ HỘI – ĐIỀU TRỊ TỪ GỐC\n1️⃣ Xác định chính xác nguyên nhân gây b.ệnh\n2️⃣ Xây dựng phác đồ cá nhân hóa theo từng tình trạng - không dùng đơn thuốc chung\n3️⃣ Phục hồi toàn diện –chặn đứng tái phát\n💬 Đừng chịu đựng thêm!\n📩 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n👉 Được tư vấn đúng bệnh – đúng mức độ\n=•=•=•=•=•=•=•=•=•=•==•==•=\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏛 Địa chỉ: Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n☎️ Hotline: 0969.092.113",
+        "title": "Để Lại [SĐT + Tình Trạng ] tư vấn 1:1 miễn phí 👉",
+        "thumbnail_url": "https://scontent.fhan5-10.fna.fbcdn.net/v/t15.5256-10/669239195_928258886500408_2257088291819148473_n.jpg?_nc_cat=101&ccb=1-7&_nc_eui2=AeGuk-JEKQh7Rwl5y_GWtm13y5FBkcpJY1jLkUGRykljWFpKI_V8LXm25avPSEv4tM_VuLh8c5a3AEW0Drak0kaT&_nc_ohc=6YBYDw1W-UgQ7kNvwHVoqXs&_nc_oc=AdqdN05dBa__Bq4ACJY78rg-SoOrX4n87lwr2KMXG3NqunT9otvkBqhpK3yQY4N-6bk&_nc_zt=23&_nc_ht=scontent.fhan5-10.fna&edm=APG_qckEAAAA&_nc_gid=1KKCN7EZ5O2GbySdCkrH2g&_nc_tpa=Q5bMBQHrjozqQ6hO66xtcBqmoN4zAxQGSL3B6_EcgD0h1ap0klERxntxB4l0fkM3o3yV4E4pQUq3ZUWM-A&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=d2b52d&_nc_sid=58080a&oh=00_Af4KTk5aCIZYgnABROXOA3sJwxjlu8RnXud1SZuZd_ibtg&oe=6A1399A1",
+        "effective_object_story_id": "807248629135034_122132593863028755"
+      },
+      "_camp_id": "120244218132530194",
+      "_adset_name": "[8/5] LM - Feed Ợ Chua"
+    },
+    {
+      "id": "120244691644060194",
+      "name": "[8/5] LM - Chi Phí Cao Thế - Bản sao",
+      "status": "ACTIVE",
+      "creative": {
+        "id": "36484104617855476",
+        "name": "Nhắn Số Điện Thoại BS Tư vấn 👉 2026-05-07-7a0fe3324dca9f76e4869b7d5d49cfc5",
+        "body": "ĂN NGON – NGỦ YÊN – 🟢 AN TÂM – KHÔNG CÒN ÁM ẢNH\n❌ Ợ chua, đầy bụng, khó chịu kéo dài mỗi ngày\n😣 Lúc nào cũng nơm nớp “ăn vào lại đau”\n💊 Phụ thuộc thuốc hết đợt này đến đợt khác\nLiệu trình đúng không chỉ dừng ở giảm triệu chứng\n🔄 Mà đưa cơ thể về trạng thái ổn định lâu dài\n🎯 Giải pháp từ Bác sĩ Hội:\n✔️ Theo sát 1:1 từng tình trạng\n✔️ Lộ trình cá nhân hóa – không dùng đơn thuốc chung\n✔️ Hướng tới phục hồi tự nhiên, hạn chế phụ thuộc thuốc\nGiá trị thật sự không nằm ở con số ban đầu\nMà nằm ở việc bạn không phải trả giá thêm nhiều lần sau đó\n✨ Đầu tư đúng – cơ thể hồi phục – cuộc sống nhẹ lại\n📨 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n➡️ Tư vấn trực tiếp theo đúng bệnh – đúng mức độ\n⚡ Để càng lâu → niêm mạc càng tổn thương → tái phát dày hơn\n━━━━━━━━━━━━━━\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏥 Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n📞 0969.092.113",
+        "title": "Nhắn Số Điện Thoại BS Tư vấn 👉",
+        "thumbnail_url": "https://scontent.fhan5-6.fna.fbcdn.net/v/t15.5256-10/675015476_1891813158155953_8183124119002996696_n.jpg?_nc_cat=107&ccb=1-7&_nc_eui2=AeGoZJyhASdAYsCtd4GRvvfNw-fIWH2ceaHD58hYfZx5oZiJjiZpIPHM9ymIdi5f-y74N0pf84ZMIeSAmR0b1rAg&_nc_ohc=FmZyVaHw7g8Q7kNvwERf5fN&_nc_oc=AdpkE58JeqcE_MB_XYYXzhC6UZSZon1tIGCUGzpYsrNDzFvH8IqYfSUKmm57i2U4mGE&_nc_zt=23&_nc_ht=scontent.fhan5-6.fna&edm=APG_qckEAAAA&_nc_gid=IZH7aukMOdtI5Q_3cqOPog&_nc_tpa=Q5bMBQHL118cJrPeGwlGWN4RnTx7u08LgCrLIQLdA95viaEQLtlE-T7qENN5jSTyqQHuJmw_NOboEQs-eQ&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af6WtRpYjI7XXBeu6TdJeStSlWmNhFUsH1E-Qsx6_iEeKw&oe=6A13B01E",
+        "effective_object_story_id": "807248629135034_122133688089028755"
+      },
+      "_camp_id": "120244220646860194",
+      "_adset_name": "[8/5] LM - Chi Phí Cao Thế"
+    },
+    {
+      "id": "120244220646870194",
+      "name": "[8/5] LM - Chi Phí Cao Thế",
+      "status": "PAUSED",
+      "creative": {
+        "id": "36484104617855476",
+        "name": "Nhắn Số Điện Thoại BS Tư vấn 👉 2026-05-07-7a0fe3324dca9f76e4869b7d5d49cfc5",
+        "body": "ĂN NGON – NGỦ YÊN – 🟢 AN TÂM – KHÔNG CÒN ÁM ẢNH\n❌ Ợ chua, đầy bụng, khó chịu kéo dài mỗi ngày\n😣 Lúc nào cũng nơm nớp “ăn vào lại đau”\n💊 Phụ thuộc thuốc hết đợt này đến đợt khác\nLiệu trình đúng không chỉ dừng ở giảm triệu chứng\n🔄 Mà đưa cơ thể về trạng thái ổn định lâu dài\n🎯 Giải pháp từ Bác sĩ Hội:\n✔️ Theo sát 1:1 từng tình trạng\n✔️ Lộ trình cá nhân hóa – không dùng đơn thuốc chung\n✔️ Hướng tới phục hồi tự nhiên, hạn chế phụ thuộc thuốc\nGiá trị thật sự không nằm ở con số ban đầu\nMà nằm ở việc bạn không phải trả giá thêm nhiều lần sau đó\n✨ Đầu tư đúng – cơ thể hồi phục – cuộc sống nhẹ lại\n📨 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n➡️ Tư vấn trực tiếp theo đúng bệnh – đúng mức độ\n⚡ Để càng lâu → niêm mạc càng tổn thương → tái phát dày hơn\n━━━━━━━━━━━━━━\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏥 Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n📞 0969.092.113",
+        "title": "Nhắn Số Điện Thoại BS Tư vấn 👉",
+        "thumbnail_url": "https://scontent.fhan5-6.fna.fbcdn.net/v/t15.5256-10/675015476_1891813158155953_8183124119002996696_n.jpg?_nc_cat=107&ccb=1-7&_nc_eui2=AeGoZJyhASdAYsCtd4GRvvfNw-fIWH2ceaHD58hYfZx5oZiJjiZpIPHM9ymIdi5f-y74N0pf84ZMIeSAmR0b1rAg&_nc_ohc=FmZyVaHw7g8Q7kNvwERf5fN&_nc_oc=AdpkE58JeqcE_MB_XYYXzhC6UZSZon1tIGCUGzpYsrNDzFvH8IqYfSUKmm57i2U4mGE&_nc_zt=23&_nc_ht=scontent.fhan5-6.fna&edm=APG_qckEAAAA&_nc_gid=IZH7aukMOdtI5Q_3cqOPog&_nc_tpa=Q5bMBQHL118cJrPeGwlGWN4RnTx7u08LgCrLIQLdA95viaEQLtlE-T7qENN5jSTyqQHuJmw_NOboEQs-eQ&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af6WtRpYjI7XXBeu6TdJeStSlWmNhFUsH1E-Qsx6_iEeKw&oe=6A13B01E",
+        "effective_object_story_id": "807248629135034_122133688089028755"
+      },
+      "_camp_id": "120244220646860194",
+      "_adset_name": "[8/5] LM - Chi Phí Cao Thế"
+    },
+    {
+      "id": "120244691673940194",
+      "name": "[8/5] LM - Chi Phí Cao Thế - Bản sao",
+      "status": "ACTIVE",
+      "creative": {
+        "id": "36484104617855476",
+        "name": "Nhắn Số Điện Thoại BS Tư vấn 👉 2026-05-07-7a0fe3324dca9f76e4869b7d5d49cfc5",
+        "body": "ĂN NGON – NGỦ YÊN – 🟢 AN TÂM – KHÔNG CÒN ÁM ẢNH\n❌ Ợ chua, đầy bụng, khó chịu kéo dài mỗi ngày\n😣 Lúc nào cũng nơm nớp “ăn vào lại đau”\n💊 Phụ thuộc thuốc hết đợt này đến đợt khác\nLiệu trình đúng không chỉ dừng ở giảm triệu chứng\n🔄 Mà đưa cơ thể về trạng thái ổn định lâu dài\n🎯 Giải pháp từ Bác sĩ Hội:\n✔️ Theo sát 1:1 từng tình trạng\n✔️ Lộ trình cá nhân hóa – không dùng đơn thuốc chung\n✔️ Hướng tới phục hồi tự nhiên, hạn chế phụ thuộc thuốc\nGiá trị thật sự không nằm ở con số ban đầu\nMà nằm ở việc bạn không phải trả giá thêm nhiều lần sau đó\n✨ Đầu tư đúng – cơ thể hồi phục – cuộc sống nhẹ lại\n📨 Comment “TÌNH TRẠNG” hoặc để lại SỐ ĐIỆN THOẠI\n➡️ Tư vấn trực tiếp theo đúng bệnh – đúng mức độ\n⚡ Để càng lâu → niêm mạc càng tổn thương → tái phát dày hơn\n━━━━━━━━━━━━━━\nBác Sĩ Hội - Sức Khỏe Dạ Dày & Tiêu Hoá\n🏥 Bệnh viện Ung bướu Hưng Việt, 34–40 Đại Cồ Việt, Hai Bà Trưng, Hà Nội\n📞 0969.092.113",
+        "title": "Nhắn Số Điện Thoại BS Tư vấn 👉",
+        "thumbnail_url": "https://scontent.fhan5-6.fna.fbcdn.net/v/t15.5256-10/675015476_1891813158155953_8183124119002996696_n.jpg?_nc_cat=107&ccb=1-7&_nc_eui2=AeGoZJyhASdAYsCtd4GRvvfNw-fIWH2ceaHD58hYfZx5oZiJjiZpIPHM9ymIdi5f-y74N0pf84ZMIeSAmR0b1rAg&_nc_ohc=FmZyVaHw7g8Q7kNvwERf5fN&_nc_oc=AdpkE58JeqcE_MB_XYYXzhC6UZSZon1tIGCUGzpYsrNDzFvH8IqYfSUKmm57i2U4mGE&_nc_zt=23&_nc_ht=scontent.fhan5-6.fna&edm=APG_qckEAAAA&_nc_gid=IZH7aukMOdtI5Q_3cqOPog&_nc_tpa=Q5bMBQHL118cJrPeGwlGWN4RnTx7u08LgCrLIQLdA95viaEQLtlE-T7qENN5jSTyqQHuJmw_NOboEQs-eQ&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af6WtRpYjI7XXBeu6TdJeStSlWmNhFUsH1E-Qsx6_iEeKw&oe=6A13B01E",
+        "effective_object_story_id": "807248629135034_122133688089028755"
+      },
+      "_camp_id": "120244220646860194",
+      "_adset_name": "[8/5] LM - Chi Phí Cao Thế"
+    },
     {
       "id": "120244692422480194",
       "name": "[15/5] LM - 90% 3sai lầm 35+",
@@ -13,7 +136,7 @@
         "id": "2137225140452477",
         "name": "🛑 90% người bị TRÀO NGƯỢC – ĐAU DẠ DÀY đang mắc ít nhất 1 trong 3 sai lầm này…\nKhiến bệnh tái đi tá 2026-05-15-a9b424cb4a5c7546f9c76f5aeeacaada",
         "body": "🛑 90% người bị TRÀO NGƯỢC – ĐAU DẠ DÀY đang mắc ít nhất 1 trong 3 sai lầm này…\nKhiến bệnh tái đi tái lại nhiều năm, uống thuốc mãi vẫn không khỏi.\nRất nhiều người nghĩ rằng chỉ cần uống thuốc giảm axit là sẽ ổn, nhưng thực tế bệnh dạ dày thường bị điều trị sai cách ngay từ đầu.\n❌ Sai lầm 1: Lạm dụng thuốc giảm tiết axit\nNhiều người cố gắng giảm axit dạ dày bằng thuốc trong thời gian dài,\nnhưng khi sử dụng quá mức có thể dẫn đến nhờn thuốc – hiệu quả giảm dần theo thời gian, khiến triệu chứng dễ tái phát.\n❌ Sai lầm 2: Kiêng khem quá mức\nKhông ít người kiêng đủ thứ: chua – cay – dầu mỡ – thịt – hải sản…\nKiêng càng nhiều lại càng thiếu chất, cơ thể mệt mỏi, sức đề kháng giảm, khiến dạ dày khó phục hồi.\n❌ Sai lầm 3: Chỉ xử lý triệu chứng, không xử lý nguyên nhân\nỢ chua – nóng rát – đau thượng vị chỉ là biểu hiện bên ngoài.\nNếu van ngăn trào ngược chưa được phục hồi, axit vẫn tiếp tục trào lên thực quản và bệnh rất dễ tái phát.\n👨‍⚕️ BÁC SĨ HỘI – CHUYÊN GIA TIÊU HÓA\nsẽ trực tiếp đồng hành và tư vấn hướng xử lý phù hợp với từng tình trạng bệnh.\n✔ Phân tích chính xác tình trạng dạ dày dựa trên triệu chứng thực tế.\n✔ Tư vấn hướng điều trị khoa học chuẩn y khoa, hạn chế nguy cơ biến chứng nguy hiểm.\n✔ Hướng dẫn bảo vệ và phục hồi niêm mạc dạ dày đúng cách, ngăn ngừa tái phát.\n🔰Cam kết: \n- Phác đồ cá nhân hóa không dùng đơn thuốc chung\n- Đồng hành 1:1 trong suốt quá trình điều trị\n👨‍⚕️ Bác sĩ Hội\n• Bác sĩ Chuyên khoa I – Ngoại Tiêu hóa, Đại học Y Hà Nội\n• Chuyên gia tại Bệnh viện Ung Bướu Hưng Việt\n• Hơn 10 năm kinh nghiệm trong khám và điều trị các bệnh lý dạ dày – trào ngược.\n🎯 Nếu bạn đang gặp tình trạng:\n• Ợ chua, nóng rát thượng vị\n• Trào ngược lên cổ họng khi nằm\n• Đầy bụng, khó tiêu kéo dài\nĐừng để bệnh âm thầm tiến triển nặng hơn.\n📩 Nhắn tin Fanpage ngay để được Bác sĩ Hội tư vấn miễn phí.\n📞 Hotline: 0583 559 111",
-        "thumbnail_url": "https://scontent.fhan5-8.fna.fbcdn.net/v/t15.5256-10/648146671_1288398723153292_5725358225239174580_n.jpg?_nc_cat=106&ccb=1-7&_nc_eui2=AeEXpoogjyWHk_LP0kHppg4xS_qjtwQbxX9L-qO3BBvFf1b0hpcUtDrPwJQmLnp8hJfxG1-1mx1_6cy5gi9XW25e&_nc_ohc=IOUedF1l6gIQ7kNvwHulz_l&_nc_oc=AdquhwqzPzzLmXbE02Ywk2uXoDqUCNMDCekadLBrQ6TXOqflYkAkyx_taWEB8SeQMMc&_nc_zt=23&_nc_ht=scontent.fhan5-8.fna&edm=APG_qckEAAAA&_nc_gid=uOdMi5vJOJfrFBW_hk3YAQ&_nc_tpa=Q5bMBQGrs7eKhl7C-HiJSLmKY9v8g-5frOlvb6rGBOkh405kRHKA3gepL43tQCJiAHRAMIYJx-0mN26tBw&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af6GUaBM3p71agxSF5tqMEkV-WkI8NYxoIorY6cGb8503Q&oe=6A12AB16",
+        "thumbnail_url": "https://scontent.fhan5-8.fna.fbcdn.net/v/t15.5256-10/648146671_1288398723153292_5725358225239174580_n.jpg?_nc_cat=106&ccb=1-7&_nc_eui2=AeEXpoogjyWHk_LP0kHppg4xS_qjtwQbxX9L-qO3BBvFf1b0hpcUtDrPwJQmLnp8hJfxG1-1mx1_6cy5gi9XW25e&_nc_ohc=0tTfqm-jNmYQ7kNvwGxOW6j&_nc_oc=Ado5CmmcJiSOBbj9pvvskNSDe_HBX2yXSEc1-WtLJZkmT4-Nedro8unIX-AtNbG4YWc&_nc_zt=23&_nc_ht=scontent.fhan5-8.fna&edm=APG_qckEAAAA&_nc_gid=MQ0k_Ma9nK5u9BE7XVlqnA&_nc_tpa=Q5bMBQEHWX5NtclBxK1w4Gdq3lfBSJP-XCrRdWdkxlQkQsKqnvo_XUN99B7ulkqUkzhkMpASaym612irlQ&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af7ZUoUtLdNRzCxXL5ARDSPfO1cj6o7PX1BiRCsE2zPfcQ&oe=6A138C16",
         "effective_object_story_id": "807248629135034_122128791501028755"
       },
       "_camp_id": "120244692069740194",
@@ -27,7 +150,7 @@
         "id": "2137225140452477",
         "name": "🛑 90% người bị TRÀO NGƯỢC – ĐAU DẠ DÀY đang mắc ít nhất 1 trong 3 sai lầm này…\nKhiến bệnh tái đi tá 2026-05-15-a9b424cb4a5c7546f9c76f5aeeacaada",
         "body": "🛑 90% người bị TRÀO NGƯỢC – ĐAU DẠ DÀY đang mắc ít nhất 1 trong 3 sai lầm này…\nKhiến bệnh tái đi tái lại nhiều năm, uống thuốc mãi vẫn không khỏi.\nRất nhiều người nghĩ rằng chỉ cần uống thuốc giảm axit là sẽ ổn, nhưng thực tế bệnh dạ dày thường bị điều trị sai cách ngay từ đầu.\n❌ Sai lầm 1: Lạm dụng thuốc giảm tiết axit\nNhiều người cố gắng giảm axit dạ dày bằng thuốc trong thời gian dài,\nnhưng khi sử dụng quá mức có thể dẫn đến nhờn thuốc – hiệu quả giảm dần theo thời gian, khiến triệu chứng dễ tái phát.\n❌ Sai lầm 2: Kiêng khem quá mức\nKhông ít người kiêng đủ thứ: chua – cay – dầu mỡ – thịt – hải sản…\nKiêng càng nhiều lại càng thiếu chất, cơ thể mệt mỏi, sức đề kháng giảm, khiến dạ dày khó phục hồi.\n❌ Sai lầm 3: Chỉ xử lý triệu chứng, không xử lý nguyên nhân\nỢ chua – nóng rát – đau thượng vị chỉ là biểu hiện bên ngoài.\nNếu van ngăn trào ngược chưa được phục hồi, axit vẫn tiếp tục trào lên thực quản và bệnh rất dễ tái phát.\n👨‍⚕️ BÁC SĨ HỘI – CHUYÊN GIA TIÊU HÓA\nsẽ trực tiếp đồng hành và tư vấn hướng xử lý phù hợp với từng tình trạng bệnh.\n✔ Phân tích chính xác tình trạng dạ dày dựa trên triệu chứng thực tế.\n✔ Tư vấn hướng điều trị khoa học chuẩn y khoa, hạn chế nguy cơ biến chứng nguy hiểm.\n✔ Hướng dẫn bảo vệ và phục hồi niêm mạc dạ dày đúng cách, ngăn ngừa tái phát.\n🔰Cam kết: \n- Phác đồ cá nhân hóa không dùng đơn thuốc chung\n- Đồng hành 1:1 trong suốt quá trình điều trị\n👨‍⚕️ Bác sĩ Hội\n• Bác sĩ Chuyên khoa I – Ngoại Tiêu hóa, Đại học Y Hà Nội\n• Chuyên gia tại Bệnh viện Ung Bướu Hưng Việt\n• Hơn 10 năm kinh nghiệm trong khám và điều trị các bệnh lý dạ dày – trào ngược.\n🎯 Nếu bạn đang gặp tình trạng:\n• Ợ chua, nóng rát thượng vị\n• Trào ngược lên cổ họng khi nằm\n• Đầy bụng, khó tiêu kéo dài\nĐừng để bệnh âm thầm tiến triển nặng hơn.\n📩 Nhắn tin Fanpage ngay để được Bác sĩ Hội tư vấn miễn phí.\n📞 Hotline: 0583 559 111",
-        "thumbnail_url": "https://scontent.fhan5-8.fna.fbcdn.net/v/t15.5256-10/648146671_1288398723153292_5725358225239174580_n.jpg?_nc_cat=106&ccb=1-7&_nc_eui2=AeEXpoogjyWHk_LP0kHppg4xS_qjtwQbxX9L-qO3BBvFf1b0hpcUtDrPwJQmLnp8hJfxG1-1mx1_6cy5gi9XW25e&_nc_ohc=IOUedF1l6gIQ7kNvwHulz_l&_nc_oc=AdquhwqzPzzLmXbE02Ywk2uXoDqUCNMDCekadLBrQ6TXOqflYkAkyx_taWEB8SeQMMc&_nc_zt=23&_nc_ht=scontent.fhan5-8.fna&edm=APG_qckEAAAA&_nc_gid=fDW7i1goRvZ4chQDGPN5Hg&_nc_tpa=Q5bMBQH7RQZaIKCU63E7hizpLqJpGqZ8H1m0ojJZvu66A7vss0zSZicvkzCx2NgN9kz0u_w7MZvH2OmrOw&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af4FR_hd97OdiiiXLJRKPBnC-ve2VbYbDKjyPXh1aYmvaA&oe=6A12AB16",
+        "thumbnail_url": "https://scontent.fhan5-8.fna.fbcdn.net/v/t15.5256-10/648146671_1288398723153292_5725358225239174580_n.jpg?_nc_cat=106&ccb=1-7&_nc_eui2=AeEXpoogjyWHk_LP0kHppg4xS_qjtwQbxX9L-qO3BBvFf1b0hpcUtDrPwJQmLnp8hJfxG1-1mx1_6cy5gi9XW25e&_nc_ohc=0tTfqm-jNmYQ7kNvwGxOW6j&_nc_oc=Ado5CmmcJiSOBbj9pvvskNSDe_HBX2yXSEc1-WtLJZkmT4-Nedro8unIX-AtNbG4YWc&_nc_zt=23&_nc_ht=scontent.fhan5-8.fna&edm=APG_qckEAAAA&_nc_gid=j5HfSWWDOsd-85caGbNswQ&_nc_tpa=Q5bMBQGKcPcC7L6z7l2TljuNASIaCrM48WFmFltijedlkpu0usCKJ6sWtL1vBJARZLLJKUqMKzH060lY7A&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=5fad0e&_nc_sid=58080a&oh=00_Af5tfN96bP7pxEJFL8xEvu1BBknaNqgvb8lCriHB5xtHHw&oe=6A138C16",
         "effective_object_story_id": "807248629135034_122128791501028755"
       },
       "_camp_id": "120244692069740194",

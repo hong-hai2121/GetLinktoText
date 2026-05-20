@@ -5,13 +5,13 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 from pathlib import Path
 
+from config import ACCESS_TOKEN
+
 BASE_DIR = Path(__file__).parent
 
 SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
 SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
-
-ACCESS_TOKEN = "EAAWM6N6fZAPMBRaTNU4xyWC8ImGodBXZB2wcV2YF0mUidZAae4VVEl519Riqd9UA5UHrsg6O69vCTZCG4EManeL54E7ZCncOdiWZCQDvKSM05xIeSdZCYEfeNz34EQQ04ZBVO4oLxzxFnxW3QcNXkPf0UH5SqKpIMcUPw1N6Q5qf23mFmDNrRqKBlqIWA3b7lifTlHz8mKwHc8254ZAR8"
 
 ACCOUNT_STATUS_MAP = {
     1: "Đang hoạt động",

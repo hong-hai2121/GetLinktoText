@@ -4,76 +4,126 @@
     "fields": "id,name,status",
     "note": "Toàn bộ campaign của tài khoản"
   },
-  "Quang Anh-2 (+7 08/05/2026)": [
+  "Quang Anh-1 (+8 08/05/2026)": [
     {
-      "id": "120244734929390194",
-      "name": "Bài viết: \"Vì Sao Dạ Dày Chỉ Ổn Được Vài Hôm Rồi Lại Khó...\"",
+      "id": "120242149685720138",
+      "name": "[18/5] LM - 2 điều dứt",
       "status": "ACTIVE"
     },
     {
-      "id": "120244692069740194",
-      "name": "[15/5] LM - 90% 3sai lầm",
+      "id": "120242148291230138",
+      "name": "[18/5] KHTN - Tự chữa trào ngược tại Nhà",
       "status": "ACTIVE"
     },
     {
-      "id": "120244456760330194",
-      "name": "[12/5] Mess - Reels Live tream - Bản sao",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244456540610194",
-      "name": "[12/5] Mess - Reels Live tream",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244453661100194",
-      "name": "[12/5] LM - Live Nội soi",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244394117130194",
-      "name": "[11/5] LM - FeedBack đỡ 8-90%",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244393906250194",
-      "name": "[11/5] LM -Điều trị tại nhà",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244278987980194",
-      "name": "[9/5] Chiến dịch Doanh số - bài uống thuốc mãi không đỡ",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244227883480194",
-      "name": "Bài viết: \"3 LÝ DO CÔ CHÚ NÊN DÙNG LIỆU TRÌNH DẠ DÀY CHUYÊN...\"",
-      "status": "PAUSED"
-    },
-    {
-      "id": "120244220646860194",
-      "name": "[8/5] LM - Chi Phí Cao Thế",
+      "id": "120242147292900138",
+      "name": "[18/5] KHTN - Không cần sống chung vs dạ dày cả đời",
       "status": "ACTIVE"
     },
     {
-      "id": "120244218132530194",
-      "name": "[8/5] LM - Feed Ợ Chua",
+      "id": "120242054810710138",
+      "name": "[16/5] UTTQ",
       "status": "ACTIVE"
     },
     {
-      "id": "120244218014740194",
-      "name": "[8/5] LM - Feedback Tin tưởng BS Hoàn Toàn",
+      "id": "120242053830110138",
+      "name": "Bài viết: \"❗Thuốc đắt nhất – chưa chắc đã là thuốc tốt nhất...\"",
       "status": "ACTIVE"
     },
     {
-      "id": "120241051520460194",
-      "name": "Chiến dịch Lưu lượng truy cập mới",
+      "id": "120242017395240138",
+      "name": "[15/5] NS - Nhóm Đơn Thuốc",
       "status": "PAUSED"
     },
     {
-      "id": "120241037187280194",
-      "name": "Bài viết: \"90% Người Trào Ngược D.ạ D.ày Mắc Phải Sai Lầm...\"",
+      "id": "120242011458390138",
+      "name": "[15/5] LM - Nội soi - NS NHÓM",
       "status": "PAUSED"
+    },
+    {
+      "id": "120241956374060138",
+      "name": "[14/5] Kéo Mess - NS Nhóm",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241896526540138",
+      "name": "[13/5] LM - 5 Dấu hiệu Thực quản bị Tổn Thương",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241716370820138",
+      "name": "ReMKT - Mess",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241706594190138",
+      "name": "[9/5] LM - FB ở viện Viêm Teo , Loạn Sản",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241705158860138",
+      "name": "[9/5] LM - Đừng chần chừ",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241654253170138",
+      "name": "Chiến dịch Doanh số - [Hệ Quả LIVE] - Page Chuyên Gia",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241650856050138",
+      "name": "PAGE CHUYÊN GIA - Càng chần chừ - LM",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241649148070138",
+      "name": "[8/5] LM - Page Chuyên Gia Đtri Từ Gốc - Đơn thuốc -",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241648219270138",
+      "name": "[8/5] LM - Page Chuyên Gia Đtri Từ Gốc - Đơn thuốc",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241642432290138",
+      "name": "ReMKT",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241641071990138",
+      "name": "[8/5] LM - 90% 3 sai lầm",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241640759790138",
+      "name": "[8/5] LM - Đtri Tại Nhà",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241640509380138",
+      "name": "[8/5] LM - Live Giải Đáp",
+      "status": "PAUSED"
+    },
+    {
+      "id": "120241640440680138",
+      "name": "[8/5] LM - Live Hệ Quả TNTQ",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241640389460138",
+      "name": "[8/5] LM - Live TNDD Uống thuốc bao lâu",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241640312060138",
+      "name": "[8/5] LM - Đơn thuốc",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "120241638643630138",
+      "name": "[8/5] LM - Nội Soi",
+      "status": "ACTIVE"
     }
   ]
 }
