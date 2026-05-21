@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\pip.exe install openpyxl pandas python-dateutil)",
+      "PowerShell(d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe -c \"import tkinter; print\\('tkinter OK'\\); import convert_pancake_to_meinvoice; print\\('core OK'\\)\" 2>&1)",
+      "PowerShell(& \"d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\pip.exe\" install openpyxl pandas python-dateutil)",
+      "PowerShell(& \"d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe\" -c \"import tkinter; print\\('tkinter OK'\\); import sys; sys.path.insert\\(0,'d:/Python/GetLinktoText/pancake_to_meinvoice'\\); import convert_pancake_to_meinvoice; print\\('core OK'\\)\")",
+      "Bash(venvScriptspython.exe -c ' *)"
+    ]
+  }
+}

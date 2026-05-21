@@ -72,6 +72,9 @@ SourceTruyen/XulyAmThanh/AmThanh_peaks/
 SourceTruyen/XuLyVideo/Video_TangToc/
 SourceTruyen/XuLyVideo/videodoc/
 
+# Ignore pancake_to_meinvoice folder
+pancake_to_meinvoice/
+
 # Ignore output and backup directories
 output_videos/
 local_videos/
