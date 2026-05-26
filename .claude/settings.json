@@ -5,7 +5,30 @@
       "PowerShell(d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe -c \"import tkinter; print\\('tkinter OK'\\); import convert_pancake_to_meinvoice; print\\('core OK'\\)\" 2>&1)",
       "PowerShell(& \"d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\pip.exe\" install openpyxl pandas python-dateutil)",
       "PowerShell(& \"d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe\" -c \"import tkinter; print\\('tkinter OK'\\); import sys; sys.path.insert\\(0,'d:/Python/GetLinktoText/pancake_to_meinvoice'\\); import convert_pancake_to_meinvoice; print\\('core OK'\\)\")",
-      "Bash(venvScriptspython.exe -c ' *)"
+      "Bash(venvScriptspython.exe -c ' *)",
+      "PowerShell(& \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe\" --version 2>&1)",
+      "PowerShell(& \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe\" -c \"import pandas; import openpyxl; print\\('OK'\\)\" 2>&1)",
+      "PowerShell(& \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\python.exe\" \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\gui.py\" 2>&1)",
+      "PowerShell(& \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\pythonw.exe\" \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\gui.py\")",
+      "PowerShell(& \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\run.bat\")",
+      "PowerShell(python -m pip show pyinstaller 2>&1)",
+      "PowerShell(python -c \"import sys, os; print\\(sys.executable\\); import _socket; print\\(os.path.abspath\\(_socket.__file__\\)\\)\")",
+      "Read(//c/Users/PC/AppData/Local/Programs/Python/**)",
+      "PowerShell(py -3.12 -c \"import sys; print\\(sys.executable\\)\")",
+      "PowerShell(Start-Process \"D:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\dist\\\\PancakeToMeInvoice\\\\PancakeToMeInvoice.exe\")",
+      "Bash(python -c \"import pandas as pd; df = pd.read_excel\\('bang_ten_thuoc_gia_tien.xlsx'\\); print\\('Columns:', list\\(df.columns\\)\\); print\\('First 5 rows:'\\); print\\(df.head\\(\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(\"D:\\\\Python\\\\GetLinktoText\\\\venv\\\\Scripts\\\\pip.exe\" install *)",
+      "PowerShell(python -c \"import xlrd; import xlwt; import xlutils; print\\('OK'\\)\" 2>&1)",
+      "PowerShell(python -c \"import sys; print\\(sys.executable\\)\")",
+      "PowerShell(python -m pip install xlwt xlutils 2>&1)",
+      "PowerShell(tail -5)",
+      "Bash(rm \"D:/Python/GetLinktoText/Misatothue/test_output.xls\" 2>/dev/null; echo \"cleaned\")",
+      "Bash(rm D:/Python/GetLinktoText/Misatothue/output_xbh*.xls D:/Python/GetLinktoText/Misatothue/convert_misa_xbh.log 2>/dev/null; echo done)",
+      "Bash(Out-String)"
+    ],
+    "additionalDirectories": [
+      "D:\\Python\\GetLinktoText\\Misatothue"
     ]
   }
 }

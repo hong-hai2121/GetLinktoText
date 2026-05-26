@@ -72,8 +72,13 @@ SourceTruyen/XulyAmThanh/AmThanh_peaks/
 SourceTruyen/XuLyVideo/Video_TangToc/
 SourceTruyen/XuLyVideo/videodoc/
 
-# Ignore pancake_to_meinvoice folder
-pancake_to_meinvoice/
+# pancake_to_meinvoice: chỉ giữ file .py
+pancake_to_meinvoice/*
+!pancake_to_meinvoice/*.py
+
+# Misatothue: chỉ giữ file .py
+Misatothue/*
+!Misatothue/*.py
 
 # Ignore output and backup directories
 output_videos/
