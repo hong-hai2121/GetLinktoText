@@ -40,6 +40,7 @@ HEADERS = [
     "Múi Giờ",
     "Đã Chi",
     "Số Dư",
+    "Số Dư Trước",
     "Phương Thức Thanh Toán",
     "Chọn Lấy Camp",   # TRUE = sẽ được get_campaigns.py xử lý
     "Cập Nhật Lúc",
@@ -65,30 +66,35 @@ def connect_sheet(credentials_file: str = "service_account.json"):
     return spreadsheet.worksheet(SHEET_NAME)
 
 
-def read_existing_selections(worksheet) -> dict[str, bool]:
-    """Đọc cột 'Chọn Lấy Camp' hiện tại, trả về {account_id: True/False}."""
+def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str]]:
+    """Đọc sheet hiện tại, trả về ({account_id: chọn_lấy_camp}, {account_id: số_dư})."""
     try:
         all_values = worksheet.get_all_values()
     except Exception:
-        return {}
+        return {}, {}
 
     if len(all_values) < 2:
-        return {}
+        return {}, {}
 
     header = all_values[0]
     try:
         id_col = header.index("ID Tài Khoản")
         chon_col = header.index("Chọn Lấy Camp")
     except ValueError:
-        return {}
+        return {}, {}
 
-    selections = {}
+    so_du_col = header.index("Số Dư") if "Số Dư" in header else -1
+
+    selections, prev_balances = {}, {}
     for row in all_values[1:]:
         acc_id = row[id_col].strip() if id_col < len(row) else ""
+        if not acc_id:
+            continue
         chon_val = row[chon_col].strip() if chon_col < len(row) else ""
-        if acc_id:
-            selections[acc_id] = chon_val.upper() in ("TRUE", "ĐÚNG", "1", "X", "✓")
-    return selections
+        selections[acc_id] = chon_val.upper() in ("TRUE", "ĐÚNG", "1", "X", "✓")
+        if so_du_col >= 0:
+            prev_balances[acc_id] = row[so_du_col].strip() if so_du_col < len(row) else ""
+    return selections, prev_balances
 
 
 def fetch_ad_accounts(access_token: str) -> list[dict]:
@@ -122,7 +128,7 @@ def format_money(amount_raw, currency: str) -> str:
     return f"{formatted} ₫" if currency == "VND" else f"{formatted} {currency}"
 
 
-def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool]):
+def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool], prev_balances: dict[str, str]):
     def sort_key(acc):
         biz = acc.get("business") or {}
         return (biz.get("name", "") or "￿", acc.get("name", ""))
@@ -149,6 +155,7 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool])
             acc.get("timezone_name", ""),
             format_money(acc.get("amount_spent", "0"), currency),
             format_money(acc.get("balance", "0"), currency),
+            prev_balances.get(acc_id, ""),
             payment_method,
             chon,
             now_str,
@@ -179,8 +186,8 @@ def main():
     print("Kết nối Google Sheets...")
     worksheet = connect_sheet()
 
-    print("Đọc lựa chọn hiện tại (giữ lại cột Chọn Lấy Camp)...")
-    selections = read_existing_selections(worksheet)
+    print("Đọc dữ liệu hiện tại (giữ lại Chọn Lấy Camp + Số Dư Trước)...")
+    selections, prev_balances = read_existing_data(worksheet)
     selected_count = sum(1 for v in selections.values() if v)
     print(f"  → {selected_count} tài khoản đang được chọn.")
 
@@ -191,7 +198,7 @@ def main():
     save_json(accounts)
 
     print(f"Ghi dữ liệu vào sheet '{SHEET_NAME}'...")
-    write_to_sheet(worksheet, accounts, selections)
+    write_to_sheet(worksheet, accounts, selections, prev_balances)
     print("Hoàn thành!")
 
 
