@@ -44,11 +44,22 @@ CODE_BG = "#131620"
 
 def write_config(date_preset: str, time_range: dict | None):
     """Ghi config.py để get_campaigns.py và get_details.py đọc."""
+    # Đọc ACCESS_TOKEN hiện tại để không bị xóa khi ghi đè
+    token = ""
+    config_path = BASE_DIR / "config.py"
+    try:
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("ACCESS_TOKEN"):
+                token = line + "\n"
+                break
+    except FileNotFoundError:
+        pass
+
     if date_preset:
-        content = f'DATE_PRESET = "{date_preset}"\nTIME_RANGE: dict = {{}}\n'
+        date_part = f'DATE_PRESET = "{date_preset}"\nTIME_RANGE: dict = {{}}\n'
     else:
-        content = f'DATE_PRESET = ""\nTIME_RANGE: dict = {json.dumps(time_range)}\n'
-    (BASE_DIR / "config.py").write_text(content, encoding="utf-8")
+        date_part = f'DATE_PRESET = ""\nTIME_RANGE: dict = {json.dumps(time_range)}\n'
+    config_path.write_text(token + date_part, encoding="utf-8")
 
 
 # ── Widgets helpers ────────────────────────────────────────────────────────────

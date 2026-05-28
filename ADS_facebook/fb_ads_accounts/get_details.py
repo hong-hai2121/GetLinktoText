@@ -370,12 +370,12 @@ def main():
 
     base_url = f"https://graph.facebook.com/{FB_API_VERSION}"
     print("\nLưu JSON...")
-    save_json(dump_adsets, "adsets.json", {
+    save_json(dump_adsets, "get_details_adsets.json", {
         "endpoint": f"GET {base_url}/{{campaign_id}}/adsets",
         "fields":   "id,name,status",
         "note":     "Adsets của các campaign được chọn lấy chi tiết",
     })
-    save_json(dump_ads, "ads.json", {
+    save_json(dump_ads, "get_details_ads.json", {
         "endpoint": f"GET {base_url}/{{adset_id}}/ads",
         "fields": (
             "id,name,status,"
@@ -384,7 +384,7 @@ def main():
         ),
         "note": "Ads kèm creative của các adset được chọn",
     })
-    save_json(dump_insights_ad, "insights_ad.json", {
+    save_json(dump_insights_ad, "get_details_insights.json", {
         "endpoint":    f"GET {base_url}/act_{{account_id}}/insights",
         "level":       "ad",
         "fields":      f"ad_id,adset_id,campaign_id,{_INSIGHTS_FIELDS}",

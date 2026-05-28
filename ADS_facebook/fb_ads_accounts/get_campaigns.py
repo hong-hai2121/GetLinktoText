@@ -540,12 +540,12 @@ def main():
 
     base_url = f"https://graph.facebook.com/{FB_API_VERSION}"
     print("\nLưu JSON...")
-    save_json(dump_campaigns, "campaigns.json", {
+    save_json(dump_campaigns, "get_campaigns.json", {
         "endpoint": f"GET {base_url}/act_{{account_id}}/campaigns",
         "fields":   "id,name,status",
         "note":     "Toàn bộ campaign của tài khoản",
     })
-    save_json(dump_insights_camp, "insights_campaign.json", {
+    save_json(dump_insights_camp, "get_campaigns_insights.json", {
         "endpoint":    f"GET {base_url}/act_{{account_id}}/insights",
         "level":       "campaign",
         "date_preset": "this_month",

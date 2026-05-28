@@ -72,6 +72,9 @@ SourceTruyen/XulyAmThanh/AmThanh_peaks/
 SourceTruyen/XuLyVideo/Video_TangToc/
 SourceTruyen/XuLyVideo/videodoc/
 
+# ADS_facebook: bỏ qua toàn bộ JSON (data + credentials)
+ADS_facebook/fb_ads_accounts/*.json
+
 # pancake_to_meinvoice: chỉ giữ file .py
 pancake_to_meinvoice/*
 !pancake_to_meinvoice/*.py

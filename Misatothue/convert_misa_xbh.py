@@ -7,7 +7,6 @@ import io
 import os
 import re
 import sys
-import difflib
 import logging
 import unicodedata
 import warnings
@@ -133,15 +132,40 @@ COL_OUT = {
 # =============================================================================
 # Logging
 # =============================================================================
+def _build_log_handlers():
+    handlers = []
+    # Stream handler — chỉ khi không phải frozen (windowed exe không có stdout)
+    if not getattr(sys, "frozen", False):
+        try:
+            handlers.append(
+                logging.StreamHandler(
+                    stream=open(sys.stdout.fileno(), mode="w",
+                                encoding="utf-8", buffering=1, closefd=False)
+                )
+            )
+        except Exception:
+            handlers.append(logging.StreamHandler())
+    # File handler — ghi log ra file cạnh exe để debug
+    try:
+        _log_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+                   else os.path.dirname(os.path.abspath(__file__))
+        handlers.append(
+            logging.FileHandler(
+                os.path.join(_log_dir, "convert_misa_xbh.log"),
+                encoding="utf-8", mode="w"
+            )
+        )
+    except Exception:
+        pass
+    if not handlers:
+        handlers.append(logging.NullHandler())
+    return handlers
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
-    handlers=[
-        logging.StreamHandler(stream=open(sys.stdout.fileno(), mode="w",
-                                          encoding="utf-8", buffering=1, closefd=False)),
-        logging.FileHandler("convert_misa_xbh.log", encoding="utf-8", mode="w"),
-    ],
+    handlers=_build_log_handlers(),
 )
 log = logging.getLogger(__name__)
 
@@ -243,7 +267,7 @@ def _normalize_name(s: str) -> str:
 # 1b. Danh mục hàng hóa → tra Mã HH
 # =============================================================================
 def load_dm_file() -> dict:
-    """Đọc DM hàng hóa, trả về {tên_hàng_normalized: mã_hàng}."""
+    """Đọc DM hàng hóa, trả về {tên_hàng_normalized: (mã_hàng, dvt)}."""
     path = CONFIG.get("DM_FILE", "DM hang hoa.xlsx")
     if not os.path.isabs(path):
         if getattr(sys, "frozen", False):
@@ -253,7 +277,7 @@ def load_dm_file() -> dict:
         path = os.path.join(base, path)
 
     if not os.path.isfile(path):
-        log.warning(f"Không tìm thấy file DM hàng hóa: {path} — cột N sẽ để trống")
+        log.warning(f"Không tìm thấy file DM hàng hóa: {path} — cột N, O sẽ để trống")
         return {}
 
     try:
@@ -263,13 +287,15 @@ def load_dm_file() -> dict:
         log.error(f"Lỗi đọc DM hàng hóa: {e}")
         return {}
 
-    ma_col = ten_col = None
+    ma_col = ten_col = dvt_col = None
     for c in df.columns:
         cl = c.lower().strip()
-        if ma_col is None and any(k in cl for k in ("mã hàng", "ma hang", "mã")):
-            ma_col = c
+        if ma_col  is None and any(k in cl for k in ("mã hàng", "ma hang", "mã")):
+            ma_col  = c
         if ten_col is None and any(k in cl for k in ("tên hàng", "ten hang", "tên")):
             ten_col = c
+        if dvt_col is None and "đvt" in cl:
+            dvt_col = c
 
     if not ma_col or not ten_col:
         log.warning(f"DM hàng hóa: không tìm được cột Mã hàng/Tên hàng. Cột: {list(df.columns)}")
@@ -277,28 +303,30 @@ def load_dm_file() -> dict:
 
     dm = {}
     for _, row in df.iterrows():
-        ma  = _str(row.get(ma_col, ""))
+        ma  = _str(row.get(ma_col,  ""))
         ten = _str(row.get(ten_col, ""))
+        dvt = _str(row.get(dvt_col, "")) if dvt_col else ""
         if ma and ten:
-            dm[_normalize_name(ten)] = ma
+            dm[_normalize_name(ten)] = (ma, dvt)
 
     log.info(f"Đã tải DM hàng hóa: {len(dm)} mặt hàng từ '{os.path.basename(path)}'")
     return dm
 
 
 def lookup_ma_hh(ten_hang: str, dm_map: dict) -> str:
-    """Tìm Mã HH theo tên hàng (exact trước, rồi fuzzy 0.75)."""
+    """Tìm Mã HH theo tên hàng, không phân biệt hoa/thường, phân biệt chính tả."""
     if not dm_map or not ten_hang:
         return ""
-    key = _normalize_name(ten_hang)
-    if key in dm_map:
-        return dm_map[key]
-    matches = difflib.get_close_matches(key, dm_map.keys(), n=1, cutoff=0.75)
-    if matches:
-        log.debug(f"Fuzzy Mã HH: '{ten_hang}' → '{dm_map[matches[0]]}'")
-        return dm_map[matches[0]]
-    log.debug(f"Không tìm thấy Mã HH cho: '{ten_hang}'")
-    return ""
+    entry = dm_map.get(_normalize_name(ten_hang))
+    return entry[0] if entry else ""
+
+
+def lookup_dvt(ten_hang: str, dm_map: dict) -> str:
+    """Lấy ĐVT từ DM hàng hóa theo tên hàng."""
+    if not dm_map or not ten_hang:
+        return ""
+    entry = dm_map.get(_normalize_name(ten_hang))
+    return entry[1] if entry else ""
 
 
 # =============================================================================
@@ -306,8 +334,7 @@ def lookup_ma_hh(ten_hang: str, dm_map: dict) -> str:
 # =============================================================================
 def load_source(file_path: str) -> pd.DataFrame:
     if not os.path.exists(file_path):
-        log.error(f"Không tìm thấy file nguồn: {file_path}")
-        sys.exit(1)
+        raise RuntimeError(f"Không tìm thấy file nguồn: {file_path}")
 
     with open(file_path, "rb") as f:
         data = f.read()
@@ -335,8 +362,7 @@ def load_source(file_path: str) -> pd.DataFrame:
             return df
         except Exception as e:
             if engine == "xlrd":
-                log.error(f"Không đọc được file nguồn: {e}")
-                sys.exit(1)
+                raise RuntimeError(f"Không đọc được file nguồn: {e}")
             log.debug(f"openpyxl thất bại ({e}), thử xlrd...")
 
 
@@ -389,7 +415,7 @@ def build_col_map(df: pd.DataFrame) -> dict:
         if col is None:
             missing.append(key)
     if missing:
-        log.debug(f"Không tìm thấy cột (sẽ để trống): {missing}")
+        log.warning(f"Không tìm thấy cột trong file nguồn (sẽ để trống): {missing}")
     return result
 
 
@@ -439,8 +465,31 @@ def filter_rows(df: pd.DataFrame, col_map: dict) -> pd.DataFrame:
 #   H-Q  (7-16) : đầy đủ mọi hàng
 #   R-T  (17-19): luôn trống
 #   U    (20)   : đầy đủ mọi hàng (Thuế Suất)
-#   V-AM (21-38): chỉ hàng đầu của mỗi nhóm (AH = concat tên hàng, AI/AK/AL = tổng cộng)
+#   Z-AG (25-32): chỉ hàng đầu của mỗi nhóm Số C.từ
+#   AH-AM(33-38): chỉ hàng đầu của mỗi nhóm thuế suất trong cùng Số C.từ (gom theo thuế suất)
 # =============================================================================
+
+_NHOM_HD_BY_THUE = {5: "R3", 8: "R6"}
+
+
+def _parse_ma_khach_start(s: str):
+    """'HK0001' → ('HK', 1, 4) — prefix, start_num, zero_pad_len. None nếu không hợp lệ."""
+    m = re.match(r'^([A-Za-z]*)(\d+)$', s.strip())
+    if not m:
+        return None
+    return m.group(1), int(m.group(2)), len(m.group(2))
+
+def _nhom_hd(ts_key) -> str:
+    """Trả về Nhóm HĐ dựa theo thuế suất; fallback về config."""
+    if ts_key != "":
+        try:
+            pct = int(round(float(ts_key)))
+            if pct in _NHOM_HD_BY_THUE:
+                return _NHOM_HD_BY_THUE[pct]
+        except (ValueError, TypeError):
+            pass
+    return CONFIG.get("NHOM_HD", "")
+
 
 def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
     def g(row, key):
@@ -449,112 +498,149 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
 
     # ── Gom nhóm liên tiếp theo Số C.từ ─────────────────────────────────────
     groups: list[tuple[str, list]] = []
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         so_ct = g(row, "so_hd")
         if groups and groups[-1][0] == so_ct:
-            groups[-1][1].append(row)
+            groups[-1][1].append((idx, row))
         else:
-            groups.append((so_ct, [row]))
+            groups.append((so_ct, [(idx, row)]))
+
+    # ── Sinh mã khách tuần tự nếu có MA_KHACH_START ──────────────────────────
+    ma_khach_seq: dict[str, str] = {}
+    _mk_start = CONFIG.get("MA_KHACH_START", "").strip()
+    if _mk_start:
+        parsed = _parse_ma_khach_start(_mk_start)
+        if parsed:
+            _mk_prefix, _mk_num, _mk_pad = parsed
+            for i, (so_ct, _) in enumerate(groups):
+                ma_khach_seq[so_ct] = f"{_mk_prefix}{str(_mk_num + i).zfill(_mk_pad)}"
 
     output_rows = []
     missing_dm = []
 
-    for so_ct, rows in groups:
-        # ── Tổng hợp cấp HĐ (dùng cho hàng đầu) ────────────────────────────
-        ten_hang_list = [g(r, "ten_hang") for r in rows]
-        dien_giai_hd  = ", ".join(t for t in ten_hang_list if t)
-
-        sum_thanh_tien = sum(_num(g(r, "thanh_tien")) for r in rows)
-        sum_tien_thue  = sum(_num(g(r, "tien_thue"))  for r in rows)
-        sum_tong_tt    = sum(_num(g(r, "tong_tt"))     for r in rows)
-
-        # Thuế suất lấy từ hàng đầu (giả định cùng thuế suất trong 1 HĐ)
-        thue_suat_hd = _parse_pct(g(rows[0], "thue_suat"))
-
+    for so_ct, row_list in groups:
         # ── Thông tin khách (từ hàng đầu) ───────────────────────────────────
-        first      = rows[0]
+        _, first   = row_list[0]
         so_hd      = g(first, "so_hd")
         ky_hieu    = g(first, "ky_hieu")
         ngay_str   = _format_date_str(g(first, "ngay_hd"))
-        ma_khach   = g(first, "ma_khach")
+        ma_khach   = ma_khach_seq.get(so_ct) or g(first, "ma_khach") or "KH00001"
         ten_khach  = g(first, "ten_khach")
         mst        = g(first, "mst")
         ghi_chu_hd = g(first, "ghi_chu")
 
-        ma_kho       = CONFIG.get("MA_KHO",            "K1")
-        ng_nhan_out  = CONFIG.get("DEFAULT_NG_NHAN",   "Bán hàng cho khách HĐ: ")
-        ten_khach_out = ten_khach or CONFIG.get("DEFAULT_TEN_KHACH",
-                                                "Khách hàng không cung cấp thông tin")
-        # Cột F: text tĩnh từ config (khác AH là concat tên hàng)
-        dien_giai_f  = CONFIG.get("DIEN_GIAI", "Bán hàng cho khách HĐ:")
+        ma_kho        = CONFIG.get("MA_KHO", "K1")
+        ng_nhan_out   = ten_khach or CONFIG.get("DEFAULT_NG_NHAN",   "Khách hàng không cung cấp thông tin")
+        ten_khach_out = ten_khach or CONFIG.get("DEFAULT_TEN_KHACH", "Khách hàng không cung cấp thông tin")
+        dien_giai_f   = CONFIG.get("DIEN_GIAI", "Bán hàng cho khách HĐ:")
 
-        # ── Ghi từng dòng trong nhóm ─────────────────────────────────────────
-        for i, row in enumerate(rows):
-            is_first = (i == 0)
+        # ── Gom nhóm theo thuế suất, giữ thứ tự xuất hiện ──────────────────
+        thue_groups: dict = {}
+        for idx, row in row_list:
+            ts_key = _parse_pct(g(row, "thue_suat"))
+            if ts_key is None:
+                ts_key = ""
+            if ts_key not in thue_groups:
+                thue_groups[ts_key] = []
+            thue_groups[ts_key].append((idx, row))
 
-            ten_hang  = g(row, "ten_hang")
-            dvt       = g(row, "dvt")
-            so_luong  = _num(g(row, "so_luong"))
-            don_gia   = _num(g(row, "don_gia"))
-            thue_suat = _parse_pct(g(row, "thue_suat"))
+        # ── Pre-compute tất cả group summaries (Z, AH-AM) ───────────────────
+        group_summaries = []
+        for ts_key, ts_rows in thue_groups.items():
+            group_summaries.append({
+                "nhom_hd":    _nhom_hd(ts_key),
+                "dien_giai2": ", ".join(t for t in (g(r, "ten_hang") for _, r in ts_rows) if t),
+                "tien_hang2": sum(_num(g(r, "thanh_tien")) for _, r in ts_rows),
+                "thue_suat2": ts_key if ts_key != "" else "",
+                "tien_thue2": sum(_num(g(r, "tien_thue"))  for _, r in ts_rows),
+                "tien_tt":    sum(_num(g(r, "tong_tt"))    for _, r in ts_rows),
+                "ghi_chu2":   ghi_chu_hd,
+            })
 
-            # Tra Mã HH từ danh mục
-            ma_hh = lookup_ma_hh(ten_hang, dm_map)
-            if not ma_hh and ten_hang:
-                missing_dm.append(ten_hang)
+        # ── Ghi từng dòng ────────────────────────────────────────────────────
+        # Z và AH-AM dùng doc_row_idx để lấy summary → dồn liên tiếp từ hàng đầu
+        doc_row_idx = 0
+        for ts_key, ts_rows in thue_groups.items():
+            for j, (row_idx, row) in enumerate(ts_rows):
+                is_first_doc = (doc_row_idx == 0)
+                summary = group_summaries[doc_row_idx] if doc_row_idx < len(group_summaries) else None
 
-            row_data = {
-                # ── A-G: chỉ hàng đầu ───────────────────────────────────────
-                "so_ct":     so_hd          if is_first else "",  # A
-                "ngay":      ngay_str       if is_first else "",  # B
-                "ma_kho":    ma_kho         if is_first else "",  # C
-                "ma_khach":  ma_khach       if is_first else "",  # D
-                "ng_nhan":   ng_nhan_out    if is_first else "",  # E
-                "dien_giai": dien_giai_f    if is_first else "",  # F
-                "ma_vv":     "",                                  # G: luôn trống
-                # ── H-Q: đầy đủ mọi hàng ────────────────────────────────────
-                "tk_no_th":  CONFIG.get("TK_NO_TIEN_HANG", ""),  # H
-                "tk_no_tt":  CONFIG.get("TK_NO_TIEN_THUE", ""),  # I
-                "tk_co_th":  CONFIG.get("TK_CO_TIEN_HANG", ""),  # J
-                "tk_no_gv":  CONFIG.get("TK_NO_GIA_VON",   ""),  # K
-                "tk_co_gt":  CONFIG.get("TK_CO_GIAM_TRU",  ""),  # L
-                "ma_kho2":   "",                                  # M: luôn trống
-                "ma_hh":     ma_hh,                              # N: tra DM
-                "dvt":       dvt,                                 # O
-                "so_luong":  so_luong,                           # P
-                "gia_ban":   don_gia,                            # Q
-                # ── R-T: luôn trống ─────────────────────────────────────────
-                "ck_pct":    "",  # R
-                "tien_ck":   "",  # S
-                "tien_hang": "",  # T
-                # ── U: đầy đủ mọi hàng ──────────────────────────────────────
-                "thue_suat": thue_suat if thue_suat else "",      # U
-                # ── V-Y: luôn trống ─────────────────────────────────────────
-                "tien_thue": "",  # V
-                "ghi_chu":   "",  # W
-                "gia_von":   "",  # X
-                "tien_von":  "",  # Y
-                # ── Z-AM: chỉ hàng đầu ──────────────────────────────────────
-                "nhom_hd":   CONFIG.get("NHOM_HD", "")  if is_first else "",  # Z
-                "mau_so":    CONFIG.get("MAU_SO",  "")  if is_first else "",  # AA
-                "ky_hieu":   ky_hieu                    if is_first else "",  # AB
-                "so_hd":     so_hd                      if is_first else "",  # AC
-                "ngay_ph":   ngay_str                   if is_first else "",  # AD
-                "ma_khach2": ma_khach                   if is_first else "",  # AE
-                "ten_khach": ten_khach_out              if is_first else "",  # AF
-                "mst":       mst                        if is_first else "",  # AG
-                "dien_giai2": dien_giai_hd              if is_first else "",  # AH: concat
-                "tien_hang2": sum_thanh_tien            if is_first else "",  # AI: tổng
-                "thue_suat2": (thue_suat_hd if thue_suat_hd else "") if is_first else "",  # AJ
-                "tien_thue2": sum_tien_thue             if is_first else "",  # AK: tổng
-                "tien_tt":    sum_tong_tt               if is_first else "",  # AL: tổng
-                "ghi_chu2":   ghi_chu_hd                if is_first else "",  # AM
-            }
-            output_rows.append(row_data)
+                ten_hang  = g(row, "ten_hang")
+                dvt       = lookup_dvt(ten_hang, dm_map)
+                so_luong  = _num(g(row, "so_luong"))
+                don_gia   = _num(g(row, "don_gia"))
+                thue_suat = _parse_pct(g(row, "thue_suat"))
+
+                ma_hh = lookup_ma_hh(ten_hang, dm_map)
+                if not ma_hh and ten_hang:
+                    excel_row = row_idx + CONFIG["SOURCE_HEADER_ROW"] + 1
+                    missing_dm.append((ten_hang, excel_row))
+
+                row_data = {
+                    # ── A-G: chỉ hàng đầu chứng từ ──────────────────────────
+                    "so_ct":     so_hd          if is_first_doc else "",  # A
+                    "ngay":      ngay_str       if is_first_doc else "",  # B
+                    "ma_kho":    ma_kho         if is_first_doc else "",  # C
+                    "ma_khach":  ma_khach       if is_first_doc else "",  # D
+                    "ng_nhan":   ng_nhan_out    if is_first_doc else "",  # E
+                    "dien_giai": dien_giai_f    if is_first_doc else "",  # F
+                    "ma_vv":     "",                                       # G
+                    # ── H-Q: đầy đủ mọi hàng ─────────────────────────────────
+                    "tk_no_th":  CONFIG.get("TK_NO_TIEN_HANG", ""),  # H
+                    "tk_no_tt":  CONFIG.get("TK_NO_TIEN_THUE", ""),  # I
+                    "tk_co_th":  CONFIG.get("TK_CO_TIEN_HANG", ""),  # J
+                    "tk_no_gv":  CONFIG.get("TK_NO_GIA_VON",   ""),  # K
+                    "tk_co_gt":  CONFIG.get("TK_CO_GIAM_TRU",  ""),  # L
+                    "ma_kho2":   "",                                   # M
+                    "ma_hh":     ma_hh,                               # N
+                    "dvt":       dvt,                                  # O
+                    "so_luong":  so_luong,                            # P
+                    "gia_ban":   don_gia,                             # Q
+                    # ── R-T: luôn trống ──────────────────────────────────────
+                    "ck_pct":    "",  # R
+                    "tien_ck":   "",  # S
+                    "tien_hang": "",  # T
+                    # ── U: đầy đủ mọi hàng ───────────────────────────────────
+                    "thue_suat": thue_suat if thue_suat else "",  # U
+                    # ── V-Y: luôn trống ──────────────────────────────────────
+                    "tien_thue": "",  # V
+                    "ghi_chu":   "",  # W
+                    "gia_von":   "",  # X
+                    "tien_von":  "",  # Y
+                    # ── Z: dồn lên theo doc_row_idx ──────────────────────────
+                    "nhom_hd":    summary["nhom_hd"]    if summary else "",  # Z
+                    # ── AA-AG: chỉ hàng đầu chứng từ ────────────────────────
+                    "mau_so":    CONFIG.get("MAU_SO",  "")  if is_first_doc else "",  # AA
+                    "ky_hieu":   ky_hieu                    if is_first_doc else "",  # AB
+                    "so_hd":     so_hd                      if is_first_doc else "",  # AC
+                    "ngay_ph":   ngay_str                   if is_first_doc else "",  # AD
+                    "ma_khach2": ma_khach                   if is_first_doc else "",  # AE
+                    "ten_khach": ten_khach_out              if is_first_doc else "",  # AF
+                    "mst":       mst                        if is_first_doc else "",  # AG
+                    # ── AH-AM: dồn lên theo doc_row_idx ─────────────────────
+                    "dien_giai2": summary["dien_giai2"] if summary else "",  # AH
+                    "tien_hang2": summary["tien_hang2"] if summary else "",  # AI
+                    "thue_suat2": summary["thue_suat2"] if summary else "",  # AJ
+                    "tien_thue2": summary["tien_thue2"] if summary else "",  # AK
+                    "tien_tt":    summary["tien_tt"]    if summary else "",  # AL
+                    "ghi_chu2":   summary["ghi_chu2"]   if summary else "",  # AM
+                }
+                output_rows.append(row_data)
+                doc_row_idx += 1
 
     if missing_dm:
-        unique_missing = sorted(set(missing_dm))
-        log.warning(f"Không tìm thấy Mã HH cho {len(unique_missing)} tên hàng: {unique_missing}")
+        by_name: dict = {}
+        for name, row_num in missing_dm:
+            by_name.setdefault(name, []).append(row_num)
+        parts = [f"  • '{name}'  →  dòng Excel {', '.join(str(r) for r in row_nums)}"
+                 for name, row_nums in sorted(by_name.items())]
+        msg = (
+            f"Không tìm thấy Mã HH cho {len(by_name)} tên hàng trong Danh mục.\n"
+            f"Vui lòng bổ sung vào file DM trước khi xuất:\n"
+            + "\n".join(parts)
+        )
+        log.error(msg)
+        raise RuntimeError(msg)
 
     return output_rows
 
@@ -580,8 +666,7 @@ def write_output(rows_data: list, template_path: str, output_path: str) -> str:
     start_row = CONFIG["OUTPUT_START_ROW"] - 1  # 0-indexed
 
     if not os.path.exists(template_path):
-        log.error(f"Không tìm thấy file template: {template_path}")
-        sys.exit(1)
+        raise RuntimeError(f"Không tìm thấy file template: {template_path}")
 
     # Đọc template với formatting
     rb = xlrd.open_workbook(template_path, formatting_info=True)
@@ -653,8 +738,7 @@ def main():
     df = filter_rows(df, col_map)
 
     if len(df) == 0:
-        log.warning("Không có dòng dữ liệu nào hợp lệ!")
-        return
+        raise RuntimeError("Không có dòng dữ liệu nào hợp lệ sau khi lọc!")
 
     # Bước 4: Tải danh mục hàng hóa
     log.info("[4] Tải danh mục hàng hóa...")

@@ -15,7 +15,7 @@ FB_API_VERSION = "v20.0"
 
 ACCOUNT_STATUS_MAP = {
     1: "Đang hoạt động",
-    2: "Đã tắt",
+2: "Đã tắt",
     3: "Chưa thanh toán",
     7: "Đang xét duyệt rủi ro",
     9: "Trong thời gian ân hạn",
@@ -40,6 +40,7 @@ HEADERS = [
     "Múi Giờ",
     "Đã Chi",
     "Số Dư",
+    "Phương Thức Thanh Toán",
     "Chọn Lấy Camp",   # TRUE = sẽ được get_campaigns.py xử lý
     "Cập Nhật Lúc",
 ]
@@ -91,7 +92,7 @@ def read_existing_selections(worksheet) -> dict[str, bool]:
 
 
 def fetch_ad_accounts(access_token: str) -> list[dict]:
-    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business"
+    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business,funding_source_details"
     url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
     params = {"fields": fields, "access_token": access_token, "limit": 500}
 
@@ -136,6 +137,8 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool])
         biz = acc.get("business") or {}
         acc_id = acc.get("id", "")
         chon = "TRUE" if selections.get(acc_id, False) else "FALSE"
+        funding = acc.get("funding_source_details") or {}
+        payment_method = funding.get("display_string", "")
         rows.append([
             acc_id,
             acc.get("name", ""),
@@ -146,6 +149,7 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool])
             acc.get("timezone_name", ""),
             format_money(acc.get("amount_spent", "0"), currency),
             format_money(acc.get("balance", "0"), currency),
+            payment_method,
             chon,
             now_str,
         ])
@@ -165,7 +169,7 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool])
 
 
 def save_json(accounts: list[dict]):
-    out_path = BASE_DIR / "ad_accounts.json"
+    out_path = BASE_DIR / "main.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(accounts, f, ensure_ascii=False, indent=2)
     print(f"Đã lưu JSON → {out_path}")

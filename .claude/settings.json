@@ -25,7 +25,9 @@
       "PowerShell(tail -5)",
       "Bash(rm \"D:/Python/GetLinktoText/Misatothue/test_output.xls\" 2>/dev/null; echo \"cleaned\")",
       "Bash(rm D:/Python/GetLinktoText/Misatothue/output_xbh*.xls D:/Python/GetLinktoText/Misatothue/convert_misa_xbh.log 2>/dev/null; echo done)",
-      "Bash(Out-String)"
+      "Bash(Out-String)",
+      "Bash(git ls-files *)",
+      "Bash(git rm *)"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"

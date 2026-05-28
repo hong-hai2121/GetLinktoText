@@ -140,6 +140,8 @@ class DMHangHoaEditor(tk.Toplevel):
         self.v_ma   = tk.StringVar()
         self.v_ten  = tk.StringVar()
         self.v_dvt  = tk.StringVar()
+        self._dvt_updating = False
+        self.v_dvt.trace_add("write", self._capitalize_dvt)
 
         tk.Label(fields_f, text="Mã hàng", bg=WHITE, fg=DARK,
                  font=F_LBL).grid(row=0, column=0, sticky="w", padx=(0, 6))
@@ -223,6 +225,15 @@ class DMHangHoaEditor(tk.Toplevel):
                              values=(i, ma, ten, dvt if dvt.lower() not in ("nan","none") else ""),
                              tags=(tag,))
         self._reindex()
+
+    def _capitalize_dvt(self, *_):
+        if self._dvt_updating:
+            return
+        val = self.v_dvt.get()
+        if val and val[0].islower():
+            self._dvt_updating = True
+            self.v_dvt.set(val[0].upper() + val[1:])
+            self._dvt_updating = False
 
     def _reindex(self):
         for i, iid in enumerate(self.tree.get_children(), 1):
@@ -342,31 +353,17 @@ class App(tk.Tk):
             script_dir = os.path.dirname(sys.executable)
         else:
             script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.script_dir = script_dir
         downloads = os.path.join(os.path.expanduser("~"), "Downloads")
         xlsx_types = [("Excel", "*.xlsx *.xls"), ("All files", "*.*")]
         xls_types  = [("Excel 97-2003", "*.xls"), ("All files", "*.*")]
         today = datetime.now().strftime("%d-%m-%Y")
 
-        _EXCLUDE = {"DM hang hoa.xlsx", "DM hang hoa.xls"}
-        _src_default = ""
-        try:
-            _candidates = [
-                f for f in os.listdir(script_dir)
-                if f.lower().endswith((".xlsx", ".xls"))
-                and f not in _EXCLUDE
-                and not f.startswith("~$")
-            ]
-            _candidates.sort(
-                key=lambda f: os.path.getmtime(os.path.join(script_dir, f)),
-                reverse=True,
-            )
-            if _candidates:
-                _src_default = os.path.join(script_dir, _candidates[0])
-        except Exception:
-            pass
-        self.v_source   = tk.StringVar(value=_src_default)
+        self.v_source   = tk.StringVar(value="")
         self.v_template = tk.StringVar(value=os.path.join(script_dir,
             "Phieu-Xuat-Ban-Hang-Lien-Tuc.xls"))
+        self.v_dm       = tk.StringVar(value=os.path.join(script_dir,
+            "DM hang hoa.xlsx"))
         self.v_output   = tk.StringVar(value=os.path.join(downloads,
             f"XBH_{today}.xls"))
 
@@ -377,9 +374,9 @@ class App(tk.Tk):
         self.v_tk_no_gv     = tk.StringVar(value="632")
         self.v_tk_co_gt     = tk.StringVar(value="156")
         self.v_ma_kho       = tk.StringVar(value="K1")
-        self.v_nhom_hd      = tk.StringVar(value="R6")
-        self.v_mau_so       = tk.StringVar(value="1")
-        self.v_dien_giai    = tk.StringVar(value="Bán hàng cho khách HĐ:")
+        self.v_mau_so           = tk.StringVar(value="1")
+        self.v_ma_khach_start   = tk.StringVar(value="")
+        self.v_dien_giai        = tk.StringVar(value="Bán hàng cho khách HĐ:")
         self.v_ng_nhan      = tk.StringVar(value="Khách hàng không cung cấp thông tin")
         self.v_ten_khach_df = tk.StringVar(value="Khách hàng không cung cấp thông tin")
 
@@ -396,6 +393,7 @@ class App(tk.Tk):
         tk.Frame(left, bg=WHITE, height=8).pack()
         self._file_row(left, "File nguồn MISA *", self.v_source,   xlsx_types, open_mode=True)
         self._file_row(left, "File mẫu template *", self.v_template, xls_types,  open_mode=True)
+        self._file_row(left, "Danh mục hàng hóa *", self.v_dm,       xlsx_types, open_mode=True)
         tk.Frame(left, bg=CARD_BDR, height=1).pack(fill="x", padx=10, pady=(2, 4))
         self._file_row(left, "File kết quả *", self.v_output, xls_types, open_mode=False)
         tk.Frame(left, bg=CARD_BDR, height=1).pack(fill="x", padx=10, pady=(2, 4))
@@ -423,19 +421,21 @@ class App(tk.Tk):
         tk_frame.columnconfigure(3, weight=1)
         tk_frame.columnconfigure(5, weight=1)
 
-        # Nhóm HĐ / Mẫu số / Diễn giải
+        # Mẫu số / Mã khách / Diễn giải
         extra_frame = tk.Frame(left, bg=WHITE)
         extra_frame.pack(fill="x", padx=12, pady=(0, 4))
-        for col_idx, (label, var, width) in enumerate([
-            ("Nhóm HĐ",    self.v_nhom_hd,   8),
-            ("Mẫu số",     self.v_mau_so,    10),
-        ]):
-            tk.Label(extra_frame, text=label, bg=WHITE, fg=DARK, font=F_LBL).grid(
-                row=0, column=col_idx*2, sticky="w", padx=(0 if col_idx == 0 else 8, 4))
-            tk.Entry(extra_frame, textvariable=var, font=F_LBL, bg="#F0F7FF",
-                     relief="solid", width=width).grid(row=0, column=col_idx*2+1, sticky="ew", padx=(0, 4))
+        tk.Label(extra_frame, text="Mẫu số", bg=WHITE, fg=DARK, font=F_LBL).grid(
+            row=0, column=0, sticky="w", padx=(0, 4))
+        tk.Entry(extra_frame, textvariable=self.v_mau_so, font=F_LBL, bg="#F0F7FF",
+                 relief="solid", width=8).grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        tk.Label(extra_frame, text="Mã khách (D)", bg=WHITE, fg=DARK, font=F_LBL).grid(
+            row=0, column=2, sticky="w", padx=(0, 4))
+        tk.Entry(extra_frame, textvariable=self.v_ma_khach_start, font=F_LBL, bg="#F0F7FF",
+                 relief="solid", width=10).grid(row=0, column=3, sticky="ew", padx=(0, 10))
+        tk.Label(extra_frame, text="mặc định là KH00001", bg=WHITE, fg=MUTED,
+                 font=("Segoe UI", 7, "italic")).grid(row=1, column=3, sticky="w")
         tk.Label(extra_frame, text="Diễn giải (F)", bg=WHITE, fg=DARK, font=F_LBL).grid(
-            row=0, column=4, sticky="w", padx=(8, 4))
+            row=0, column=4, sticky="w", padx=(0, 4))
         tk.Entry(extra_frame, textvariable=self.v_dien_giai, font=F_LBL, bg="#FFF8E1",
                  relief="solid", width=28).grid(row=0, column=5, sticky="ew")
         tk.Label(extra_frame, text="({ten_hang}, {ten_khach}, {so_hd})",
@@ -557,6 +557,7 @@ class App(tk.Tk):
         for label, var in [
             ("File nguồn MISA", self.v_source),
             ("File mẫu template", self.v_template),
+            ("Danh mục hàng hóa", self.v_dm),
         ]:
             path = var.get().strip()
             if not path:
@@ -581,44 +582,58 @@ class App(tk.Tk):
         threading.Thread(target=self._run_worker, daemon=True).start()
 
     def _run_worker(self):
-        import convert_misa_xbh as core
+        success = False
+        self._last_error = ""
 
-        core.CONFIG["SOURCE_FILE"]        = self.v_source.get().strip()
-        core.CONFIG["TEMPLATE_FILE"]      = self.v_template.get().strip()
-        core.CONFIG["OUTPUT_FILE"]        = self.v_output.get().strip()
-        core.CONFIG["TK_NO_TIEN_HANG"]   = self.v_tk_no_th.get().strip()
-        core.CONFIG["TK_NO_TIEN_THUE"]   = self.v_tk_no_tt.get().strip()
-        core.CONFIG["TK_CO_TIEN_HANG"]   = self.v_tk_co_th.get().strip()
-        core.CONFIG["TK_NO_GIA_VON"]     = self.v_tk_no_gv.get().strip()
-        core.CONFIG["TK_CO_GIAM_TRU"]      = self.v_tk_co_gt.get().strip()
-        core.CONFIG["MA_KHO"]             = self.v_ma_kho.get().strip()
-        core.CONFIG["NHOM_HD"]            = self.v_nhom_hd.get().strip()
-        core.CONFIG["MAU_SO"]             = self.v_mau_so.get().strip()
-        core.CONFIG["DIEN_GIAI"]          = self.v_dien_giai.get().strip()
-        core.CONFIG["DEFAULT_NG_NHAN"]    = self.v_ng_nhan.get().strip()
-        core.CONFIG["DEFAULT_TEN_KHACH"]  = self.v_ten_khach_df.get().strip()
-
-        # Hướng logging về GUI
+        # Setup GUI logging TRƯỚC — để bắt cả lỗi import
         core_log = logging.getLogger()
         core_log.setLevel(logging.DEBUG)
         for h in core_log.handlers[:]:
             core_log.removeHandler(h)
         core_log.addHandler(self.gui_handler)
 
-        self._actual_output = core.CONFIG["OUTPUT_FILE"]
-        success = False
         try:
+            import convert_misa_xbh as core
+            # Gắn gui_handler trực tiếp vào logger của module core
+            mod_log = logging.getLogger("convert_misa_xbh")
+            mod_log.setLevel(logging.DEBUG)
+            for h in mod_log.handlers[:]:
+                mod_log.removeHandler(h)
+            mod_log.addHandler(self.gui_handler)
+            mod_log.propagate = False
+
+            core.CONFIG["SOURCE_FILE"]       = self.v_source.get().strip()
+            core.CONFIG["TEMPLATE_FILE"]     = self.v_template.get().strip()
+            core.CONFIG["DM_FILE"]           = self.v_dm.get().strip()
+            core.CONFIG["OUTPUT_FILE"]       = self.v_output.get().strip()
+            core.CONFIG["TK_NO_TIEN_HANG"]  = self.v_tk_no_th.get().strip()
+            core.CONFIG["TK_NO_TIEN_THUE"]  = self.v_tk_no_tt.get().strip()
+            core.CONFIG["TK_CO_TIEN_HANG"]  = self.v_tk_co_th.get().strip()
+            core.CONFIG["TK_NO_GIA_VON"]    = self.v_tk_no_gv.get().strip()
+            core.CONFIG["TK_CO_GIAM_TRU"]   = self.v_tk_co_gt.get().strip()
+            core.CONFIG["MA_KHO"]            = self.v_ma_kho.get().strip()
+            core.CONFIG["MAU_SO"]            = self.v_mau_so.get().strip()
+            core.CONFIG["MA_KHACH_START"]    = self.v_ma_khach_start.get().strip()
+            core.CONFIG["DIEN_GIAI"]         = self.v_dien_giai.get().strip()
+            core.CONFIG["DEFAULT_NG_NHAN"]   = self.v_ng_nhan.get().strip()
+            core.CONFIG["DEFAULT_TEN_KHACH"] = self.v_ten_khach_df.get().strip()
+
+            self._actual_output = core.CONFIG["OUTPUT_FILE"]
             core.main()
             self._actual_output = core.CONFIG.get("_ACTUAL_OUTPUT", core.CONFIG["OUTPUT_FILE"])
             success = True
-        except SystemExit:
-            pass
-        except PermissionError:
-            logging.error("File output đang mở — đóng file rồi thử lại.")
+        except PermissionError as e:
+            self._last_error = f"File output đang mở — đóng file rồi thử lại.\n{e}"
+            logging.error(self._last_error)
+        except RuntimeError as e:
+            self._last_error = str(e)
+            logging.error(self._last_error)
         except Exception as e:
-            logging.error(f"Lỗi: {e}", exc_info=True)
-
-        self.after(0, self._run_done, success)
+            import traceback
+            self._last_error = traceback.format_exc()
+            logging.error(f"Lỗi: {e}")
+        finally:
+            self.after(200, self._run_done, success)
 
     def _run_done(self, success: bool):
         self.progress.stop()
@@ -634,30 +649,36 @@ class App(tk.Tk):
                 except Exception:
                     pass
         else:
-            self.status_var.set("✗  Có lỗi — xem log bên trên")
+            self.status_var.set("✗  Có lỗi")
             self.status_lbl.configure(fg=RED)
-            messagebox.showerror("Lỗi", "Chuyển đổi thất bại.\nXem chi tiết trong log.")
+            err_detail = getattr(self, "_last_error", "") or "Không rõ lỗi."
+            self.after(100, lambda: messagebox.showerror(
+                "Chuyển đổi thất bại", err_detail))
 
     def _open_folder(self):
-        out = self.v_output.get().strip()
-        folder = os.path.dirname(os.path.abspath(out)) if out else os.path.expanduser("~")
         try:
-            os.startfile(folder)
+            os.startfile(self.script_dir)
         except Exception:
             pass
 
     def _open_dm_editor(self):
-        import convert_misa_xbh as core
-        path = core.CONFIG.get("DM_FILE", "DM hang hoa.xlsx")
-        if not os.path.isabs(path):
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            path = os.path.join(script_dir, path)
+        path = self.v_dm.get().strip()
+        if not path:
+            path = os.path.join(self.script_dir, "DM hang hoa.xlsx")
         DMHangHoaEditor(self, path)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    App().mainloop()
+    import traceback
+    try:
+        if getattr(sys, "frozen", False):
+            script_dir = os.path.dirname(sys.executable)
+        else:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        App().mainloop()
+    except Exception:
+        import tkinter.messagebox as mb
+        mb.showerror("Lỗi khởi động", traceback.format_exc())
