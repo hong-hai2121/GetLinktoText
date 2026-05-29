@@ -557,40 +557,34 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
                 "ghi_chu2":   ghi_chu_hd,
             })
 
-        # ── Điều chỉnh Q để sum(P*Q)*U% khớp AK (lệch < 100đ) ──────────────
-        # Mỗi nhóm thuế suất xử lý độc lập → đúng cả khi 1 C.từ có 2 AK dồn lên
-        q_adjustments: dict = {}
+        # ── Điều chỉnh V để sum(V) khớp AK theo từng nhóm thuế suất ───────
+        v_adjustments: dict = {}
         for g_idx, (ts_key, ts_rows) in enumerate(thue_groups.items()):
-            if not ts_key:  # ts_key == 0.0 hoặc "" → không có thuế
+            if not ts_key:
                 continue
             ts_float = ts_key / 100.0
-            tien_hang_calc = sum(_num(g(r, "thanh_tien")) for _, r in ts_rows)
-            tien_thue_calc = round(tien_hang_calc * ts_float)
-            tien_thue_ak   = round(group_summaries[g_idx]["tien_thue2"])
-            lenh = tien_thue_ak - tien_thue_calc
+            v_per_row = [
+                round(_num(g(r, "so_luong")) * _num(g(r, "don_gia")) * ts_float)
+                for _, r in ts_rows
+            ]
+            sum_v = sum(v_per_row)
+            tien_thue_ak = round(group_summaries[g_idx]["tien_thue2"])
+            lenh = tien_thue_ak - sum_v
             if lenh == 0:
                 continue
             if abs(lenh) < 100:
-                last_idx, last_row = ts_rows[-1]
-                p_last = _num(g(last_row, "so_luong"))
-                if p_last == 0:
-                    log.warning(
-                        f"C.từ '{so_ct}' thuế {ts_key}%: lệch {lenh:+.0f}đ "
-                        f"nhưng số lượng dòng cuối = 0 — không điều chỉnh Q"
-                    )
-                    continue
-                q_last = _num(g(last_row, "don_gia"))
-                tien_hang_needed = tien_thue_ak / ts_float
-                q_new = (tien_hang_needed - tien_hang_calc + p_last * q_last) / p_last
-                q_adjustments[(ts_key, last_idx)] = q_new
+                last_idx, _ = ts_rows[-1]
+                v_new = v_per_row[-1] + lenh
+                v_adjustments[(ts_key, last_idx)] = v_new
                 log.info(
-                    f"C.từ '{so_ct}' thuế {ts_key}%: lệch {lenh:+.0f}đ → "
-                    f"điều chỉnh Q dòng cuối {q_last:,.0f} → {q_new:,.0f}"
+                    f"C.từ '{so_ct}' thuế {ts_key}%: sum(V)={sum_v:,.0f} "
+                    f"lệch AK {lenh:+.0f}đ → điều chỉnh V dòng cuối "
+                    f"{v_per_row[-1]:,.0f} → {v_new:,.0f}"
                 )
             else:
                 log.warning(
-                    f"C.từ '{so_ct}' thuế {ts_key}%: lệch {lenh:+.0f}đ >= 100đ "
-                    f"— KHÔNG điều chỉnh Q, kiểm tra lại dữ liệu nguồn"
+                    f"C.từ '{so_ct}' thuế {ts_key}%: sum(V)={sum_v:,.0f} "
+                    f"lệch AK {lenh:+.0f}đ >= 100đ — KHÔNG điều chỉnh V"
                 )
 
         # ── Ghi từng dòng ────────────────────────────────────────────────────
@@ -604,7 +598,7 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
                 ten_hang  = g(row, "ten_hang")
                 dvt       = lookup_dvt(ten_hang, dm_map)
                 so_luong  = _num(g(row, "so_luong"))
-                don_gia   = q_adjustments.get((ts_key, row_idx), _num(g(row, "don_gia")))
+                don_gia   = _num(g(row, "don_gia"))
                 thue_suat = _parse_pct(g(row, "thue_suat"))
 
                 ma_hh = lookup_ma_hh(ten_hang, dm_map)
@@ -638,8 +632,11 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
                     "tien_hang": "",  # T
                     # ── U: đầy đủ mọi hàng ───────────────────────────────────
                     "thue_suat": thue_suat if thue_suat else "",  # U
-                    # ── V-Y: luôn trống ──────────────────────────────────────
-                    "tien_thue": "",  # V
+                    # ── V: P×Q×U%, dòng cuối mỗi nhóm điều chỉnh để sum(V)=AK ──
+                    "tien_thue": v_adjustments.get(
+                        (ts_key, row_idx),
+                        round(so_luong * don_gia * (thue_suat / 100)) if thue_suat else ""
+                    ),  # V
                     "ghi_chu":   "",  # W
                     "gia_von":   "",  # X
                     "tien_von":  "",  # Y
