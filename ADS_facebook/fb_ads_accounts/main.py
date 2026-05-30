@@ -120,6 +120,27 @@ def format_money(amount_raw, currency: str) -> str:
     return f"{formatted} ₫" if currency == "VND" else f"{formatted} {currency}"
 
 
+def _format_id_columns_as_text(worksheet):
+    """Ep cac cot ID (bat dau bang 'ID ') sang dinh dang TEXT de Sheets
+    khong dien giai chuoi ID 16 chu so thanh so roi lam tron."""
+    id_indices = [i for i, h in enumerate(HEADERS) if h.startswith("ID ")]
+    requests = []
+    for ci in id_indices:
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": worksheet.id,
+                    "startColumnIndex": ci,
+                    "endColumnIndex": ci + 1,
+                },
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        })
+    if requests:
+        worksheet.spreadsheet.batch_update({"requests": requests})
+
+
 def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool], prev_balances: dict[str, str]):
     def sort_key(acc):
         biz = acc.get("business") or {}
@@ -164,7 +185,12 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
         worksheet.batch_clear([f"A2:{col_letter}{last_row}"])
 
     if rows:
-        worksheet.update(values=rows, range_name="A2")
+        # RAW: giu nguyen chuoi ID, khong de Sheets dien giai thanh so
+        # roi lam tron 16 chu so (4197654223887206 -> 4197654223887200).
+        worksheet.update(values=rows, range_name="A2", value_input_option="RAW")
+
+        # Ep cot ID sang TEXT de khong bi lam tron.
+        _format_id_columns_as_text(worksheet)
 
         # Tô màu nền hàng theo cột "Chọn Lấy Camp": TRUE = xanh nhạt, FALSE = trắng
         chon_col = HEADERS.index("Chọn Lấy Camp")
