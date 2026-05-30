@@ -13,6 +13,7 @@
     processed:    0,
     total:        0,
     selectedDateRange: '',
+    accountName:  '',
   };
 
   // ── Utilities ──────────────────────────────────────────────────────────────
@@ -423,6 +424,15 @@
     return false;
   }
 
+  // Account name heading: "Tên tài khoản (ID)" — any heading containing a long numeric account ID
+  function detectAccountName() {
+    for (const el of document.querySelectorAll('[role="heading"]')) {
+      const text = normalizeText(el.innerText || el.textContent || '');
+      if (/\(\d{10,}\)/.test(text)) return text;
+    }
+    return '';
+  }
+
   // Find the transaction table specifically (aria-label="Giao dịch")
   function getTransactionTable() {
     return document.querySelector('table[aria-label="Giao dịch"][role="grid"]')
@@ -662,6 +672,7 @@
     state.scrapedList  = [];
     state.processed    = 0;
     state.total        = 0;
+    state.accountName  = detectAccountName();
 
     sendProgress('Đang tìm bảng giao dịch...', 0, 0);
 
@@ -1029,11 +1040,11 @@
         break;
 
       case 'EXPORT_CSV':
-        sendResponse({ ok: true, list: state.scrapedList, detail: state.scrapedDetail });
+        sendResponse({ ok: true, list: state.scrapedList, detail: state.scrapedDetail, accountName: state.accountName || detectAccountName() });
         break;
 
       case 'CLEAR_DATA':
-        Object.assign(state, { scrapedList: [], scrapedDetail: [], processed: 0, total: 0, phase: 'idle', selectedDateRange: '' });
+        Object.assign(state, { scrapedList: [], scrapedDetail: [], processed: 0, total: 0, phase: 'idle', selectedDateRange: '', accountName: '' });
         sendResponse({ ok: true });
         break;
     }

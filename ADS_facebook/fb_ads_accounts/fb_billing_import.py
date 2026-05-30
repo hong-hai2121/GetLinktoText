@@ -8,7 +8,14 @@ import re
 import sys
 import threading
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
+
+try:
+    import openpyxl
+    _OPENPYXL_OK = True
+except ImportError:
+    _OPENPYXL_OK = False
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -66,7 +73,14 @@ def read_csv(path: Path):
     for enc in ("utf-8-sig", "utf-8", "cp1252"):
         try:
             with open(path, encoding=enc, newline="") as f:
-                reader = csv.DictReader(f)
+                sample = f.read(8192)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=',\t;|')
+                delim = dialect.delimiter
+            except csv.Error:
+                delim = ','
+            with open(path, encoding=enc, newline="") as f:
+                reader = csv.DictReader(f, delimiter=delim)
                 headers = list(reader.fieldnames or [])
                 rows    = list(reader)
             return headers, rows
@@ -107,9 +121,121 @@ def read_xls(path: Path):
     return headers, rows
 
 
+def _col_idx(ref: str) -> int:
+    col = ''.join(c for c in ref if c.isalpha())
+    n = 0
+    for ch in col:
+        n = n * 26 + (ord(ch.upper()) - 64)
+    return n - 1
+
+
+def _read_xlsx_manual(path: Path):
+    """Parse ZIP local headers trực tiếp — bỏ qua central directory bị hỏng."""
+    import struct as _struct, zlib as _zlib
+
+    with open(path, 'rb') as f:
+        data = f.read()
+
+    files: dict[str, bytes] = {}
+    pos = 0
+    while pos < len(data) - 4:
+        if data[pos:pos+4] == b'PK\x03\x04':
+            _, _, compress, _, _, _, comp_sz, _, fname_len, extra_len = \
+                _struct.unpack_from('<HHHHH IIIHH', data, pos + 4)
+            fname = data[pos+30:pos+30+fname_len].decode('utf-8', errors='replace')
+            ds    = pos + 30 + fname_len + extra_len
+            raw   = data[ds:ds+comp_sz]
+            files[fname] = _zlib.decompress(raw, -15) if compress == 8 else raw
+            pos = ds + comp_sz
+        elif data[pos:pos+4] == b'PK\x01\x02':
+            break
+        else:
+            pos += 1
+
+    sheet_xml = files.get('xl/worksheets/sheet1.xml')
+    if not sheet_xml:
+        raise RuntimeError("Không tìm thấy xl/worksheets/sheet1.xml trong file XLSX")
+
+    NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+
+    shared: list[str] = []
+    ss_xml = files.get('xl/sharedStrings.xml')
+    if ss_xml:
+        ss_root = ET.fromstring(ss_xml)
+        for si in ss_root.findall(f'{{{NS}}}si'):
+            t_el = si.find(f'{{{NS}}}t')
+            shared.append(t_el.text or '' if t_el is not None else '')
+
+    def cell_val(c: ET.Element) -> str:
+        t = c.get('t', '')
+        if t == 'inlineStr':
+            is_t = c.find(f'{{{NS}}}is/{{{NS}}}t')
+            return (is_t.text or '') if is_t is not None else ''
+        v_el = c.find(f'{{{NS}}}v')
+        if v_el is None:
+            return ''
+        if t == 's' and shared:
+            idx = int(v_el.text or 0)
+            return shared[idx] if idx < len(shared) else ''
+        return v_el.text or ''
+
+    root = ET.fromstring(sheet_xml)
+    sheet_data = root.find(f'{{{NS}}}sheetData')
+    if sheet_data is None:
+        return [], []
+
+    all_rows: list[list[str]] = []
+    for row_el in sheet_data.findall(f'{{{NS}}}row'):
+        cells = row_el.findall(f'{{{NS}}}c')
+        if not cells:
+            continue
+        max_col = max(_col_idx(c.get('r', 'A')) for c in cells)
+        row = [''] * (max_col + 1)
+        for c in cells:
+            row[_col_idx(c.get('r', 'A'))] = cell_val(c)
+        all_rows.append(row)
+
+    if not all_rows:
+        return [], []
+
+    headers = all_rows[0]
+    rows = [
+        dict(zip(headers, r + [''] * max(0, len(headers) - len(r))))
+        for r in all_rows[1:]
+    ]
+    return headers, rows
+
+
+def read_xlsx(path: Path):
+    """Đọc .xlsx: thử openpyxl trước, fallback sang manual ZIP parser nếu thất bại."""
+    if _OPENPYXL_OK:
+        try:
+            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+            ws = wb.active
+            rows_iter = ws.iter_rows(values_only=True)
+            try:
+                header_row = next(rows_iter)
+            except StopIteration:
+                wb.close()
+                return [], []
+            headers = [str(h) if h is not None else '' for h in header_row]
+            rows = [
+                {headers[i]: (str(v) if v is not None else '') for i, v in enumerate(raw)}
+                for raw in rows_iter
+            ]
+            wb.close()
+            return headers, rows
+        except zipfile.BadZipFile:
+            pass
+    return _read_xlsx_manual(path)
+
+
 def read_file(path: Path):
-    if path.suffix.lower() == '.xls':
+    ext = path.suffix.lower()
+    if ext == '.xls':
         return read_xls(path)
+    if ext == '.xlsx':
+        return read_xlsx(path)
     return read_csv(path)
 
 
@@ -248,126 +374,44 @@ def upsert(worksheet, csv_headers: list, csv_rows: list) -> dict:
 
 # ── Hộp thoại xác nhận ────────────────────────────────────────────────────────
 
-class ConfirmDialog(tk.Toplevel):
-    """Hiện phân tích cấu trúc + hỏi xác nhận trước khi import."""
-
-    def __init__(self, parent, analysis: dict, csv_rows: int, skipped: int, sheet_title: str):
-        super().__init__(parent)
-        self.title("Xác nhận Import")
-        self.resizable(False, False)
-        self.grab_set()
-        self.result = False
-
-        pad = dict(padx=16, pady=6)
-
-        # Tiêu đề
-        tk.Label(self, text="Phân tích cấu trúc trước khi ghi",
-                 font=("Segoe UI", 11, "bold"),
-                 fg="#1A1A2E").pack(anchor="w", padx=16, pady=(14, 4))
-
-        # Thông tin sheet + CSV
-        total = csv_rows + skipped
-        skip_line = f"\n  Bỏ qua    : {skipped} dòng (không phải '{STATUS_ALLOW}')" if skipped else ""
-        info = (
-            f"  Tab đích  : {sheet_title}\n"
-            f"  Tổng CSV  : {total} dòng  →  Sẽ import: {csv_rows}"
-            + skip_line
-        )
-        tk.Label(self, text=info, font=("Segoe UI", 9),
-                 fg="#444444", justify="left").pack(anchor="w", **pad)
-
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=16, pady=4)
-
-        # ID giao dịch
-        id_ok   = analysis["has_id"]
-        id_icon = "✓" if id_ok else "✗"
-        id_col  = "#1A7A3A" if id_ok else "#CC0000"
-        id_msg  = f"  {id_icon}  Cột '{ID_COL}': {'Có — sẽ dùng để kiểm tra trùng' if id_ok else 'KHÔNG CÓ — mọi dòng sẽ được APPEND (không dedup)'}"
-        tk.Label(self, text=id_msg, font=("Segoe UI", 9),
-                 fg=id_col, justify="left").pack(anchor="w", **pad)
-
-        # Sheet trống
-        if analysis["sheet_empty"]:
-            tk.Label(self, text="  ℹ  Sheet đang trống — sẽ ghi mới toàn bộ",
-                     font=("Segoe UI", 9), fg="#0055AA",
-                     justify="left").pack(anchor="w", **pad)
-
-        # Cột khớp
-        if analysis["matched"]:
-            tk.Label(self,
-                     text=f"  ✓  {len(analysis['matched'])} cột khớp với sheet",
-                     font=("Segoe UI", 9), fg="#1A7A3A",
-                     justify="left").pack(anchor="w", **pad)
-
-        # Cột mới từ CSV
-        if analysis["new_cols"]:
-            tk.Label(self,
-                     text=f"  ⚠  {len(analysis['new_cols'])} cột mới từ CSV (sẽ thêm vào sheet):",
-                     font=("Segoe UI", 9), fg="#C47A00",
-                     justify="left").pack(anchor="w", padx=16, pady=(6, 0))
-            tk.Label(self,
-                     text="      " + ", ".join(analysis["new_cols"]),
-                     font=("Segoe UI", 9), fg="#C47A00",
-                     wraplength=400, justify="left").pack(anchor="w", padx=16)
-
-        # Cột trong sheet nhưng không có trong CSV
-        if analysis["missing"]:
-            tk.Label(self,
-                     text=f"  ✗  {len(analysis['missing'])} cột trong sheet KHÔNG có trong CSV (sẽ để trống):",
-                     font=("Segoe UI", 9), fg="#CC0000",
-                     justify="left").pack(anchor="w", padx=16, pady=(6, 0))
-            tk.Label(self,
-                     text="      " + ", ".join(analysis["missing"]),
-                     font=("Segoe UI", 9), fg="#CC0000",
-                     wraplength=400, justify="left").pack(anchor="w", padx=16)
-
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=16, pady=8)
-
-        # Nút
-        btn_row = tk.Frame(self, bg=self.cget("bg"))
-        btn_row.pack(padx=16, pady=(0, 14))
-        ttk.Button(btn_row, text="  Tiến hành Import  ",
-                   command=self._ok).pack(side="left", padx=(0, 8))
-        ttk.Button(btn_row, text="Huỷ",
-                   command=self._cancel).pack(side="left")
-
-        self.bind("<Return>", lambda _: self._ok())
-        self.bind("<Escape>", lambda _: self._cancel())
-        self._center(parent)
-
-    def _ok(self):
-        self.result = True
-        self.destroy()
-
-    def _cancel(self):
-        self.result = False
-        self.destroy()
-
-    def _center(self, parent):
-        self.update_idletasks()
-        pw, ph = parent.winfo_width(), parent.winfo_height()
-        px, py = parent.winfo_x(), parent.winfo_y()
-        w, h   = self.winfo_width(), self.winfo_height()
-        self.geometry(f"+{px + (pw - w)//2}+{py + (ph - h)//2}")
-
-
-# ── Giao diện chính ────────────────────────────────────────────────────────────
+# ── Giao diện chính (multi-file) ───────────────────────────────────────────────
 
 class App(tk.Tk):
+    # Nhãn trạng thái hiển thị trong bảng queue
+    _STATUS_LABEL = {
+        "loading":   "Đang đọc...",
+        "checking":  "Đang so cột...",
+        "ready":     "✓ Sẵn sàng",
+        "mismatch":  "⚠ Cột khác",
+        "no_tab":    "⚠ Chưa có tab",
+        "importing": "Đang import...",
+        "done":      "✓ Hoàn tất",
+        "error":     "✗ Lỗi",
+    }
+
+    # ── Bảng màu ───────────────────────────────────────────────────────────
+    BG        = "#EDF1F7"   # nền cửa sổ
+    CARD      = "#FFFFFF"   # nền thẻ
+    BORDER    = "#DCE3EC"   # viền thẻ
+    ACCENT    = "#2D6CDF"   # xanh chủ đạo
+    ACCENT_HV = "#1F5AC4"   # xanh khi hover
+    ACCENT_DIS= "#AEC4EC"   # xanh khi disabled
+    TEXT      = "#1E293B"   # chữ chính
+    MUTED     = "#64748B"   # chữ phụ
+
     def __init__(self):
         super().__init__()
         self.title("FB Billing Import → Google Sheet")
-        self.geometry("1150x700")
-        self.minsize(900, 580)
-        self.configure(bg="#F0F2F5")
+        self.geometry("1200x720")
+        self.minsize(960, 600)
+        self.configure(bg=self.BG)
 
-        self._spreadsheet  = None
-        self._worksheets   = []
-        self._csv_headers  = []
-        self._csv_rows     = []
-        self._selected_ws  = None
-        self._sheet_headers = []       # headers đang có trong tab được chọn
-        self._analysis      = None     # kết quả analyze_structure
+        self._spreadsheet = None
+        self._worksheets: list = []
+        # queue item: {path, ws, headers, rows, sheet_headers, analysis, status, error, iid}
+        self._queue: list[dict] = []
+        # cache header sheet theo tên tab để khỏi đọc lại nhiều lần
+        self._sheet_hdr_cache: dict = {}
 
         self._apply_styles()
         self._build_ui()
@@ -378,131 +422,203 @@ class App(tk.Tk):
     def _apply_styles(self):
         s = ttk.Style(self)
         s.theme_use("clam")
-        s.configure("TFrame",       background="#F0F2F5")
-        s.configure("Card.TFrame",  background="#FFFFFF", relief="flat")
-        s.configure("TLabel",       background="#F0F2F5", font=("Segoe UI", 10))
-        s.configure("Status.TLabel",background="#F0F2F5",
-                    font=("Segoe UI", 9), foreground="#555555")
-        s.configure("TButton",      font=("Segoe UI", 10), padding=(10, 6))
-        s.configure("Import.TButton",
-                    font=("Segoe UI", 10, "bold"), padding=(18, 8))
-        s.configure("Treeview",
-                    font=("Segoe UI", 9), rowheight=24, fieldbackground="#FFFFFF")
-        s.configure("Treeview.Heading",
-                    font=("Segoe UI", 9, "bold"), background="#E8EBF0")
-        s.map("Treeview", background=[("selected", "#4A90D9")])
+
+        s.configure("TFrame",      background=self.BG)
+        s.configure("Card.TFrame", background=self.CARD)
+        s.configure("TLabel",      background=self.BG,
+                    font=("Segoe UI", 10), foreground=self.TEXT)
+
+        # Nút thường (xám đậm, viền rõ)
+        s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(15, 8),
+                    background="#E2E8F0", foreground="#334155",
+                    bordercolor="#B9C4D4", relief="flat", borderwidth=1)
+        s.map("TButton",
+              background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")],
+              foreground=[("disabled", "#B0B8C4")],
+              bordercolor=[("active", "#94A3B8")])
+
+        # Nút phụ nổi bật (accent nhạt) — cho "Thêm file..."
+        s.configure("Soft.TButton", font=("Segoe UI", 9, "bold"), padding=(15, 8),
+                    background="#DBE7FB", foreground=self.ACCENT_HV,
+                    bordercolor="#B6CFF6", relief="flat", borderwidth=1)
+        s.map("Soft.TButton",
+              background=[("active", "#C7DAFA"), ("disabled", "#EEF3FC")],
+              foreground=[("disabled", "#AEC4EC")],
+              bordercolor=[("active", "#9CBEF3")])
+
+        # Nút chính (accent)
+        s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"),
+                    padding=(24, 10), background=self.ACCENT,
+                    foreground="#FFFFFF", relief="flat", borderwidth=0)
+        s.map("Accent.TButton",
+              background=[("active", self.ACCENT_HV), ("disabled", self.ACCENT_DIS)],
+              foreground=[("disabled", "#EEF2FB")])
+
+        # Treeview
+        s.configure("Treeview", font=("Segoe UI", 9), rowheight=29,
+                    background=self.CARD, fieldbackground=self.CARD,
+                    foreground=self.TEXT, borderwidth=0)
+        s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
+                    background="#F1F5F9", foreground="#475569",
+                    relief="flat", padding=(8, 7))
+        s.map("Treeview",
+              background=[("selected", "#DBE7FB")],
+              foreground=[("selected", self.TEXT)])
+        s.map("Treeview.Heading", background=[("active", "#E2E8F0")])
+
+        # Scrollbar
+        for o in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
+            s.configure(o, background="#CBD5E1", troughcolor="#EEF2F7",
+                        bordercolor="#EEF2F7", arrowcolor="#64748B",
+                        relief="flat", borderwidth=0)
+            s.map(o, background=[("active", "#94A3B8")])
+
+        # Progressbar
+        s.configure("TProgressbar", background=self.ACCENT,
+                    troughcolor="#E2E8F0", borderwidth=0, thickness=8)
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        root = ttk.Frame(self, style="TFrame", padding=12)
-        root.pack(fill="both", expand=True)
-        root.columnconfigure(1, weight=1)
-        root.rowconfigure(2, weight=1)
+        outer = tk.Frame(self, bg=self.BG)
+        outer.pack(fill="both", expand=True, padx=16, pady=14)
 
-        # Tiêu đề + status
-        hdr = ttk.Frame(root, style="TFrame")
-        hdr.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        tk.Label(hdr, text="FB Billing Import",
-                 bg="#F0F2F5", font=("Segoe UI", 14, "bold"),
-                 fg="#1A1A2E").pack(side="left")
-        self._status_lbl = ttk.Label(hdr, text="Đang kết nối Google Sheet...",
-                                     style="Status.TLabel")
+        # ── Header ────────────────────────────────────────────────────────
+        hdr = tk.Frame(outer, bg=self.BG)
+        hdr.pack(fill="x", pady=(0, 14))
+        tk.Label(hdr, text="FB Billing Import", bg=self.BG,
+                 font=("Segoe UI Semibold", 16), fg=self.TEXT).pack(side="left")
+        tk.Label(hdr, text="  →  Google Sheet", bg=self.BG,
+                 font=("Segoe UI", 11), fg=self.MUTED).pack(side="left")
+        self._status_lbl = tk.Label(hdr, text="Đang kết nối Google Sheet...",
+                                    bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED)
         self._status_lbl.pack(side="right")
 
-        # ── Trái: chọn tab ───────────────────────────────────────────────
-        left = self._card(root, "1  Chọn tab Google Sheet", width=220)
-        left.grid(row=1, column=0, rowspan=2, sticky="nsew", padx=(0, 8))
-        left.rowconfigure(1, weight=1)
-        left.columnconfigure(0, weight=1)
+        # ── PanedWindow: kéo to/nhỏ panel tab ──────────────────────────────
+        paned = tk.PanedWindow(outer, orient="horizontal", bg=self.BG,
+                               sashwidth=10, sashrelief="flat", bd=0,
+                               sashpad=0, opaqueresize=True)
+        paned.pack(fill="both", expand=True)
 
+        # ── Trái: danh sách tab ─────────────────────────────────────────
+        left = self._card_frame(paned, "1", "Tab Google Sheet")
+        tk.Label(left.body, text="Chọn file ở bảng phải, rồi click tab để gán",
+                 bg=self.CARD, font=("Segoe UI", 8), fg="#94A3B8",
+                 anchor="w", justify="left").pack(fill="x", pady=(0, 6))
+
+        tab_wrap = tk.Frame(left.body, bg=self.BORDER, bd=0,
+                            highlightthickness=1, highlightbackground=self.BORDER)
+        tab_wrap.pack(fill="both", expand=True)
         self._tab_list = tk.Listbox(
-            left, selectmode="single",
-            font=("Segoe UI", 10), activestyle="none",
-            selectbackground="#4A90D9", selectforeground="white",
-            relief="flat", bd=0,
-            highlightthickness=1,
-            highlightcolor="#D0D5DD", highlightbackground="#D0D5DD",
+            tab_wrap, selectmode="single", font=("Segoe UI", 10),
+            activestyle="none", selectbackground="#DBE7FB", selectforeground=self.TEXT,
+            relief="flat", bd=0, highlightthickness=0,
+            bg=self.CARD, fg=self.TEXT,
         )
-        tab_sb = ttk.Scrollbar(left, orient="vertical",
-                               command=self._tab_list.yview)
+        tab_sb = ttk.Scrollbar(tab_wrap, orient="vertical", command=self._tab_list.yview)
         self._tab_list.configure(yscrollcommand=tab_sb.set)
-        self._tab_list.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
-        tab_sb.grid(row=1, column=1, sticky="ns",  pady=(6, 0))
-        self._tab_list.bind("<<ListboxSelect>>", self._on_tab_select)
+        tab_sb.pack(side="right", fill="y")
+        self._tab_list.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        self._tab_list.bind("<<ListboxSelect>>", self._on_tab_click)
 
-        # ── Phải trên: chọn file CSV ─────────────────────────────────────
-        right_top = self._card(root, "2  Chọn file CSV / XLS")
-        right_top.grid(row=1, column=1, sticky="nsew", pady=(0, 8))
-        right_top.columnconfigure(1, weight=1)
+        paned.add(left, width=270, minsize=200, stretch="never", padx=0, pady=0)
 
-        ttk.Button(right_top, text="Duyệt file...",
-                   command=self._browse_csv).grid(
-            row=1, column=0, sticky="w", pady=(8, 4), padx=(0, 10))
-        self._file_lbl = ttk.Label(right_top, text="Chưa chọn file",
-                                   style="Status.TLabel")
-        self._file_lbl.grid(row=1, column=1, sticky="w")
+        # ── Phải: queue file ────────────────────────────────────────────
+        right = self._card_frame(paned, "2", "Danh sách file cần import")
 
-        # Thông tin CSV + kiểm tra cấu trúc (Text box 7 dòng)
-        self._info_box = tk.Text(
-            right_top, height=7, font=("Segoe UI", 9),
-            state="disabled", bg="#F8F9FA",
-            relief="flat", bd=0,
-            highlightthickness=1,
-            highlightcolor="#D0D5DD", highlightbackground="#D0D5DD",
-        )
-        self._info_box.grid(row=2, column=0, columnspan=2,
-                            sticky="ew", pady=(6, 0))
-        # Tags màu
-        self._info_box.tag_config("ok",   foreground="#1A7A3A")
-        self._info_box.tag_config("warn", foreground="#C47A00")
-        self._info_box.tag_config("err",  foreground="#CC0000")
-        self._info_box.tag_config("info", foreground="#0055AA")
-        self._info_box.tag_config("dim",  foreground="#777777")
+        # Nút thao tác
+        btn_row = tk.Frame(right.body, bg=self.CARD)
+        btn_row.pack(fill="x", pady=(0, 8))
+        ttk.Button(btn_row, text="＋  Thêm file...", style="Soft.TButton",
+                   command=self._browse_files).pack(side="left")
+        ttk.Button(btn_row, text="Xóa đã chọn",
+                   command=self._remove_selected).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="Xóa tất cả",
+                   command=self._clear_queue).pack(side="left")
 
-        # ── Phải dưới: preview ───────────────────────────────────────────
-        prev = self._card(root, "3  Xem trước dữ liệu CSV")
-        prev.grid(row=2, column=1, sticky="nsew")
-        prev.rowconfigure(1, weight=1)
-        prev.columnconfigure(0, weight=1)
-
-        wrap = ttk.Frame(prev, style="Card.TFrame")
-        wrap.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        # Bảng queue
+        wrap = tk.Frame(right.body, bg=self.BORDER,
+                        highlightthickness=1, highlightbackground=self.BORDER)
+        wrap.pack(fill="both", expand=True)
         wrap.rowconfigure(0, weight=1)
         wrap.columnconfigure(0, weight=1)
 
-        self._tree = ttk.Treeview(wrap, show="headings", selectmode="browse")
-        vb = ttk.Scrollbar(wrap, orient="vertical",   command=self._tree.yview)
-        hb = ttk.Scrollbar(wrap, orient="horizontal", command=self._tree.xview)
-        self._tree.configure(yscrollcommand=vb.set, xscrollcommand=hb.set)
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vb.grid(row=0, column=1, sticky="ns")
-        hb.grid(row=1, column=0, sticky="ew")
+        cols = ("file", "tab", "rows", "status")
+        self._q_tree = ttk.Treeview(wrap, columns=cols, show="headings",
+                                    selectmode="extended")
+        self._q_tree.heading("file",   text="File",       anchor="w")
+        self._q_tree.heading("tab",    text="Tab đích",    anchor="w")
+        self._q_tree.heading("rows",   text="Dòng",        anchor="center")
+        self._q_tree.heading("status", text="Trạng thái",  anchor="w")
+        self._q_tree.column("file",   width=340, stretch=True,  minwidth=150)
+        self._q_tree.column("tab",    width=200, stretch=False, minwidth=100)
+        self._q_tree.column("rows",   width=60,  stretch=False, anchor="center")
+        self._q_tree.column("status", width=140, stretch=False)
+        qvb = ttk.Scrollbar(wrap, orient="vertical",   command=self._q_tree.yview)
+        qhb = ttk.Scrollbar(wrap, orient="horizontal", command=self._q_tree.xview)
+        self._q_tree.configure(yscrollcommand=qvb.set, xscrollcommand=qhb.set)
+        self._q_tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        qvb.grid(row=0, column=1, sticky="ns")
+        qhb.grid(row=1, column=0, sticky="ew")
+        # Sọc xen kẽ + màu theo trạng thái
+        self._q_tree.tag_configure("odd",       background="#F8FAFC")
+        self._q_tree.tag_configure("loading",   foreground="#94A3B8")
+        self._q_tree.tag_configure("checking",  foreground="#94A3B8")
+        self._q_tree.tag_configure("ready",     foreground="#15803D")
+        self._q_tree.tag_configure("mismatch",  foreground="#D97706")
+        self._q_tree.tag_configure("no_tab",    foreground="#C47A00")
+        self._q_tree.tag_configure("error",     foreground="#DC2626")
+        self._q_tree.tag_configure("done",      foreground="#2563EB")
+        self._q_tree.tag_configure("importing", foreground="#475569")
+        self._q_tree.bind("<<TreeviewSelect>>", self._on_queue_select)
 
-        # ── Thanh dưới ───────────────────────────────────────────────────
-        bot = ttk.Frame(root, style="TFrame")
-        bot.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        # Info box (chi tiết file đang chọn)
+        self._info_box = tk.Text(
+            right.body, height=5, font=("Consolas", 9),
+            state="disabled", bg="#F8FAFC", fg=self.TEXT, relief="flat", bd=0,
+            padx=10, pady=8,
+            highlightthickness=1, highlightcolor=self.BORDER, highlightbackground=self.BORDER,
+        )
+        self._info_box.pack(fill="x", pady=(8, 0))
+        self._info_box.tag_config("ok",   foreground="#15803D")
+        self._info_box.tag_config("warn", foreground="#C47A00")
+        self._info_box.tag_config("err",  foreground="#DC2626")
+        self._info_box.tag_config("info", foreground="#2563EB")
+        self._info_box.tag_config("dim",  foreground=self.MUTED)
 
+        paned.add(right, minsize=440, stretch="always", padx=0, pady=0)
+
+        # ── Thanh dưới ─────────────────────────────────────────────────────
+        bot = tk.Frame(outer, bg=self.BG)
+        bot.pack(fill="x", pady=(14, 0))
         self._import_btn = ttk.Button(
-            bot, text="  Import vào Sheet  ",
-            style="Import.TButton",
-            command=self._run_import, state="disabled",
+            bot, text="Import tất cả",
+            style="Accent.TButton", command=self._run_import_all, state="disabled",
         )
         self._import_btn.pack(side="left")
-        self._progress = ttk.Progressbar(bot, mode="indeterminate", length=160)
-        self._progress.pack(side="left", padx=12)
-        self._result_lbl = ttk.Label(bot, text="", style="Status.TLabel")
+        self._progress = ttk.Progressbar(bot, mode="indeterminate", length=170)
+        self._progress.pack(side="left", padx=14)
+        self._result_lbl = tk.Label(bot, text="", bg=self.BG,
+                                    font=("Segoe UI", 9), fg=self.MUTED)
         self._result_lbl.pack(side="left")
 
-    def _card(self, parent, title: str, width: int = 0) -> ttk.Frame:
-        kw = {"width": width} if width else {}
-        outer = ttk.Frame(parent, style="Card.TFrame", padding=12, **kw)
-        tk.Label(outer, text=title, bg="#FFFFFF",
-                 font=("Segoe UI", 10, "bold"),
-                 fg="#333333").grid(row=0, column=0, columnspan=2, sticky="w")
-        return outer
+    def _card_frame(self, parent, num: str, title: str) -> tk.Frame:
+        """Thẻ trắng có viền + tiêu đề kèm badge số. Trả về frame có thuộc tính .body."""
+        card = tk.Frame(parent, bg=self.CARD,
+                        highlightthickness=1, highlightbackground=self.BORDER)
+        head = tk.Frame(card, bg=self.CARD)
+        head.pack(fill="x", padx=14, pady=(13, 9))
+        tk.Label(head, text=f" {num} ", bg=self.ACCENT, fg="#FFFFFF",
+                 font=("Segoe UI", 9, "bold"), padx=4, pady=1).pack(side="left")
+        tk.Label(head, text=title, bg=self.CARD, fg=self.TEXT,
+                 font=("Segoe UI Semibold", 11)).pack(side="left", padx=(9, 0))
+        tk.Frame(card, bg=self.BORDER, height=1).pack(fill="x")
+        body = tk.Frame(card, bg=self.CARD)
+        body.pack(fill="both", expand=True, padx=14, pady=(11, 13))
+        card.body = body
+        return card
 
-    # ── Kết nối Google Sheet ─────────────────────────────────────────────────
+    # ── Kết nối Google Sheet ──────────────────────────────────────────────────
 
     def _connect_async(self):
         threading.Thread(target=self._connect_worker, daemon=True).start()
@@ -515,7 +631,7 @@ class App(tk.Tk):
             self._worksheets  = wss
             self.after(0, self._load_tabs)
         except Exception as e:
-            self.after(0, lambda: self._set_status(f"Lỗi kết nối: {e}", error=True))
+            self.after(0, lambda e=e: self._set_status(f"Lỗi kết nối: {e}", error=True))
 
     def _load_tabs(self):
         self._tab_list.delete(0, "end")
@@ -525,211 +641,372 @@ class App(tk.Tk):
             f"Đã kết nối: {self._spreadsheet.title}  ({len(self._worksheets)} tab)"
         )
 
-    def _on_tab_select(self, *_):
-        sel = self._tab_list.curselection()
-        if not sel:
+    # ── Tab click → gán cho file đang chọn ───────────────────────────────────
+
+    def _on_tab_click(self, *_):
+        sel_tabs = self._tab_list.curselection()
+        sel_iids = self._q_tree.selection()
+        if not sel_tabs or not sel_iids:
             return
-        self._selected_ws    = self._worksheets[sel[0]]
-        self._sheet_headers  = []
-        self._analysis       = None
+        ws = self._worksheets[sel_tabs[0]]
+        for iid in sel_iids:
+            item = self._item_by_iid(iid)
+            if item and item["status"] not in ("importing", "done"):
+                item["ws"]            = ws
+                item["analysis"]      = None
+                item["sheet_headers"] = None
+                if item["headers"]:
+                    self._ensure_analysis(item)   # đã đọc xong file → so cột ngay
+                else:
+                    item["status"] = "loading"    # file còn đang đọc
+                    self._refresh_tree_row(item)
         self._refresh_import_btn()
-        # Đọc headers của tab vừa chọn (background)
-        self._set_status(f"Đang đọc cấu trúc tab '{self._selected_ws.title}'...")
-        threading.Thread(target=self._load_sheet_headers_worker, daemon=True).start()
 
-    def _load_sheet_headers_worker(self):
-        try:
-            first_row = self._selected_ws.row_values(1)
-            self.after(0, lambda: self._on_sheet_headers_loaded(first_row))
-        except Exception as e:
-            self.after(0, lambda: self._set_status(f"Lỗi đọc sheet: {e}", error=True))
+    # ── Chọn file (multi) ─────────────────────────────────────────────────────
 
-    def _on_sheet_headers_loaded(self, headers: list):
-        self._sheet_headers = headers
-        tab = self._selected_ws.title if self._selected_ws else ""
-        n   = len([h for h in headers if h])
-        self._set_status(
-            f"Tab '{tab}': {n} cột{'  (sheet đang trống)' if n == 0 else ''}"
-        )
-        if self._csv_headers:
-            self._run_analysis()
+    @staticmethod
+    def _tab_candidates_from_stem(stem: str) -> list:
+        candidates = []
+        m = re.match(r'^(.+?)_fb_billing', stem, re.IGNORECASE)
+        if m:
+            candidates.append(m.group(1).strip())
+        m2 = re.match(r'^(.+?)\s*\(', stem)
+        if m2:
+            short = m2.group(1).strip()
+            if short not in candidates:
+                candidates.append(short)
+        return candidates
 
-    # ── Chọn file CSV ────────────────────────────────────────────────────────
+    @staticmethod
+    def _norm_for_match(s: str) -> str:
+        """Chuẩn hóa để so sánh: lowercase + thay '/' → '_' (Windows đổi / thành _ trong tên file)."""
+        return s.strip().lower().replace('/', '_')
 
-    def _browse_csv(self):
-        path = filedialog.askopenfilename(
+    def _find_ws(self, candidates: list):
+        ws_lower = [(ws, self._norm_for_match(ws.title)) for ws in self._worksheets]
+        for name in candidates:
+            norm = self._norm_for_match(name)
+            for ws, title in ws_lower:
+                if title == norm:
+                    return ws
+        return None
+
+    def _browse_files(self):
+        paths = filedialog.askopenfilenames(
             initialdir=str(Path.home() / "Downloads"),
-            title="Chọn file CSV hoặc XLS",
+            title="Chọn file CSV / XLS / XLSX",
             filetypes=[
-                ("CSV / XLS files", "*.csv *.xls"),
+                ("CSV / XLS / XLSX files", "*.csv *.xls *.xlsx"),
                 ("CSV files", "*.csv"),
-                ("XLS files", "*.xls"),
+                ("Excel files", "*.xls *.xlsx"),
                 ("All files", "*.*"),
             ],
         )
-        if not path:
+        if not paths:
             return
-        p = Path(path)
-        self._file_lbl.configure(text=p.name)
-        self._csv_headers = []
-        self._csv_rows    = []
-        self._analysis    = None
-        self._refresh_import_btn()
-        self._write_info("Đang đọc file...", "dim")
-        threading.Thread(target=self._load_csv_worker, args=(p,), daemon=True).start()
+        for path_str in paths:
+            p = Path(path_str)
+            if any(i["path"] == p for i in self._queue):
+                continue  # bỏ qua file trùng
+            ws   = self._find_ws(self._tab_candidates_from_stem(p.stem))
+            item = {
+                "path": p, "ws": ws,
+                "headers": [], "rows": [],
+                "sheet_headers": None, "analysis": None,
+                "status": "loading", "error": "", "iid": "",
+            }
+            iid = self._q_tree.insert(
+                "", "end",
+                values=(p.name, ws.title if ws else "—", "—", "Đang đọc..."),
+                tags=("loading",),
+            )
+            item["iid"] = iid
+            self._queue.append(item)
+            threading.Thread(target=self._load_file_worker,
+                             args=(item,), daemon=True).start()
 
-    def _load_csv_worker(self, path: Path):
+    def _load_file_worker(self, item: dict):
         try:
-            headers, rows = read_file(path)
-            self._csv_headers = headers
-            self._csv_rows    = rows
-            self.after(0, lambda: self._on_csv_loaded(headers, rows))
+            headers, rows  = read_file(item["path"])
+            item["headers"] = headers
+            item["rows"]    = rows
+            item["status"]  = "checking" if item["ws"] else "no_tab"
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Lỗi đọc file", str(e)))
+            item["status"] = "error"
+            item["error"]  = str(e)
+        self.after(0, lambda i=item: self._on_file_loaded(i))
 
-    def _on_csv_loaded(self, headers: list, rows: list):
-        self._show_csv_basic_info(headers, rows)
-        self._populate_preview(headers, rows)
-        self._refresh_import_btn()
-        if self._sheet_headers is not None:
-            self._run_analysis()
-
-    def _show_csv_basic_info(self, headers: list, rows: list):
-        filtered, skipped = filter_by_status(headers, rows)
-        lines = [
-            ("dim", f"Tổng dòng   : {len(rows)}\n"),
-            ("dim", f"Số cột      : {len(headers)}\n"),
-        ]
-        if STATUS_COL in headers:
-            tag = "warn" if skipped > 0 else "ok"
-            lines.append((tag,
-                f"✓  Sẽ import : {len(filtered)} dòng  "
-                f"(bỏ qua {skipped} dòng không phải '{STATUS_ALLOW}')\n"))
-        if ID_COL in headers:
-            lines.append(("ok",  f"✓  Cột ID    : {ID_COL}\n"))
-        else:
-            lines.append(("err", f"✗  Cột ID    : '{ID_COL}' KHÔNG CÓ\n"))
-        self._write_info_tagged(lines)
-
-    # ── Phân tích cấu trúc ───────────────────────────────────────────────────
-
-    def _run_analysis(self):
-        if not self._csv_headers or self._selected_ws is None:
-            return
-        self._analysis = analyze_structure(self._csv_headers, self._sheet_headers)
-        self._show_analysis()
+    def _on_file_loaded(self, item: dict):
+        self._refresh_tree_row(item)
+        if item["status"] == "checking" and item["ws"]:
+            self._ensure_analysis(item)   # đã có tab → so cột với sheet
         self._refresh_import_btn()
 
-    def _show_analysis(self):
-        a = self._analysis
-        if a is None:
+    # ── So sánh cột file ↔ sheet ──────────────────────────────────────────────
+
+    def _ensure_analysis(self, item: dict):
+        """Đảm bảo item có analysis (so cột với sheet). Đọc header sheet nếu cần."""
+        if not item["headers"] or not item["ws"]:
             return
-        lines = []
-
-        if a["sheet_empty"]:
-            lines.append(("info", "\n── Cấu trúc sheet ──────────────────\n"))
-            lines.append(("info", "ℹ  Sheet đang trống — sẽ tạo cột từ CSV\n"))
+        title = item["ws"].title
+        if title in self._sheet_hdr_cache:
+            item["sheet_headers"] = self._sheet_hdr_cache[title]
+            self._compute_analysis(item)
         else:
-            lines.append(("dim",  "\n── Cấu trúc so với sheet ──────────\n"))
-            if a["matched"]:
-                lines.append(("ok",  f"✓  {len(a['matched'])} cột khớp\n"))
-            if a["new_cols"]:
-                lines.append(("warn",
-                    f"⚠  {len(a['new_cols'])} cột mới từ CSV sẽ được thêm:\n"))
-                lines.append(("warn", f"   {', '.join(a['new_cols'])}\n"))
-            if a["missing"]:
-                lines.append(("err",
-                    f"✗  {len(a['missing'])} cột trong sheet THIẾU trong CSV (để trống):\n"))
-                lines.append(("err",  f"   {', '.join(a['missing'])}\n"))
+            item["status"] = "checking"
+            self._refresh_tree_row(item)
+            ws = item["ws"]
+            threading.Thread(target=self._load_sheet_hdr_worker,
+                             args=(item, ws), daemon=True).start()
 
-        self._append_info_tagged(lines)
+    def _load_sheet_hdr_worker(self, item: dict, ws):
+        try:
+            hdr = ws.row_values(1)
+            self._sheet_hdr_cache[ws.title] = hdr
+            self.after(0, lambda: self._after_sheet_hdr(item, ws, hdr))
+        except Exception as e:
+            self.after(0, lambda e=e: self._sheet_hdr_error(item, str(e)))
 
-    # ── Preview ──────────────────────────────────────────────────────────────
+    def _after_sheet_hdr(self, item: dict, ws, hdr: list):
+        # Nếu trong lúc đọc, item đã đổi tab thì bỏ qua kết quả cũ
+        if item["ws"] is not ws:
+            return
+        item["sheet_headers"] = hdr
+        self._compute_analysis(item)
 
-    def _populate_preview(self, headers: list, rows: list, limit: int = 200):
-        tree = self._tree
-        tree.delete(*tree.get_children())
-        tree["columns"] = headers
-        for h in headers:
-            tree.heading(h, text=h)
-            tree.column(h, width=max(100, len(h) * 9),
-                        minwidth=60, stretch=False)
-        tree.tag_configure("alt", background="#F5F7FA")
-        for i, row in enumerate(rows[:limit]):
-            tree.insert("", "end",
-                        values=[row.get(h, "") for h in headers],
-                        tags=("alt",) if i % 2 else ())
-        if len(rows) > limit:
-            tree.insert("", "end",
-                        values=[f"... còn {len(rows) - limit} dòng"] + [""] * (len(headers) - 1))
+    def _sheet_hdr_error(self, item: dict, msg: str):
+        item["status"] = "error"
+        item["error"]  = f"Đọc cột sheet lỗi: {msg}"
+        self._refresh_tree_row(item)
+        self._refresh_import_btn()
+        self._refresh_selected_info(item)
 
-    # ── Import ───────────────────────────────────────────────────────────────
+    def _compute_analysis(self, item: dict):
+        a = analyze_structure(item["headers"], item["sheet_headers"] or [])
+        item["analysis"] = a
+        # sheet trống → không có gì để lệch; có khác cột → cảnh báo
+        if a["sheet_empty"] or (not a["new_cols"] and not a["missing"]):
+            item["status"] = "ready"
+        else:
+            item["status"] = "mismatch"
+        self._refresh_tree_row(item)
+        self._refresh_import_btn()
+        self._refresh_selected_info(item)
+
+    def _refresh_selected_info(self, item: dict):
+        """Cập nhật info box nếu item này đang được chọn."""
+        sel = self._q_tree.selection()
+        if sel and sel[0] == item["iid"]:
+            self._show_item_info(item)
+
+    # ── Queue helpers ─────────────────────────────────────────────────────────
+
+    def _item_by_iid(self, iid: str) -> dict | None:
+        return next((i for i in self._queue if i["iid"] == iid), None)
+
+    def _refresh_tree_row(self, item: dict):
+        tab_text  = item["ws"].title if item["ws"] else "—"
+        rows_text = str(len(item["rows"])) if item["rows"] else "—"
+        status    = self._STATUS_LABEL.get(item["status"], item["status"])
+        idx       = self._q_tree.index(item["iid"])
+        tags      = (item["status"],) if idx % 2 == 0 else ("odd", item["status"])
+        self._q_tree.item(item["iid"],
+                          values=(item["path"].name, tab_text, rows_text, status),
+                          tags=tags)
 
     def _refresh_import_btn(self):
-        ready = self._selected_ws is not None and bool(self._csv_rows)
-        self._import_btn.configure(state="normal" if ready else "disabled")
+        ok = any(i["ws"] and i["status"] in ("ready", "mismatch")
+                 for i in self._queue)
+        self._import_btn.configure(state="normal" if ok else "disabled")
 
-    def _run_import(self):
-        if not self._selected_ws or not self._csv_rows:
+    def _on_queue_select(self, *_):
+        sel = self._q_tree.selection()
+        if not sel:
+            return
+        item = self._item_by_iid(sel[0])
+        if item:
+            self._show_item_info(item)
+
+    def _show_item_info(self, item: dict):
+        lines: list[tuple[str, str]] = [
+            ("dim", f"File : {item['path'].name}\n"),
+        ]
+        if item["ws"]:
+            lines.append(("ok",  f"Tab  : {item['ws'].title}\n"))
+        else:
+            lines.append(("warn", "Tab  : Chưa gán — click tab bên trái để gán\n"))
+        if item["status"] == "error":
+            lines.append(("err", f"Lỗi  : {item['error']}\n"))
+        elif item["headers"]:
+            filtered, skipped = filter_by_status(item["headers"], item["rows"])
+            lines.append(("dim", f"Dòng : {len(item['rows'])} tổng  →  import {len(filtered)}"))
+            if skipped:
+                lines.append(("warn", f"  (bỏ {skipped} dòng không phải '{STATUS_ALLOW}')"))
+            lines.append(("dim", "\n"))
+            if ID_COL in item["headers"]:
+                lines.append(("ok",  f"✓  Cột '{ID_COL}' — sẽ dedup theo ID\n"))
+            else:
+                lines.append(("err", f"✗  Cột '{ID_COL}' KHÔNG CÓ — sẽ append tất cả\n"))
+            # Kết quả so cột với sheet
+            a = item["analysis"]
+            if item["status"] == "checking":
+                lines.append(("dim", "⋯  Đang so cột với sheet...\n"))
+            elif a is not None and not a["sheet_empty"]:
+                if a["new_cols"]:
+                    lines.append(("warn",
+                        f"⚠  {len(a['new_cols'])} cột CÓ ở file nhưng KHÔNG ở sheet "
+                        f"(sẽ thêm): {', '.join(a['new_cols'])}\n"))
+                if a["missing"]:
+                    lines.append(("warn",
+                        f"⚠  {len(a['missing'])} cột CÓ ở sheet nhưng KHÔNG ở file "
+                        f"(để trống): {', '.join(a['missing'])}\n"))
+                if not a["new_cols"] and not a["missing"]:
+                    lines.append(("ok", "✓  Cột file khớp hoàn toàn với sheet\n"))
+            elif a is not None and a["sheet_empty"]:
+                lines.append(("info", "ℹ  Sheet trống — sẽ tạo cột từ file\n"))
+        self._write_info_tagged(lines)
+
+    def _remove_selected(self):
+        for iid in list(self._q_tree.selection()):
+            item = self._item_by_iid(iid)
+            if item and item["status"] != "importing":
+                self._queue.remove(item)
+                self._q_tree.delete(iid)
+        self._refresh_import_btn()
+
+    def _clear_queue(self):
+        for item in [i for i in self._queue if i["status"] != "importing"]:
+            self._queue.remove(item)
+            self._q_tree.delete(item["iid"])
+        self._refresh_import_btn()
+
+    # ── Import tất cả ────────────────────────────────────────────────────────
+
+    def _run_import_all(self):
+        importable = [i for i in self._queue
+                      if i["ws"] and i["status"] in ("ready", "mismatch")]
+        mismatched = [i for i in importable if i["status"] == "mismatch"]
+        no_tab     = [i for i in self._queue if i["status"] == "no_tab"]
+        if not importable:
             return
 
-        # Nếu chưa có analysis (sheet headers chưa về) thì chờ
-        if self._analysis is None and self._sheet_headers == []:
-            messagebox.showinfo("Vui lòng chờ",
-                                "Đang tải cấu trúc sheet, thử lại sau vài giây.")
-            return
-
-        # Hiện hộp thoại xác nhận
-        if self._analysis is None:
-            self._analysis = analyze_structure(self._csv_headers, self._sheet_headers)
-
-        filtered_rows, skipped = filter_by_status(self._csv_headers, self._csv_rows)
-        dlg = ConfirmDialog(self, self._analysis,
-                            len(filtered_rows), skipped,
-                            self._selected_ws.title)
-        self.wait_window(dlg)
-        if not dlg.result:
-            return
+        # Có file lệch cột → cảnh báo chi tiết, đề phòng gán nhầm sheet
+        if mismatched:
+            if not self._confirm_mismatch(importable, mismatched, no_tab):
+                return
+        else:
+            lines = [f"Sẽ import {len(importable)} file vào {len(importable)} tab."]
+            if no_tab:
+                lines.append(f"Bỏ qua {len(no_tab)} file chưa gán tab.")
+            if not messagebox.askyesno("Xác nhận Import", "\n".join(lines)):
+                return
 
         self._import_btn.configure(state="disabled")
-        self._result_lbl.configure(text="Đang ghi dữ liệu...")
         self._progress.start(12)
-        threading.Thread(target=self._import_worker, daemon=True).start()
+        self._result_lbl.configure(text="Đang import...")
+        threading.Thread(target=self._import_all_worker,
+                         args=(importable,), daemon=True).start()
 
-    def _import_worker(self):
-        try:
-            filtered_rows, skipped = filter_by_status(self._csv_headers, self._csv_rows)
-            stats = upsert(self._selected_ws, self._csv_headers, filtered_rows)
-            stats["skipped"] = skipped
-            self.after(0, lambda: self._show_result(stats))
-        except Exception as e:
-            self.after(0, lambda: self._import_error(str(e)))
+    def _confirm_mismatch(self, importable: list, mismatched: list, no_tab: list) -> bool:
+        """Hộp thoại cảnh báo: liệt kê file có cột khác sheet. Trả về True nếu vẫn import."""
+        dlg = tk.Toplevel(self)
+        dlg.title("⚠ Cảnh báo lệch cột")
+        dlg.configure(bg=self.CARD)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.result = False
 
-    def _show_result(self, stats: dict):
+        tk.Label(dlg, text="⚠  Một số file có cột KHÁC với tab Google Sheet",
+                 bg=self.CARD, fg="#B45309", font=("Segoe UI Semibold", 12)
+                 ).pack(anchor="w", padx=18, pady=(16, 4))
+        tk.Label(dlg,
+                 text="Hãy kiểm tra xem có gán nhầm file vào sai tab không trước khi tiếp tục.",
+                 bg=self.CARD, fg=self.MUTED, font=("Segoe UI", 9), justify="left"
+                 ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        # Vùng cuộn liệt kê chi tiết
+        box = tk.Text(dlg, width=84, height=16, font=("Consolas", 9),
+                      bg="#F8FAFC", fg=self.TEXT, relief="flat", bd=0,
+                      padx=10, pady=8, wrap="word",
+                      highlightthickness=1, highlightbackground=self.BORDER)
+        sb = ttk.Scrollbar(dlg, orient="vertical", command=box.yview)
+        box.configure(yscrollcommand=sb.set)
+        box.pack(side="top", fill="both", expand=True, padx=(18, 0), pady=(0, 6))
+        sb.place(in_=box, relx=1.0, rely=0, relheight=1.0, anchor="ne")
+        box.tag_config("file", foreground=self.TEXT, font=("Consolas", 9, "bold"))
+        box.tag_config("warn", foreground="#B45309")
+        box.tag_config("dim",  foreground=self.MUTED)
+
+        for it in mismatched:
+            a = it["analysis"]
+            box.insert("end", f"📄 {it['path'].name}\n", "file")
+            box.insert("end", f"   → tab: {it['ws'].title}\n", "dim")
+            if a["new_cols"]:
+                box.insert("end",
+                    f"   ⚠ {len(a['new_cols'])} cột thừa (có ở file, thiếu ở sheet): "
+                    f"{', '.join(a['new_cols'])}\n", "warn")
+            if a["missing"]:
+                box.insert("end",
+                    f"   ⚠ {len(a['missing'])} cột thiếu (có ở sheet, thiếu ở file): "
+                    f"{', '.join(a['missing'])}\n", "warn")
+            box.insert("end", "\n")
+        box.configure(state="disabled")
+
+        ok_cnt = len(importable) - len(mismatched)
+        summary = (f"Tổng cộng: {len(importable)} file sẽ import "
+                   f"({ok_cnt} khớp, {len(mismatched)} lệch cột)")
+        if no_tab:
+            summary += f"  ·  bỏ qua {len(no_tab)} file chưa gán tab"
+        tk.Label(dlg, text=summary, bg=self.CARD, fg=self.MUTED,
+                 font=("Segoe UI", 9)).pack(anchor="w", padx=18, pady=(2, 8))
+
+        btn_row = tk.Frame(dlg, bg=self.CARD)
+        btn_row.pack(anchor="e", padx=18, pady=(0, 16))
+
+        def _ok():
+            dlg.result = True
+            dlg.destroy()
+
+        ttk.Button(btn_row, text="Huỷ", command=dlg.destroy).pack(side="right")
+        ttk.Button(btn_row, text="Vẫn import", style="Accent.TButton",
+                   command=_ok).pack(side="right", padx=(0, 8))
+
+        dlg.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width()  - dlg.winfo_width())  // 2
+        y = self.winfo_y() + (self.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{x}+{y}")
+        self.wait_window(dlg)
+        return dlg.result
+
+    def _import_all_worker(self, items: list):
+        total_added = total_updated = errors = 0
+        for item in items:
+            item["status"] = "importing"
+            self.after(0, lambda i=item: self._refresh_tree_row(i))
+            try:
+                filtered, _ = filter_by_status(item["headers"], item["rows"])
+                stats = upsert(item["ws"], item["headers"], filtered)
+                item["status"] = "done"
+                self._sheet_hdr_cache.pop(item["ws"].title, None)  # cột sheet đã đổi
+                total_added   += stats["added"]
+                total_updated += stats["updated"]
+            except Exception as e:
+                item["status"] = "error"
+                item["error"]  = str(e)
+                errors        += 1
+            self.after(0, lambda i=item: self._refresh_tree_row(i))
+        self.after(0, lambda: self._import_all_done(
+            total_added, total_updated, errors, len(items)))
+
+    def _import_all_done(self, added: int, updated: int, errors: int, total: int):
         self._progress.stop()
-        self._import_btn.configure(state="normal")
-        self._result_lbl.configure(
-            text=f"✓  +{stats['added']} mới  /  ↺ {stats['updated']} cập nhật"
-        )
-        skipped   = stats.get("skipped", 0)
-        total_csv = stats["total"] + skipped
-        skip_line = (f"\nBỏ qua      : {skipped} dòng (không phải '{STATUS_ALLOW}')"
-                     if skipped else "")
-        messagebox.showinfo(
-            "Import thành công",
-            f"Tab đã ghi   : {stats['tab']}\n"
-            f"Tổng CSV     : {total_csv} dòng\n"
-            f"Đã import    : {stats['total']} dòng\n"
-            f"Cập nhật     : {stats['updated']} dòng (trùng ID)\n"
-            f"Thêm mới     : {stats['added']} dòng"
-            + skip_line,
-        )
-
-    def _import_error(self, msg: str):
-        self._progress.stop()
-        self._import_btn.configure(state="normal")
-        self._result_lbl.configure(text="Lỗi!")
-        messagebox.showerror("Lỗi khi import", msg)
+        self._refresh_import_btn()
+        if errors:
+            self._result_lbl.configure(
+                text=f"✓ {total - errors}/{total} file  ✗ {errors} lỗi")
+        else:
+            self._result_lbl.configure(
+                text=f"✓  {total} file  +{added} mới  ↺ {updated} cập nhật")
 
     # ── Text info helpers ─────────────────────────────────────────────────────
 
@@ -746,19 +1023,11 @@ class App(tk.Tk):
             self._info_box.insert("end", text, tag)
         self._info_box.configure(state="disabled")
 
-    def _append_info_tagged(self, lines: list):
-        self._info_box.configure(state="normal")
-        for tag, text in lines:
-            self._info_box.insert("end", text, tag)
-        self._info_box.configure(state="disabled")
-
-    # ── Tiện ích ─────────────────────────────────────────────────────────────
+    # ── Tiện ích ──────────────────────────────────────────────────────────────
 
     def _set_status(self, text: str, error: bool = False):
         self._status_lbl.configure(
-            text=text,
-            foreground="#CC0000" if error else "#555555",
-        )
+            text=text, foreground="#CC0000" if error else "#555555")
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────

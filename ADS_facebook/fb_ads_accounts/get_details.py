@@ -7,9 +7,9 @@ Script CHÈN dòng Adset/Ad vào đúng vị trí trong sheet, KHÔNG xóa dữ 
 dòng Campaign hiện có (kể cả các cột ngoài cấu trúc script quản lý).
 """
 
-import requests
 from datetime import datetime
 
+from fb_api import api_summary
 from get_campaigns import (
     # Constants & config
     BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
@@ -390,6 +390,7 @@ def main():
         "fields":      f"ad_id,adset_id,campaign_id,{_INSIGHTS_FIELDS}",
         "note":        "Insights cấp ad — dùng cho dòng Ad và tổng hợp Adset",
     })
+    api_summary()
     print("\nHoàn thành!")
 
 

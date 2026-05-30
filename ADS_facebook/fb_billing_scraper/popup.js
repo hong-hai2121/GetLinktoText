@@ -34,7 +34,7 @@
       const cde = new Uint8Array([
         0x50, 0x4B, 0x01, 0x02, 20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ..._u32(crc), ..._u32(sz), ..._u32(sz), ..._u16(nb.length),
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ..._u32(offset),
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ..._u32(offset),
       ]);
       cdEntries.push({ cde, nb });
       offset += lfh.length + nb.length + sz;
@@ -127,10 +127,11 @@
     return { name: 'Chi tiết', headers, rows };
   }
 
-  function exportExcel(listData, detailData) {
+  function exportExcel(listData, detailData, accountName) {
     const date = new Date().toISOString().slice(0, 10);
-    if (listData?.length)   _downloadXlsx(buildXlsx([_buildListSheet(listData)]),     `fb_billing_list_${date}.xlsx`);
-    if (detailData?.length) setTimeout(() => _downloadXlsx(buildXlsx([_buildDetailSheet(detailData)]), `fb_billing_detail_${date}.xlsx`), 600);
+    const prefix = accountName ? accountName.replace(/[\\/:*?"<>|]/g, '_') + '_' : '';
+    if (listData?.length)   _downloadXlsx(buildXlsx([_buildListSheet(listData)]),     `${prefix}fb_billing_list_${date}.xlsx`);
+    if (detailData?.length) setTimeout(() => _downloadXlsx(buildXlsx([_buildDetailSheet(detailData)]), `${prefix}fb_billing_detail_${date}.xlsx`), 600);
   }
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -315,7 +316,7 @@
       await ensureContentScript(tab.id);
       const res = await sendToContent(tab.id, { type: 'EXPORT_CSV' });
       if (!res?.ok) showError(res?.reason ?? 'Không có dữ liệu để xuất.');
-      else exportExcel(res.list, res.detail);
+      else exportExcel(res.list, res.detail, res.accountName);
     } catch (err) {
       showError('Lỗi khi xuất Excel.');
     }

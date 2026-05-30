@@ -1,4 +1,3 @@
-import requests
 import gspread
 import json
 from google.oauth2.service_account import Credentials
@@ -6,12 +5,17 @@ from datetime import datetime
 from pathlib import Path
 
 from config import ACCESS_TOKEN
+from fb_api import graph_paginate, api_summary
 
 BASE_DIR = Path(__file__).parent
 
 SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
 SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
+
+# Màu nền hàng theo cột "Chọn Lấy Camp"
+COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # TRUE → xanh nhạt
+COLOR_DEFAULT = {"red": 1.0, "green": 1.0, "blue": 1.0}       # FALSE → trắng
 
 ACCOUNT_STATUS_MAP = {
     1: "Đang hoạt động",
@@ -87,7 +91,7 @@ def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str]]:
 
     selections, prev_balances = {}, {}
     for row in all_values[1:]:
-        acc_id = row[id_col].strip() if id_col < len(row) else ""
+        acc_id = row[id_col].strip().removeprefix("act_") if id_col < len(row) else ""
         if not acc_id:
             continue
         chon_val = row[chon_col].strip() if chon_col < len(row) else ""
@@ -101,19 +105,7 @@ def fetch_ad_accounts(access_token: str) -> list[dict]:
     fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business,funding_source_details"
     url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
     params = {"fields": fields, "access_token": access_token, "limit": 500}
-
-    accounts = []
-    while url:
-        resp = requests.get(url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            raise RuntimeError(f"Facebook API lỗi: {data['error']['message']}")
-        accounts.extend(data.get("data", []))
-        url = data.get("paging", {}).get("next")
-        params = {}
-
-    return accounts
+    return graph_paginate(url, params, label="me/adaccounts")
 
 
 def format_money(amount_raw, currency: str) -> str:
@@ -141,8 +133,11 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
         currency = acc.get("currency", "")
         status_code = acc.get("account_status", 0)
         biz = acc.get("business") or {}
-        acc_id = acc.get("id", "")
-        chon = "TRUE" if selections.get(acc_id, False) else "FALSE"
+        acc_id = acc.get("id", "").removeprefix("act_")
+        current_balance = format_money(acc.get("balance", "0"), currency)
+        prev_balance = prev_balances.get(acc_id, "")
+        balance_changed = prev_balance != "" and current_balance != prev_balance
+        chon = "TRUE" if (selections.get(acc_id, False) or balance_changed) else "FALSE"
         funding = acc.get("funding_source_details") or {}
         payment_method = funding.get("display_string", "")
         rows.append([
@@ -162,14 +157,27 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
         ])
 
     col_letter = chr(64 + len(HEADERS))
-    worksheet.update("A1", [HEADERS])
+    worksheet.update(values=[HEADERS], range_name="A1")
 
     last_row = worksheet.row_count
     if last_row >= 2:
         worksheet.batch_clear([f"A2:{col_letter}{last_row}"])
 
     if rows:
-        worksheet.update("A2", rows)
+        worksheet.update(values=rows, range_name="A2")
+
+        # Tô màu nền hàng theo cột "Chọn Lấy Camp": TRUE = xanh nhạt, FALSE = trắng
+        chon_col = HEADERS.index("Chọn Lấy Camp")
+        formats = []
+        for i, row in enumerate(rows):
+            sheet_row = i + 2  # dữ liệu bắt đầu từ hàng 2
+            is_selected = row[chon_col] == "TRUE"
+            formats.append({
+                "range": f"A{sheet_row}:{col_letter}{sheet_row}",
+                "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT},
+            })
+        worksheet.batch_format(formats)
+
         print(f"Đã ghi {len(rows)} tài khoản quảng cáo vào sheet '{SHEET_NAME}' (từ A1).")
     else:
         print("Không có tài khoản quảng cáo nào.")
@@ -199,6 +207,8 @@ def main():
 
     print(f"Ghi dữ liệu vào sheet '{SHEET_NAME}'...")
     write_to_sheet(worksheet, accounts, selections, prev_balances)
+
+    api_summary()
     print("Hoàn thành!")
 
 

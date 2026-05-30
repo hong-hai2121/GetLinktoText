@@ -10,7 +10,6 @@ Cột "Chọn Lấy Chi Tiết" được giữ nguyên giá trị cũ để khô
 """
 
 import re
-import requests
 import gspread
 import json
 from google.oauth2.service_account import Credentials
@@ -18,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import ACCESS_TOKEN
+from fb_api import graph_paginate, api_summary
 
 BASE_DIR = Path(__file__).parent
 
@@ -223,17 +223,8 @@ def write_to_sheet(worksheet, rows: list[list]):
 # ── Facebook Graph API ─────────────────────────────────────────────────────────
 
 def paginate(url: str, params: dict) -> list[dict]:
-    results = []
-    while url:
-        resp = requests.get(url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            raise RuntimeError(f"Facebook API lỗi: {data['error']['message']}")
-        results.extend(data.get("data", []))
-        url = data.get("paging", {}).get("next")
-        params = {}
-    return results
+    # Ủy thác sang fb_api.graph_paginate để đếm + log + retry rate limit.
+    return graph_paginate(url, params)
 
 
 def fetch_campaigns(account_id: str) -> list[dict]:
@@ -552,6 +543,7 @@ def main():
         "fields":      f"campaign_id,{_INSIGHTS_FIELDS}",
         "note":        "Insights cấp campaign tháng này — dùng cho dòng Campaign trong sheet",
     })
+    api_summary()
     print("\nHoàn thành!")
 
 
