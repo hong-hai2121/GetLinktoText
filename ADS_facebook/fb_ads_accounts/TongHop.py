@@ -36,6 +36,9 @@ SOURCE_AMOUNT_COL = "C"
 DEBT_LABEL = "1.2 Số tiền nợ"
 ACTUAL_SPEND_LABEL = "1.3 Ngân sách thực tế Camp đã tiêu"
 CP_TOTAL_LABEL = "CP Tổng"
+LECH_LABEL = "Lệch"
+NGAY_DAU_LABEL = "Ngày đầu thanh toán"
+TIEN_NGAY_DAU_LABEL = "Tiền Ngày đầu nạp"
 DON_LABEL = "Đơn"
 DOANH_SO_LABEL = "Doanh Số"
 TY_LE_CP_LABEL = "Tỷ lệ CP"
@@ -53,8 +56,9 @@ ROW_LABELS = [
     "1.1 Ngân sách được duyệt",
     "1.2 Số tiền nợ",
     "1.3 Ngân sách thực tế Camp đã tiêu",
-    "Ngân sách tháng 3 chuyển sang",
-    "Lần 1 tuần 1 T5",
+    "Lệch",
+    "Ngày đầu thanh toán",
+    "Tiền Ngày đầu nạp",
     "Lần 1 tuần 2 T5",
     "Lần 1 tuần 3 T5",
     "Lần 1 tuần 4 T5",
@@ -231,6 +235,44 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
         # Hàng 19 = hàng 3 + hàng 4 (1.1 Ngân sách được duyệt + 1.2 Số tiền nợ)
         return [f'={col_letter(i + 2)}3+{col_letter(i + 2)}4' for i in range(len(tab_titles))]
 
+    def _lech_row() -> list:
+        return [f'={col_letter(i+2)}3+{col_letter(i+2)}4-{col_letter(i+2)}5'
+                for i in range(len(tab_titles))]
+
+    def _ngay_dau_row() -> list:
+        def make(cl):
+            sq  = "'"
+            ind = lambda rng: f'INDIRECT("{sq}"&{cl}$1&"{sq}!{rng}")'
+            return (
+                f'=LET('
+                f'ngay;ARRAYFORMULA(IFERROR(DATE('
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};",\\s*(\\d{{4}})"));'
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};"Tháng\\s*(\\d+)"));'
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};"^{sq}?(\\d+)")));'
+                f'""));'
+                f'TEXT(MIN(FILTER(ngay;ngay<>""));"dd/mm/yyyy")'
+                f')'
+            )
+        return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
+
+    def _tien_ngay_dau_row() -> list:
+        def make(cl):
+            sq  = "'"
+            ind = lambda rng: f'INDIRECT("{sq}"&{cl}$1&"{sq}!{rng}")'
+            return (
+                f'=LET('
+                f'ngay;ARRAYFORMULA(IFERROR(DATE('
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};",\\s*(\\d{{4}})"));'
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};"Tháng\\s*(\\d+)"));'
+                f'VALUE(REGEXEXTRACT({ind("B2:B")};"^{sq}?(\\d+)")));'
+                f'""));'
+                f'tien;ARRAYFORMULA(IFERROR(VALUE(REGEXREPLACE(TO_TEXT({ind("C2:C")});"[^\\d]";""));0));'
+                f'ngaymin;MIN(FILTER(ngay;ngay<>""));'
+                f'SUM(FILTER(tien;ngay=ngaymin))'
+                f')'
+            )
+        return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
+
     data_rows = []
     for label in ROW_LABELS:
         if label == BUDGET_LABEL:
@@ -241,6 +283,12 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
             data_rows.append([label] + _actual_spend_row())
         elif label == CP_TOTAL_LABEL:
             data_rows.append([label] + _cp_total_row())
+        elif label == LECH_LABEL:
+            data_rows.append([label] + _lech_row())
+        elif label == NGAY_DAU_LABEL:
+            data_rows.append([label] + _ngay_dau_row())
+        elif label == TIEN_NGAY_DAU_LABEL:
+            data_rows.append([label] + _tien_ngay_dau_row())
         elif label == DON_LABEL:
             data_rows.append([label] + _don_row())
         elif label == DOANH_SO_LABEL:

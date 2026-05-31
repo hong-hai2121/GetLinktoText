@@ -664,6 +664,35 @@
     return { txId, txLink, date, amount, paymentMethod, reference, status, vatId };
   }
 
+  const FAILED_STATUS = /không thành công|thất bại|failed|unsuccessful|declined|bị từ chối/i;
+
+  // Tìm nút "Xem thêm" dùng để load thêm giao dịch — ưu tiên [aria-busy] để
+  // tránh nhầm với nút "Xem thêm" trên thanh điều hướng.
+  function _findLoadMoreBtn() {
+    const target = 'Xem thêm';
+    // Ưu tiên: role="button" có aria-busy (đặc trưng nút pagination của Facebook)
+    for (const el of document.querySelectorAll('[role="button"][aria-busy]')) {
+      if (el.getAttribute('aria-hidden') === 'true') continue;
+      if (normalizeText(el.innerText || el.textContent) === target) return el;
+    }
+    // Fallback: tìm nút nằm SAU bảng giao dịch trong DOM
+    const table = getTransactionTable();
+    if (table) {
+      let node = table.parentElement;
+      while (node && node !== document.body) {
+        const next = node.nextElementSibling;
+        if (next) {
+          const btn = Array.from(next.querySelectorAll('[role="button"], button'))
+            .find(el => normalizeText(el.innerText || el.textContent) === target
+                     && el.getAttribute('aria-hidden') !== 'true');
+          if (btn) return btn;
+        }
+        node = node.parentElement;
+      }
+    }
+    return findButtonByText(target);
+  }
+
   // ── List page: main loop ───────────────────────────────────────────────────
 
   async function runListScrape() {
@@ -698,31 +727,34 @@
         const data = scrapeListRow(row);
         if (!data.txId || seenIds.has(data.txId)) continue;
         seenIds.add(data.txId);
+        if (data.status && FAILED_STATUS.test(normalizeText(data.status))) continue;
         state.scrapedList.push(data);
       }
 
       state.processed = state.scrapedList.length;
       sendProgress(`Đã cào ${state.scrapedList.length} giao dịch...`, state.scrapedList.length, 0);
 
-      // Click "Xem thêm" if available
-      const loadMoreBtn = findButtonByText('Xem thêm');
+      // Click "Xem thêm" nếu có — dùng aria-busy để tránh nhầm nút nav cùng tên
+      const loadMoreBtn = _findLoadMoreBtn();
       if (!loadMoreBtn || !state.running) break;
 
-      const countBefore = rows.length;
-      loadMoreBtn.click();
+      const tblBefore = getTransactionTable();
+      const countBefore = tblBefore ? tblBefore.querySelectorAll('tr[role="row"]').length : 0;
+      clickElement(loadMoreBtn);
 
-      // Wait for new rows to appear in the table
+      // Chờ cho đến khi bảng có thêm dòng mới (tối đa 10 giây)
       await new Promise(resolve => {
-        const t = setTimeout(resolve, 8000);
+        const t = setTimeout(resolve, 10000);
         const obs = new MutationObserver(() => {
           const tbl = getTransactionTable();
-          const newCount = tbl ? tbl.querySelectorAll('tr[role="row"]').length : 0;
-          if (newCount > countBefore) { clearTimeout(t); obs.disconnect(); resolve(); }
+          if (tbl && tbl.querySelectorAll('tr[role="row"]').length > countBefore) {
+            clearTimeout(t); obs.disconnect(); resolve();
+          }
         });
         obs.observe(document.body, { childList: true, subtree: true });
       });
 
-      await delay(400);
+      await delay(3000);
     }
 
     state.running = false;
@@ -841,17 +873,34 @@
         }
       }
 
+      // Số tiền thực tế: lấy từ div[aria-level="4"][role="heading"] trong totalRow
+      // (bỏ qua "Tổng số" và các nhãn cột)
+      let totalRowAmount = '';
+      if (totalRowEl) {
+        for (const h of totalRowEl.querySelectorAll('[aria-level="4"][role="heading"]')) {
+          const t = normalizeText(h.innerText || h.textContent);
+          if (t.toLowerCase() === 'tổng số' || COL_HEADER_LABELS.has(t.toLowerCase())) continue;
+          if (!/[₫đ]/i.test(t)) continue;  // chỉ lấy heading có ký hiệu tiền tệ
+          const cleaned = cleanNumber(t);
+          if (cleaned && /\d/.test(cleaned)) { totalRowAmount = cleaned; break; }
+        }
+      }
+
       // Ad group data: 4 direct children of dataRowEl = [name, result, amount, id]
       let adGroup = null;
       if (dataRowEl) {
         const cols = Array.from(dataRowEl.children);
         if (cols.length >= 3) {
-          const getText = col => normalizeText(col?.innerText || col?.textContent || '').replace(/\.{3}$/, '').trimEnd();
+          const getText = col => {
+            const heading = col?.querySelector('[role="heading"]');
+            const target  = heading || col;
+            return normalizeText(target?.innerText || target?.textContent || '').replace(/\.{3}$/, '').trimEnd();
+          };
           adGroup = {
             name:       getText(cols[0]),
             result:     getText(cols[1]),
             resultType: resultType,
-            amount:     cleanNumber(getText(cols[2])),
+            amount:     totalRowAmount || cleanNumber(getText(cols[2])),
             id:         cols[3] ? getText(cols[3]) : '',
             note:       '',
           };
@@ -942,6 +991,7 @@
 
       const item = state.scrapedList[i];
       sendProgress(`Cào chi tiết ${i + 1}/${state.total}: ${item.txId}`, i + 1, state.total);
+
 
       // Search the list by transaction ID, then open the exact matching row.
       await restoreRememberedDateRange();

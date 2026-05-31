@@ -130,8 +130,8 @@
   function exportExcel(listData, detailData, accountName) {
     const date = new Date().toISOString().slice(0, 10);
     const prefix = accountName ? accountName.replace(/[\\/:*?"<>|]/g, '_') + '_' : '';
-    if (listData?.length)   _downloadXlsx(buildXlsx([_buildListSheet(listData)]),     `${prefix}fb_billing_list_${date}.xlsx`);
-    if (detailData?.length) setTimeout(() => _downloadXlsx(buildXlsx([_buildDetailSheet(detailData)]), `${prefix}fb_billing_detail_${date}.xlsx`), 600);
+    if (listData?.length)   _downloadXlsx(buildXlsx([_buildListSheet(listData)]),     `${prefix}fb_billing_DANH_SACH_${date}.xlsx`);
+    if (detailData?.length) setTimeout(() => _downloadXlsx(buildXlsx([_buildDetailSheet(detailData)]), `${prefix}fb_billing_CHI_TIET_${date}.xlsx`), 600);
   }
 
   // ── DOM refs ───────────────────────────────────────────────────────────────

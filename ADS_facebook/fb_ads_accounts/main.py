@@ -1,5 +1,8 @@
 import gspread
 import json
+import threading
+import tkinter as tk
+from tkinter import ttk, messagebox
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -261,12 +264,28 @@ def save_json(accounts: list[dict]):
     print(f"Đã lưu JSON → {out_path}")
 
 
-def main():
+def create_snapshot_sheet(spreadsheet):
+    """Tạo sheet mới tên 'HH:MM TM' (ví dụ '11:54 T5') là bản sao TKQC API."""
+    now = datetime.now()
+    title = f"{now.strftime('%H:%M')} T{now.month}"
+    src = spreadsheet.worksheet(SHEET_NAME)
+    body = {"requests": [{"duplicateSheet": {
+        "sourceSheetId": src.id,
+        "insertSheetIndex": len(spreadsheet.worksheets()),
+        "newSheetName": title,
+    }}]}
+    spreadsheet.batch_update(body)
+    print(f"  → Đã tạo sheet snapshot '{title}'.")
+    return title
+
+
+def main(cuoi_thang: bool = False):
     print("Kết nối Google Sheets...")
-    worksheet = connect_sheet()
+    ws = connect_sheet()
+    spreadsheet = ws.spreadsheet
 
     print("Đọc dữ liệu hiện tại (giữ lại Chọn Lấy Camp + Số Dư Trước)...")
-    selections, prev_balances, stored_prev_balances, last_updates = read_existing_data(worksheet)
+    selections, prev_balances, stored_prev_balances, last_updates = read_existing_data(ws)
     selected_count = sum(1 for v in selections.values() if v)
     print(f"  → {selected_count} tài khoản đang được chọn.")
 
@@ -277,11 +296,96 @@ def main():
     save_json(accounts)
 
     print(f"Ghi dữ liệu vào sheet '{SHEET_NAME}'...")
-    write_to_sheet(worksheet, accounts, selections, prev_balances, stored_prev_balances, last_updates)
+    write_to_sheet(ws, accounts, selections, prev_balances, stored_prev_balances, last_updates)
+
+    if cuoi_thang:
+        print("Cuối tháng — tạo sheet snapshot...")
+        create_snapshot_sheet(spreadsheet)
 
     api_summary()
     print("Hoàn thành!")
 
 
+# ── GUI ────────────────────────────────────────────────────────────────────────
+
+class App(tk.Tk):
+    BG     = "#EDF1F7"
+    ACCENT = "#2D6CDF"
+    TEXT   = "#1E293B"
+    MUTED  = "#64748B"
+
+    def __init__(self):
+        super().__init__()
+        self.title("Cập Nhật Tài Khoản")
+        self.geometry("340x160")
+        self.resizable(False, False)
+        self.configure(bg=self.BG)
+
+        self._cuoi_thang = tk.BooleanVar(value=False)
+        self._build_ui()
+
+    def _build_ui(self):
+        s = ttk.Style(self)
+        s.theme_use("clam")
+        s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(14, 7),
+                    background="#E2E8F0", foreground="#334155", relief="flat")
+        s.map("TButton", background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")])
+        s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(22, 9),
+                    background=self.ACCENT, foreground="#FFFFFF", relief="flat")
+        s.map("Accent.TButton", background=[("active", "#1F5AC4"), ("disabled", "#AEC4EC")])
+        s.configure("TProgressbar", background=self.ACCENT,
+                    troughcolor="#E2E8F0", borderwidth=0, thickness=5)
+
+        outer = tk.Frame(self, bg=self.BG)
+        outer.pack(fill="both", expand=True, padx=20, pady=16)
+
+        tk.Checkbutton(
+            outer, text="Cuối tháng — tạo sheet snapshot (HH:MM TM)",
+            variable=self._cuoi_thang,
+            bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+            font=("Segoe UI", 9), relief="flat",
+        ).pack(anchor="w", pady=(0, 12))
+
+        self._status = tk.Label(outer, text="", bg=self.BG,
+                                font=("Segoe UI", 9), fg=self.MUTED)
+        self._status.pack(anchor="w")
+
+        self._progress = ttk.Progressbar(outer, mode="indeterminate", length=300)
+        self._progress.pack(fill="x", pady=(4, 10))
+
+        bot = tk.Frame(outer, bg=self.BG)
+        bot.pack(fill="x")
+        ttk.Button(bot, text="Huỷ", command=self.destroy).pack(side="right")
+        self._run_btn = ttk.Button(bot, text="Chạy", style="Accent.TButton",
+                                   command=self._run)
+        self._run_btn.pack(side="right", padx=(0, 8))
+
+    def _run(self):
+        self._run_btn.configure(state="disabled")
+        self._progress.start(12)
+        self._status.configure(text="Đang chạy...")
+        cuoi_thang = self._cuoi_thang.get()
+        threading.Thread(target=self._worker, args=(cuoi_thang,), daemon=True).start()
+
+    def _worker(self, cuoi_thang: bool):
+        try:
+            main(cuoi_thang=cuoi_thang)
+            self.after(0, self._done)
+        except Exception as e:
+            self.after(0, lambda e=e: self._error(str(e)))
+
+    def _done(self):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._status.configure(text="✓ Hoàn thành!")
+        messagebox.showinfo("Hoàn thành", "Đã cập nhật tài khoản quảng cáo.")
+
+    def _error(self, msg: str):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._status.configure(text=f"✗ Lỗi: {msg}", fg="#CC0000")
+        messagebox.showerror("Lỗi", msg)
+
+
 if __name__ == "__main__":
-    main()
+    App().mainloop()

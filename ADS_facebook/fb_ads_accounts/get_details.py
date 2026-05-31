@@ -30,7 +30,7 @@ from get_campaigns import (
     col_to_letter, connect_spreadsheet, get_all_accounts,
     read_detail_selections, get_or_create_worksheet, sanitize_sheet_name,
     # Facebook API
-    paginate,
+    paginate, fetch_insights_campaign_level,
     # Metrics
     parse_insight_metrics, aggregate_metrics,
     # Formatting
@@ -331,8 +331,10 @@ def refresh_adset_ad_rows(worksheet, adset_data_map: dict, ad_insights_map: dict
 # ── Per-campaign write ─────────────────────────────────────────────────────────
 
 def _write_one_campaign(worksheet, camp_id: str, adsets: list,
-                        ad_insights_map: dict, now_str: str) -> int:
-    """Xóa Adset/Ad cũ của đúng 1 campaign rồi chèn dữ liệu mới — không đụng campaign khác."""
+                        ad_insights_map: dict, now_str: str,
+                        camp_insights_map: dict | None = None) -> int:
+    """Xóa Adset/Ad cũ của đúng 1 campaign rồi chèn dữ liệu mới — không đụng campaign khác.
+    Nếu có camp_insights_map, cập nhật luôn metrics dòng Campaign (cột F–Y)."""
     all_data = worksheet.get_all_values()
     if len(all_data) < 2:
         return 0
@@ -370,6 +372,15 @@ def _write_one_campaign(worksheet, camp_id: str, adsets: list,
     if camp_row is None:
         return 0
 
+    # Cập nhật metrics dòng Campaign (F–Y) với dữ liệu mới nhất
+    if camp_insights_map and camp_id in camp_insights_map:
+        m = parse_insight_metrics(camp_insights_map[camp_id])
+        camp_update = _insights_cols(m) + [
+            int(round(m["spend"])) if m["spend"] > 0 else "",  # X
+            now_str,                                            # Y
+        ]
+        worksheet.update(f"F{camp_row}:Y{camp_row}", [camp_update])
+
     # Build và insert dòng Adset/Ad
     new_rows = []
     for adset in sorted(adsets, key=lambda a: (status_order.get(a.get("status", ""), 9), a.get("name", ""))):
@@ -388,7 +399,7 @@ def _write_one_campaign(worksheet, camp_id: str, adsets: list,
 
 # ── Core processing ────────────────────────────────────────────────────────────
 
-def run_for_accounts(spreadsheet, accounts: list[dict]):
+def run_for_accounts(spreadsheet, accounts: list[dict], fetch_creative: bool = True):
     month_label = datetime.now().strftime("%m/%Y")
     checkpoint  = load_checkpoint()
     dump_insights_ad: dict[str, list] = {}
@@ -422,7 +433,12 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
             if not remaining:
                 print("  → Tất cả campaign đã được xử lý (checkpoint). Bỏ qua fetch API.")
             else:
-                # Insights 1 call/account — luôn fetch để có dữ liệu mới nhất
+                # Insights cấp campaign — để cập nhật dòng Campaign trong sheet
+                camp_insights = fetch_insights_campaign_level(acc_id)
+                camp_insights_map = {r["campaign_id"]: r for r in camp_insights if "campaign_id" in r}
+                print(f"  → {len(camp_insights)} dòng insights campaign.")
+
+                # Insights cấp ad — để ghi dòng Adset/Ad
                 ad_insights = fetch_insights_ad_level(acc_id)
                 ad_insights_map = {r["ad_id"]: r for r in ad_insights if "ad_id" in r}
                 dump_insights_ad[acc_name] = ad_insights
@@ -445,9 +461,12 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
                         adset["_ads"] = ads
 
                     now_str  = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                    inserted = _write_one_campaign(ws, camp_id, adsets, ad_insights_map, now_str)
+                    inserted = _write_one_campaign(
+                        ws, camp_id, adsets, ad_insights_map, now_str,
+                        camp_insights_map=camp_insights_map,
+                    )
                     print(f"  → [{camp_id}] {len(adsets)} adsets, "
-                          f"{len(raw_ads_camp)} ads — ghi {inserted} dòng.")
+                          f"{len(raw_ads_camp)} ads — ghi {inserted} dòng (campaign updated).")
 
                     # Lưu checkpoint ngay
                     done_set.add(camp_id)
@@ -456,25 +475,28 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
                     _save_checkpoint(checkpoint)
 
             # ── Creative sheet dùng toàn bộ raw_ads (checkpoint + lần này) ──
-            all_raw_ads = cp_acc.get("raw_ads", [])
-            creative_rows = []
-            for ad in all_raw_ads:
-                c = extract_creative_info(ad.get("creative") or {})
-                creative_rows.append([
-                    c.get("creative_id",  ""),
-                    ad.get("id",          ""),
-                    ad.get("name",        ""),
-                    STATUS_MAP.get(ad.get("status", ""), ad.get("status", "")),
-                    ad.get("_camp_id",    ""),
-                    ad.get("_adset_name", ""),
-                    c.get("page_id",      ""),
-                    c.get("post_id",      ""),
-                    c.get("thumbnail_url",""),
-                    c.get("body",         ""),
-                    c.get("title",        ""),
-                ])
-            c_title, c_count = write_creative_sheet(spreadsheet, acc_name, creative_rows)
-            print(f"  → Đã ghi {c_count} creative vào tab '{c_title}'.")
+            if fetch_creative:
+                all_raw_ads = cp_acc.get("raw_ads", [])
+                creative_rows = []
+                for ad in all_raw_ads:
+                    c = extract_creative_info(ad.get("creative") or {})
+                    creative_rows.append([
+                        c.get("creative_id",  ""),
+                        ad.get("id",          ""),
+                        ad.get("name",        ""),
+                        STATUS_MAP.get(ad.get("status", ""), ad.get("status", "")),
+                        ad.get("_camp_id",    ""),
+                        ad.get("_adset_name", ""),
+                        c.get("page_id",      ""),
+                        c.get("post_id",      ""),
+                        c.get("thumbnail_url",""),
+                        c.get("body",         ""),
+                        c.get("title",        ""),
+                    ])
+                c_title, c_count = write_creative_sheet(spreadsheet, acc_name, creative_rows)
+                print(f"  → Đã ghi {c_count} creative vào tab '{c_title}'.")
+            else:
+                print("  → Bỏ qua Creative sheet (không được chọn).")
 
             # Account xong hoàn toàn → xóa khỏi checkpoint
             checkpoint.pop(acc_name, None)
@@ -516,6 +538,7 @@ class App(tk.Tk):
 
         self._spreadsheet = None
         self._items: list[dict] = []
+        self._creative_var = None
 
         self._apply_styles()
         self._build_ui()
@@ -567,7 +590,17 @@ class App(tk.Tk):
                  text="Chỉ tài khoản có 'Chọn Lấy Camp' = TRUE. "
                       "Click dòng để bật / tắt tài khoản muốn lấy chi tiết.",
                  bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED,
-                 justify="left", anchor="w").pack(fill="x", pady=(0, 8))
+                 justify="left", anchor="w").pack(fill="x", pady=(0, 4))
+
+        opt_row = tk.Frame(outer, bg=self.BG)
+        opt_row.pack(fill="x", pady=(0, 8))
+        self._creative_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            opt_row, text="Lấy nội dung quảng cáo (Creative) — ghi vào tab '{tài khoản} - Creative'",
+            variable=self._creative_var,
+            bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+            font=("Segoe UI", 9), relief="flat", bd=0,
+        ).pack(side="left")
 
         # Pack bot trước card để luôn hiển thị dù cửa sổ thấp
         bot = tk.Frame(outer, bg=self.BG)
@@ -607,26 +640,18 @@ class App(tk.Tk):
                    command=lambda: self._set_all(True)).pack(side="left")
         ttk.Button(bot, text="Tắt tất cả",
                    command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
-        self._new_run_btn = ttk.Button(bot, text="Bắt đầu mới",
-                                       command=self._new_run)
-        self._new_run_btn.pack(side="left", padx=(10, 0))
 
         self._count_lbl = tk.Label(bot, text="", bg=self.BG,
                                    font=("Segoe UI", 9), fg=self.MUTED)
         self._count_lbl.pack(side="left", padx=10)
 
-        self._run_btn = ttk.Button(bot, text="Chạy / Tiếp tục",
+        self._run_btn = ttk.Button(bot, text="Chạy",
                                    style="Accent.TButton",
                                    command=self._run, state="disabled")
         self._run_btn.pack(side="right")
         ttk.Button(bot, text="Huỷ", command=self.destroy).pack(side="right", padx=(0, 8))
         self._progress = ttk.Progressbar(bot, mode="indeterminate", length=110)
         self._progress.pack(side="right", padx=(0, 10))
-
-        # Label checkpoint — hiển thị bên dưới treeview
-        self._cp_lbl = tk.Label(outer, text="", bg=self.BG,
-                                font=("Segoe UI", 9), fg="#D97706")
-        self._cp_lbl.pack(fill="x", pady=(4, 0), side="bottom")
 
     def _connect_async(self):
         threading.Thread(target=self._connect_worker, daemon=True).start()
@@ -658,7 +683,6 @@ class App(tk.Tk):
         self._refresh_count()
         if self._items:
             self._run_btn.configure(state="normal")
-        self._refresh_cp()
 
     def _toggle(self, iid: str):
         item = next((i for i in self._items if i["iid"] == iid), None)
@@ -713,49 +737,34 @@ class App(tk.Tk):
         if not accounts:
             messagebox.showwarning("Chưa chọn", "Chưa bật tài khoản nào.")
             return
+        clear_checkpoint()
+        fetch_creative = self._creative_var.get() if self._creative_var else True
         self._run_btn.configure(state="disabled")
         self._progress.start(12)
         self._set_status(f"Đang chạy {len(accounts)} tài khoản...")
-        threading.Thread(target=self._run_worker, args=(list(accounts),), daemon=True).start()
+        threading.Thread(target=self._run_worker,
+                         args=(list(accounts), fetch_creative), daemon=True).start()
 
-    def _run_worker(self, accounts: list[dict]):
+    def _run_worker(self, accounts: list[dict], fetch_creative: bool = True):
         try:
-            run_for_accounts(self._spreadsheet, accounts)
+            run_for_accounts(self._spreadsheet, accounts, fetch_creative=fetch_creative)
             self.after(0, self._done)
         except RateLimitError as e:
             self.after(0, lambda e=e: self._rate_limited(str(e)))
         except Exception as e:
             self.after(0, lambda e=e: self._error(str(e)))
 
-    def _new_run(self):
-        if messagebox.askyesno("Bắt đầu mới", "Xóa checkpoint và bắt đầu lại từ đầu?"):
-            clear_checkpoint()
-            self._refresh_cp()
-
-    def _refresh_cp(self):
-        summary = checkpoint_summary()
-        self._cp_lbl.configure(
-            text=f"⚡ {summary} — nhấn Chạy để tiếp tục" if summary else ""
-        )
-        self._new_run_btn.configure(state="normal" if summary else "disabled")
-
     def _done(self):
         self._progress.stop()
         self._run_btn.configure(state="normal")
         self._set_status("✓ Hoàn thành!")
-        self._refresh_cp()
         messagebox.showinfo("Hoàn thành", "Đã lấy xong chi tiết cho các tài khoản được chọn.")
 
     def _rate_limited(self, msg: str):
         self._progress.stop()
         self._run_btn.configure(state="normal")
-        self._set_status("⚠ Rate limit — checkpoint đã lưu", error=True)
-        self._refresh_cp()
-        messagebox.showwarning(
-            "Rate Limit",
-            f"{msg}\n\nCheckpoint đã lưu tiến trình.\n"
-            "Nhấn 'Chạy / Tiếp tục' để tiếp tục từ chỗ còn lại."
-        )
+        self._set_status("⚠ Rate limit", error=True)
+        messagebox.showwarning("Rate Limit", msg)
 
     def _error(self, msg: str):
         self._progress.stop()
