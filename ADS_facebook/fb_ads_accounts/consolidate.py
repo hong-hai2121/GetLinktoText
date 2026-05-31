@@ -9,6 +9,7 @@ Chạy: python consolidate.py
 
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -26,12 +27,25 @@ from get_campaigns import (
 )
 
 BASE_DIR = Path(__file__).parent
-OUTPUT_SHEET_TITLE = "Tổng Hợp"
+OUTPUT_SHEET_TITLE = f"Tổng Hợp T{datetime.now().month}"
 
 # Hàng "1.1 Ngân sách được duyệt": mỗi cột tài khoản = tổng cột "số tiền"
 # (cột C, từ C2 trở xuống) của trang tính có tên = tên tab ở hàng 1 cột đó.
 BUDGET_LABEL = "1.1 Ngân sách được duyệt"
 SOURCE_AMOUNT_COL = "C"
+DEBT_LABEL = "1.2 Số tiền nợ"
+ACTUAL_SPEND_LABEL = "1.3 Ngân sách thực tế Camp đã tiêu"
+CP_TOTAL_LABEL = "CP Tổng"
+DON_LABEL = "Đơn"
+DOANH_SO_LABEL = "Doanh Số"
+TY_LE_CP_LABEL = "Tỷ lệ CP"
+
+# Regex dùng trong công thức Google Sheets để bỏ nhóm ngoặc cuối (ID TK)
+_STRIP_LAST_ID = '"\\s*\\([^()]*\\)\\s*$"'
+TKQC_API_SHEET = "TKQC API"
+TKQC_API_ID_COL = "A"
+TKQC_API_BALANCE_COL = "N"
+TKQC_API_BALANCE_INDEX = 14
 
 # ── Danh sách nhãn hàng cố định ở cột A ───────────────────────────────────────
 ROW_LABELS = [
@@ -153,10 +167,86 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
             )
         return cells
 
+    def _debt_row() -> list:
+        cells = []
+        lookup_range = f"'{TKQC_API_SHEET}'!{TKQC_API_ID_COL}:{TKQC_API_BALANCE_COL}"
+        for i in range(len(tab_titles)):
+            cl = col_letter(i + 2)
+            cells.append(
+                f'=IFERROR(VLOOKUP(REGEXEXTRACT({cl}$1;"\\(([^()]*)\\)\\s*$");'
+                f'{lookup_range};{TKQC_API_BALANCE_INDEX};FALSE);"")'
+            )
+        return cells
+
+    def _sheet_name(cl: str) -> str:
+        # Header hàng 1 → bỏ nhóm ngoặc cuối (ID TK) rồi bỏ dấu "/"
+        # Ví dụ: "Quang Huy-2 ( +8 08/05/2026) (755854116909247)" → "Quang Huy-2 ( +8 08052026)"
+        regex_part = 'REGEXREPLACE(' + cl + '$1;' + _STRIP_LAST_ID + ';"")'
+        return 'SUBSTITUTE(' + regex_part + ';"/";"")'
+
+    def _indirect(cl: str, rng: str) -> str:
+        return 'INDIRECT("\'"&' + _sheet_name(cl) + '&"\'' + '!' + rng + '")'
+
+    def _actual_spend_row() -> list:
+        cells = []
+        for i in range(len(tab_titles)):
+            cl = col_letter(i + 2)
+            cells.append(
+                '=SUMIF('
+                + _indirect(cl, 'B2:B') + ';'
+                '"Campaign";'
+                + _indirect(cl, 'X2:X')
+                + ')'
+            )
+        return cells
+
+    def _doanh_so_row() -> list:
+        cells = []
+        for i in range(len(tab_titles)):
+            cl = col_letter(i + 2)
+            cells.append(
+                '=SUMPRODUCT('
+                '(' + _indirect(cl, 'B2:B') + '="Campaign")'
+                '*VALUE(SUBSTITUTE(' + _indirect(cl, 'T2:T') + ';"\'";"")'
+                '))'
+            )
+        return cells
+
+    def _don_row() -> list:
+        cells = []
+        for i in range(len(tab_titles)):
+            cl = col_letter(i + 2)
+            cells.append(
+                '=SUMPRODUCT('
+                '(' + _indirect(cl, 'B2:B') + '="Campaign")'
+                '*VALUE(SUBSTITUTE(' + _indirect(cl, 'V2:V') + ';"\'";"")'
+                '))'
+            )
+        return cells
+
+    def _ty_le_cp_row() -> list:
+        return [f'={col_letter(i + 2)}19/{col_letter(i + 2)}22' for i in range(len(tab_titles))]
+
+    def _cp_total_row() -> list:
+        # Hàng 19 = hàng 3 + hàng 4 (1.1 Ngân sách được duyệt + 1.2 Số tiền nợ)
+        return [f'={col_letter(i + 2)}3+{col_letter(i + 2)}4' for i in range(len(tab_titles))]
+
     data_rows = []
     for label in ROW_LABELS:
         if label == BUDGET_LABEL:
             data_rows.append([label] + _budget_row())
+        elif label == DEBT_LABEL:
+            data_rows.append([label] + _debt_row())
+        elif label == ACTUAL_SPEND_LABEL:
+            data_rows.append([label] + _actual_spend_row())
+        elif label == CP_TOTAL_LABEL:
+            data_rows.append([label] + _cp_total_row())
+        elif label == DON_LABEL:
+            data_rows.append([label] + _don_row())
+        elif label == DOANH_SO_LABEL:
+            data_rows.append([label] + _doanh_so_row())
+        elif label == TY_LE_CP_LABEL:
+            data_rows.append([label] + _ty_le_cp_row())
         else:
             data_rows.append([label] + [""] * len(tab_titles))
 

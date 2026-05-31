@@ -1,7 +1,7 @@
 import gspread
 import json
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from config import ACCESS_TOKEN
@@ -48,6 +48,7 @@ HEADERS = [
     "Phương Thức Thanh Toán",
     "Chọn Lấy Camp",   # TRUE = sẽ được get_campaigns.py xử lý
     "Cập Nhật Lúc",
+    "Số Dư Số",
 ]
 
 SCOPES = [
@@ -70,26 +71,33 @@ def connect_sheet(credentials_file: str = "service_account.json"):
     return spreadsheet.worksheet(SHEET_NAME)
 
 
-def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str]]:
-    """Đọc sheet hiện tại, trả về ({account_id: chọn_lấy_camp}, {account_id: số_dư})."""
+def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict[str, str], dict[str, str]]:
+    """Đọc sheet hiện tại, trả về:
+    - {account_id: chọn_lấy_camp}
+    - {account_id: số_dư}         ← để tính Số Dư Trước khi > 24h
+    - {account_id: số_dư_trước}   ← giữ nguyên khi < 24h
+    - {account_id: cập_nhật_lúc}  ← để kiểm tra 24h
+    """
     try:
         all_values = worksheet.get_all_values()
     except Exception:
-        return {}, {}
+        return {}, {}, {}, {}
 
     if len(all_values) < 2:
-        return {}, {}
+        return {}, {}, {}, {}
 
     header = all_values[0]
     try:
         id_col = header.index("ID Tài Khoản")
         chon_col = header.index("Chọn Lấy Camp")
     except ValueError:
-        return {}, {}
+        return {}, {}, {}, {}
 
-    so_du_col = header.index("Số Dư") if "Số Dư" in header else -1
+    so_du_col        = header.index("Số Dư")        if "Số Dư"        in header else -1
+    so_du_truoc_col  = header.index("Số Dư Trước")  if "Số Dư Trước"  in header else -1
+    cap_nhat_col     = header.index("Cập Nhật Lúc") if "Cập Nhật Lúc" in header else -1
 
-    selections, prev_balances = {}, {}
+    selections, prev_balances, stored_prev_balances, last_updates = {}, {}, {}, {}
     for row in all_values[1:]:
         acc_id = row[id_col].strip().removeprefix("act_") if id_col < len(row) else ""
         if not acc_id:
@@ -98,7 +106,11 @@ def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str]]:
         selections[acc_id] = chon_val.upper() in ("TRUE", "ĐÚNG", "1", "X", "✓")
         if so_du_col >= 0:
             prev_balances[acc_id] = row[so_du_col].strip() if so_du_col < len(row) else ""
-    return selections, prev_balances
+        if so_du_truoc_col >= 0:
+            stored_prev_balances[acc_id] = row[so_du_truoc_col].strip() if so_du_truoc_col < len(row) else ""
+        if cap_nhat_col >= 0:
+            last_updates[acc_id] = row[cap_nhat_col].strip() if cap_nhat_col < len(row) else ""
+    return selections, prev_balances, stored_prev_balances, last_updates
 
 
 def fetch_ad_accounts(access_token: str) -> list[dict]:
@@ -118,6 +130,16 @@ def format_money(amount_raw, currency: str) -> str:
         value = value / 100
     formatted = f"{int(round(value)):,}".replace(",", ".")
     return f"{formatted} ₫" if currency == "VND" else f"{formatted} {currency}"
+
+
+def money_number(amount_raw, currency: str):
+    try:
+        value = float(amount_raw)
+    except (ValueError, TypeError):
+        return 0
+    if currency.upper() not in ZERO_DECIMAL_CURRENCIES:
+        value = value / 100
+    return int(round(value)) if value.is_integer() else round(value, 2)
 
 
 def _format_id_columns_as_text(worksheet):
@@ -141,14 +163,19 @@ def _format_id_columns_as_text(worksheet):
         worksheet.spreadsheet.batch_update({"requests": requests})
 
 
-def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool], prev_balances: dict[str, str]):
+def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
+                   prev_balances: dict[str, str], stored_prev_balances: dict[str, str],
+                   last_updates: dict[str, str]):
     def sort_key(acc):
         biz = acc.get("business") or {}
         return (biz.get("name", "") or "￿", acc.get("name", ""))
 
     sorted_accounts = sorted(accounts, key=sort_key)
 
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    now = datetime.now()
+    now_str = now.strftime("%d/%m/%Y %H:%M:%S")
+    cutoff = now - timedelta(hours=24)
+
     rows = []
     for acc in sorted_accounts:
         currency = acc.get("currency", "")
@@ -156,11 +183,28 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
         biz = acc.get("business") or {}
         acc_id = acc.get("id", "").removeprefix("act_")
         current_balance = format_money(acc.get("balance", "0"), currency)
+        current_balance_number = money_number(acc.get("balance", "0"), currency)
         prev_balance = prev_balances.get(acc_id, "")
         balance_changed = prev_balance != "" and current_balance != prev_balance
         chon = "TRUE" if (selections.get(acc_id, False) or balance_changed) else "FALSE"
         funding = acc.get("funding_source_details") or {}
         payment_method = funding.get("display_string", "")
+
+        # Chỉ cập nhật Số Dư Trước khi lần cập nhật cuối > 24h (hoặc chưa có)
+        last_update_str = last_updates.get(acc_id, "")
+        within_24h = False
+        if last_update_str:
+            try:
+                last_update_dt = datetime.strptime(last_update_str, "%d/%m/%Y %H:%M:%S")
+                within_24h = last_update_dt >= cutoff
+            except ValueError:
+                pass
+
+        if within_24h:
+            so_du_truoc = stored_prev_balances.get(acc_id, prev_balance)
+        else:
+            so_du_truoc = prev_balance
+
         rows.append([
             acc_id,
             acc.get("name", ""),
@@ -171,10 +215,11 @@ def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
             acc.get("timezone_name", ""),
             format_money(acc.get("amount_spent", "0"), currency),
             format_money(acc.get("balance", "0"), currency),
-            prev_balances.get(acc_id, ""),
+            so_du_truoc,
             payment_method,
             chon,
             now_str,
+            current_balance_number,
         ])
 
     col_letter = chr(64 + len(HEADERS))
@@ -221,7 +266,7 @@ def main():
     worksheet = connect_sheet()
 
     print("Đọc dữ liệu hiện tại (giữ lại Chọn Lấy Camp + Số Dư Trước)...")
-    selections, prev_balances = read_existing_data(worksheet)
+    selections, prev_balances, stored_prev_balances, last_updates = read_existing_data(worksheet)
     selected_count = sum(1 for v in selections.values() if v)
     print(f"  → {selected_count} tài khoản đang được chọn.")
 
@@ -232,7 +277,7 @@ def main():
     save_json(accounts)
 
     print(f"Ghi dữ liệu vào sheet '{SHEET_NAME}'...")
-    write_to_sheet(worksheet, accounts, selections, prev_balances)
+    write_to_sheet(worksheet, accounts, selections, prev_balances, stored_prev_balances, last_updates)
 
     api_summary()
     print("Hoàn thành!")

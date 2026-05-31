@@ -10,14 +10,22 @@ Cột "Chọn Lấy Chi Tiết" được giữ nguyên giá trị cũ để khô
 """
 
 import re
+import sys
+import threading
 import gspread
 import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+except ImportError:
+    tk = None
+
 from config import ACCESS_TOKEN
-from fb_api import graph_paginate, api_summary
+from fb_api import graph_paginate, api_summary, RateLimitError
 
 BASE_DIR = Path(__file__).parent
 
@@ -92,6 +100,9 @@ HEADERS = [
     "Chi Phí Campaign",      # X  24  – số nguyên, chỉ dòng Campaign
     "Cập Nhật Lúc",          # Y  25
 ]
+
+COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # có spend → xanh nhạt
+COLOR_DEFAULT  = {"red": 1.0,  "green": 1.0,  "blue": 1.0}   # không có spend → trắng
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -216,8 +227,20 @@ def get_or_create_worksheet(spreadsheet, title: str):
 def write_to_sheet(worksheet, rows: list[list]):
     worksheet.clear()
     worksheet.update("A1", [HEADERS])
-    if rows:
-        worksheet.update("A2", rows)
+    if not rows:
+        return
+    worksheet.update("A2", rows)
+
+    last_col = col_to_letter(len(HEADERS))
+    formats = []
+    for i, row in enumerate(rows):
+        sheet_row = i + 2
+        is_selected = row[0] == "TRUE"
+        formats.append({
+            "range":  f"A{sheet_row}:{last_col}{sheet_row}",
+            "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT},
+        })
+    worksheet.batch_format(formats)
 
 
 # ── Facebook Graph API ─────────────────────────────────────────────────────────
@@ -227,8 +250,15 @@ def paginate(url: str, params: dict) -> list[dict]:
     return graph_paginate(url, params)
 
 
+def _act_id(account_id: str) -> str:
+    # Sheet lưu ID dạng số (đã removeprefix("act_") trong main.py).
+    # Edge /campaigns và /insights yêu cầu prefix act_.
+    account_id = account_id.strip()
+    return account_id if account_id.startswith("act_") else f"act_{account_id}"
+
+
 def fetch_campaigns(account_id: str) -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{account_id}/campaigns"
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/campaigns"
     params = {
         "fields":       "id,name,status",
         "access_token": ACCESS_TOKEN,
@@ -238,7 +268,7 @@ def fetch_campaigns(account_id: str) -> list[dict]:
 
 
 def fetch_insights_campaign_level(account_id: str) -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{account_id}/insights"
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/insights"
     params = {
         "level":        "campaign",
         **_date_params(),
@@ -408,45 +438,46 @@ def fmt_pct(v: float) -> str:
     return f"{v:.2f}%"
 
 
-def _insights_cols(m: dict, currency: str) -> list:
-    """18 giá trị cho cột F–W (Spend → Chi Phí / Kết Quả)."""
-    def money(v): return fmt_money(v, currency) if v > 0 else ""
-    def count(v): return fmt_num(v)             if v > 0 else ""
+def _insights_cols(m: dict) -> list:
+    """18 giá trị số thực cho cột F–W — lưu number để dùng được trong công thức Sheets."""
+    def num(v, decimals=0):
+        return round(v, decimals) if v > 0 else ""
 
     return [
-        fmt_money(m["spend"],  currency),                          # J  Spend
-        fmt_num(m["impr"]),                                        # K  Lượt Hiển Thị
-        fmt_num(m["clicks"]),                                      # L  Lượt Click
-        fmt_pct(m["ctr"]),                                         # M  CTR
-        money(m["cpc"]),                                           # N  CPC
-        money(m["cpm"]),                                           # O  CPM
-        fmt_num(m["reach"]),                                       # P  Tiếp Cận
-        fmt_pct(m["freq"]) if m["freq"] > 0 else "",               # Q  Tần Suất
-        count(m["inbox"]),                                         # R  Số Inbox
-        money(m["cpi"]),                                           # S  CPI
-        count(m["leads"]),                                         # T  Số Lead
-        money(m["cpl"]),                                           # U  CPL
-        count(m["purchases"]),                                     # V  Số Đơn Hàng
-        money(m["cps"]),                                           # W  CPS
-        money(m["revenue"]),                                       # X  Doanh Thu
-        f"{m['roas']:.2f}" if m["roas"] > 0 else "",               # Y  ROAS
-        count(m["ket_qua"]),                                       # Z  Kết Quả
-        money(m["cpkq"]),                                          # AA Chi Phí / Kết Quả
+        num(m["spend"],     2),   # F  Spend Tháng Này
+        num(m["impr"]),           # G  Lượt Hiển Thị
+        num(m["clicks"]),         # H  Lượt Click
+        num(m["ctr"],       2),   # I  CTR (%)
+        num(m["cpc"],       2),   # J  CPC
+        num(m["cpm"],       2),   # K  CPM
+        num(m["reach"]),          # L  Tiếp Cận
+        num(m["freq"],      2),   # M  Tần Suất
+        num(m["inbox"]),          # N  Số Inbox
+        num(m["cpi"],       2),   # O  CPI
+        num(m["leads"]),          # P  Số Lead
+        num(m["cpl"],       2),   # Q  CPL
+        num(m["purchases"]),      # R  Số Đơn Hàng
+        num(m["cps"],       2),   # S  CPS
+        num(m["revenue"],   2),   # T  Doanh Thu
+        num(m["roas"],      2),   # U  ROAS
+        num(m["ket_qua"]),        # V  Kết Quả
+        num(m["cpkq"],      2),   # W  Chi Phí / Kết Quả
     ]
 
 
 # ── Row builder ────────────────────────────────────────────────────────────────
 
 def _campaign_row(camp_id, camp_name, is_selected, m: dict,
-                  status: str, currency: str, now_str: str) -> list:
+                  status: str, now_str: str, auto_by_spend: bool = False) -> list:
     """Dòng Campaign — 25 cột."""
+    chon = "TRUE" if (m["spend"] > 0 if auto_by_spend else is_selected) else "FALSE"
     return [
-        "TRUE" if is_selected else "FALSE",  # A
+        chon,       # A
         "Campaign",                           # B
         camp_id,                              # C  Campaign ID
         camp_name,                            # D  Tên
         STATUS_MAP.get(status, status),       # E
-    ] + _insights_cols(m, currency) + [
+    ] + _insights_cols(m) + [
         int(round(m["spend"])) if m["spend"] > 0 else "",  # X  Chi Phí Campaign (số nguyên)
         now_str,                                            # Y  Cập Nhật Lúc
     ]
@@ -466,68 +497,103 @@ def save_json(data: dict, filename: str, api_info: dict | None = None):
     print(f"  JSON → {out_path}")
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
+# ── Core processing ────────────────────────────────────────────────────────────
 
-def main():
+def get_all_accounts(spreadsheet) -> list[dict]:
+    """Đọc sheet TKQC API, trả về TẤT CẢ tài khoản kèm trạng thái 'Chọn Lấy Camp'."""
+    ws = spreadsheet.worksheet(AD_ACCOUNTS_SHEET)
+    all_values = ws.get_all_values()
+    if len(all_values) < 2:
+        return []
+    header = all_values[0]
+    try:
+        id_col       = header.index("ID Tài Khoản")
+        name_col     = header.index("Tên Tài Khoản")
+        currency_col = header.index("Tiền Tệ")
+        chon_col     = header.index("Chọn Lấy Camp")
+    except ValueError as e:
+        raise RuntimeError(f"Sheet '{AD_ACCOUNTS_SHEET}' thiếu cột: {e}.")
+    da_chi_col = header.index("Đã Chi") if "Đã Chi" in header else -1
+
+    accounts = []
+    for row in all_values[1:]:
+        acc_id   = row[id_col].strip()           if id_col       < len(row) else ""
+        acc_name = row[name_col].strip()         if name_col     < len(row) else ""
+        currency = row[currency_col].strip()     if currency_col < len(row) else "VND"
+        chon_val = row[chon_col].strip().upper() if chon_col     < len(row) else ""
+        da_chi   = row[da_chi_col].strip()       if da_chi_col >= 0 and da_chi_col < len(row) else ""
+        # Kiểm tra có chi tiêu: bỏ ký tự không phải số rồi parse
+        da_chi_num = 0
+        try:
+            cleaned = da_chi.replace(" ₫", "").replace(".", "").replace(",", "").strip()
+            da_chi_num = int(float(cleaned)) if cleaned else 0
+        except ValueError:
+            pass
+        if acc_id:
+            accounts.append({
+                "id":        acc_id,
+                "name":      acc_name,
+                "currency":  currency,
+                "selected":  chon_val in _CHON_VALUES,
+                "has_spend": da_chi_num > 0,
+                "da_chi":    da_chi,
+            })
+    return accounts
+
+
+def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = False):
+    """Fetch campaign + insights cho danh sách tài khoản, ghi vào Sheets và JSON."""
     month_label = datetime.now().strftime("%m/%Y")
-    print("Kết nối Google Sheets...")
-    spreadsheet = connect_spreadsheet()
+    dump_campaigns:     dict[str, list] = {}
+    dump_insights_camp: dict[str, list] = {}
 
-    print(f"Đọc danh sách tài khoản được chọn từ sheet '{AD_ACCOUNTS_SHEET}'...")
-    selected_accounts = get_selected_accounts(spreadsheet)
-    if not selected_accounts:
-        print("Không có tài khoản nào được chọn. Hãy đánh TRUE vào cột 'Chọn Lấy Camp'.")
-        return
-    print(f"Tìm thấy {len(selected_accounts)} tài khoản được chọn.")
+    rate_limited = False
+    try:
+        for acc in accounts:
+            acc_id   = acc["id"]
+            acc_name = acc["name"]
+            print(f"\n[{acc_name}] Xử lý tháng {month_label}...")
 
-    dump_campaigns:      dict[str, list] = {}
-    dump_insights_camp:  dict[str, list] = {}
+            ws = get_or_create_worksheet(spreadsheet, acc_name)
 
-    for acc in selected_accounts:
-        acc_id   = acc["id"]
-        acc_name = acc["name"]
-        currency = acc["currency"]
-        print(f"\n[{acc_name}] Xử lý tháng {month_label}...")
+            detail_selections = read_detail_selections(ws)
+            selected_count = sum(1 for v in detail_selections.values() if v)
+            print(f"  → {selected_count} campaign đang được chọn lấy chi tiết (giữ nguyên).")
 
-        ws = get_or_create_worksheet(spreadsheet, acc_name)
+            campaigns = fetch_campaigns(acc_id)
+            print(f"  → {len(campaigns)} campaign.")
+            dump_campaigns[acc_name] = campaigns
 
-        # Giữ nguyên lựa chọn chi tiết hiện tại
-        detail_selections = read_detail_selections(ws)
-        selected_count = sum(1 for v in detail_selections.values() if v)
-        print(f"  → {selected_count} campaign đang được chọn lấy chi tiết (giữ nguyên).")
+            camp_insights = fetch_insights_campaign_level(acc_id)
+            camp_insights_map = {r["campaign_id"]: r for r in camp_insights if "campaign_id" in r}
+            print(f"  → {len(camp_insights)} dòng insights campaign.")
+            dump_insights_camp[acc_name] = camp_insights
 
-        # ── API 1: Campaigns ──────────────────────────────────────────────────
-        campaigns = fetch_campaigns(acc_id)
-        print(f"  → {len(campaigns)} campaign.")
-        dump_campaigns[acc_name] = campaigns
-
-        # ── API 2: Insights cấp campaign ─────────────────────────────────────
-        camp_insights = fetch_insights_campaign_level(acc_id)
-        camp_insights_map = {r["campaign_id"]: r for r in camp_insights if "campaign_id" in r}
-        print(f"  → {len(camp_insights)} dòng insights campaign.")
-        dump_insights_camp[acc_name] = camp_insights
-
-        # Build và ghi Campaign rows
-        status_order = {"ACTIVE": 0, "PAUSED": 1, "ARCHIVED": 2, "DELETED": 3}
-        sorted_camps = sorted(
-            campaigns,
-            key=lambda c: (status_order.get(c.get("status", ""), 9), c.get("name", "")),
-        )
-        now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        rows = [
-            _campaign_row(
-                camp.get("id", ""),
-                camp.get("name", ""),
-                detail_selections.get(camp.get("id", ""), False),
-                parse_insight_metrics(camp_insights_map.get(camp.get("id", ""), {})),
-                camp.get("status", ""),
-                currency,
-                now_str,
+            status_order = {"ACTIVE": 0, "PAUSED": 1, "ARCHIVED": 2, "DELETED": 3}
+            sorted_camps = sorted(
+                campaigns,
+                key=lambda c: (status_order.get(c.get("status", ""), 9), c.get("name", "")),
             )
-            for camp in sorted_camps
-        ]
-        write_to_sheet(ws, rows)
-        print(f"  → Đã ghi {len(rows)} dòng vào tab '{sanitize_sheet_name(acc_name)}'.")
+            now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            rows = [
+                _campaign_row(
+                    camp.get("id", ""),
+                    camp.get("name", ""),
+                    detail_selections.get(camp.get("id", ""), False),
+                    parse_insight_metrics(camp_insights_map.get(camp.get("id", ""), {})),
+                    camp.get("status", ""),
+                    now_str,
+                    auto_by_spend=auto_by_spend,
+                )
+                for camp in sorted_camps
+            ]
+            write_to_sheet(ws, rows)
+            print(f"  → Đã ghi {len(rows)} dòng vào tab '{sanitize_sheet_name(acc_name)}'.")
+
+    except RateLimitError as e:
+        rate_limited = True
+        print(f"\n⚠ Rate limit: {e}")
+        print(f"Đã hoàn thành {len(dump_campaigns)} tài khoản. Lưu dữ liệu hiện có...")
 
     base_url = f"https://graph.facebook.com/{FB_API_VERSION}"
     print("\nLưu JSON...")
@@ -544,8 +610,282 @@ def main():
         "note":        "Insights cấp campaign tháng này — dùng cho dòng Campaign trong sheet",
     })
     api_summary()
+    if rate_limited:
+        raise RateLimitError(f"Rate limit — đã lưu {len(dump_campaigns)} tài khoản.")
     print("\nHoàn thành!")
 
 
+# ── GUI ────────────────────────────────────────────────────────────────────────
+
+class App(tk.Tk):
+    BG         = "#EDF1F7"
+    CARD       = "#FFFFFF"
+    BORDER     = "#DCE3EC"
+    ACCENT     = "#2D6CDF"
+    ACCENT_HV  = "#1F5AC4"
+    ACCENT_DIS = "#AEC4EC"
+    TEXT       = "#1E293B"
+    MUTED      = "#64748B"
+
+    def __init__(self):
+        super().__init__()
+        self.title("Get Campaigns – Chọn Tài Khoản")
+        self.geometry("780x440")
+        self.minsize(560, 320)
+        self.configure(bg=self.BG)
+        self.resizable(True, True)
+
+        self._spreadsheet = None
+        self._items: list[dict] = []
+        self._spend_var = None   # checkbox tự chọn campaign có spend
+
+        self._apply_styles()
+        self._build_ui()
+        self._connect_async()
+
+    # ── Styles ────────────────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        s = ttk.Style(self)
+        s.theme_use("clam")
+        s.configure("TFrame",  background=self.BG)
+        s.configure("TLabel",  background=self.BG,
+                    font=("Segoe UI", 10), foreground=self.TEXT)
+        s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(14, 7),
+                    background="#E2E8F0", foreground="#334155",
+                    bordercolor="#B9C4D4", relief="flat", borderwidth=1)
+        s.map("TButton",
+              background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")],
+              foreground=[("disabled", "#B0B8C4")])
+        s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"),
+                    padding=(22, 9), background=self.ACCENT,
+                    foreground="#FFFFFF", relief="flat", borderwidth=0)
+        s.map("Accent.TButton",
+              background=[("active", self.ACCENT_HV), ("disabled", self.ACCENT_DIS)],
+              foreground=[("disabled", "#EEF2FB")])
+        s.configure("Treeview", font=("Segoe UI", 9), rowheight=28,
+                    background=self.CARD, fieldbackground=self.CARD,
+                    foreground=self.TEXT, borderwidth=0)
+        s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
+                    background="#F1F5F9", foreground="#475569",
+                    relief="flat", padding=(8, 6))
+        s.map("Treeview",
+              background=[("selected", "#DBE7FB")],
+              foreground=[("selected", self.TEXT)])
+        s.configure("TProgressbar", background=self.ACCENT,
+                    troughcolor="#E2E8F0", borderwidth=0, thickness=6)
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+
+    def _build_ui(self):
+        outer = tk.Frame(self, bg=self.BG)
+        outer.pack(fill="both", expand=True, padx=18, pady=14)
+
+        hdr = tk.Frame(outer, bg=self.BG)
+        hdr.pack(fill="x", pady=(0, 10))
+        tk.Label(hdr, text="Get Campaigns", bg=self.BG,
+                 font=("Segoe UI Semibold", 15), fg=self.TEXT).pack(side="left")
+        self._status_lbl = tk.Label(hdr, text="Đang kết nối...",
+                                    bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED)
+        self._status_lbl.pack(side="right")
+
+        tk.Label(outer,
+                 text="Click dòng để bật / tắt. Chỉ tài khoản ✓ được gọi API. "
+                      "Không ảnh hưởng sheet TKQC API.",
+                 bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED,
+                 justify="left", anchor="w").pack(fill="x", pady=(0, 4))
+
+        opt_row = tk.Frame(outer, bg=self.BG)
+        opt_row.pack(fill="x", pady=(0, 8))
+        self._spend_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            opt_row, text="Tự chọn campaign có Spend (cột A = TRUE nếu có chi tiêu)",
+            variable=self._spend_var,
+            bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+            font=("Segoe UI", 9), relief="flat", bd=0,
+        ).pack(side="left")
+
+        # Pack bot trước card để luôn hiển thị dù cửa sổ thấp
+        bot = tk.Frame(outer, bg=self.BG)
+        bot.pack(fill="x", pady=(12, 0), side="bottom")
+
+        card = tk.Frame(outer, bg=self.CARD,
+                        highlightthickness=1, highlightbackground=self.BORDER)
+        card.pack(fill="both", expand=True)
+        card.rowconfigure(0, weight=1)
+        card.columnconfigure(0, weight=1)
+
+        cols = ("chon", "acc_name", "acc_id", "da_chi")
+        self._tree = ttk.Treeview(card, columns=cols, show="headings",
+                                  selectmode="browse")
+        self._tree.heading("chon",     text="Chọn",          anchor="center")
+        self._tree.heading("acc_name", text="Tên Tài Khoản",  anchor="w")
+        self._tree.heading("acc_id",   text="ID Tài Khoản",   anchor="w")
+        self._tree.heading("da_chi",   text="Đã Chi",          anchor="e")
+        self._tree.column("chon",     width=56,  stretch=False, anchor="center", minwidth=50)
+        self._tree.column("acc_name", width=220, stretch=True,  minwidth=120)
+        self._tree.column("acc_id",   width=150, stretch=False, minwidth=100)
+        self._tree.column("da_chi",   width=130, stretch=False, minwidth=90,  anchor="e")
+
+        vsb = ttk.Scrollbar(card, orient="vertical",   command=self._tree.yview)
+        hsb = ttk.Scrollbar(card, orient="horizontal", command=self._tree.xview)
+        self._tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        self._tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        self._tree.tag_configure("on",  foreground="#15803D")
+        self._tree.tag_configure("off", foreground="#DC2626")
+        self._tree.tag_configure("odd", background="#F8FAFC")
+
+        self._tree.bind("<ButtonRelease-1>", self._on_click)
+        self._tree.bind("<space>",           self._on_space)
+
+        ttk.Button(bot, text="Bật tất cả",
+                   command=lambda: self._set_all(True)).pack(side="left")
+        ttk.Button(bot, text="Tắt tất cả",
+                   command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
+
+        self._count_lbl = tk.Label(bot, text="", bg=self.BG,
+                                   font=("Segoe UI", 9), fg=self.MUTED)
+        self._count_lbl.pack(side="left", padx=10)
+
+        self._run_btn = ttk.Button(bot, text="Chạy",
+                                   style="Accent.TButton",
+                                   command=self._run, state="disabled")
+        self._run_btn.pack(side="right")
+        ttk.Button(bot, text="Huỷ", command=self.destroy).pack(side="right", padx=(0, 8))
+        self._progress = ttk.Progressbar(bot, mode="indeterminate", length=110)
+        self._progress.pack(side="right", padx=(0, 10))
+
+    # ── Connect ───────────────────────────────────────────────────────────────
+
+    def _connect_async(self):
+        threading.Thread(target=self._connect_worker, daemon=True).start()
+
+    def _connect_worker(self):
+        try:
+            ss       = connect_spreadsheet()
+            accounts = get_all_accounts(ss)
+            self._spreadsheet = ss
+            self.after(0, lambda: self._load_items(
+                accounts, f"Kết nối OK · {ss.title} · {len(accounts)} tài khoản"))
+        except Exception as e:
+            self.after(0, lambda e=e: self._set_status(f"Lỗi: {e}", error=True))
+
+    def _load_items(self, accounts: list[dict], status_text: str):
+        self._set_status(status_text)
+        self._items = []
+        for i, acc in enumerate(accounts):
+            selected = acc.get("selected", False)
+            base_tag = "on" if selected else "off"
+            tags = ("odd", base_tag) if i % 2 != 0 else (base_tag,)
+            iid = self._tree.insert("", "end", values=(
+                "✓" if selected else "✗",
+                acc["name"],
+                acc["id"],
+                acc.get("da_chi", ""),
+            ), tags=tags)
+            self._items.append({**acc, "iid": iid, "selected": selected})
+        self._refresh_count()
+        if any(i["selected"] for i in self._items):
+            self._run_btn.configure(state="normal")
+
+    # ── Toggle ────────────────────────────────────────────────────────────────
+
+    def _update_item_ui(self, item: dict):
+        idx = self._items.index(item)
+        base_tag = "on" if item["selected"] else "off"
+        tags = ("odd", base_tag) if idx % 2 != 0 else (base_tag,)
+        self._tree.item(item["iid"], values=(
+            "✓" if item["selected"] else "✗",
+            item["name"], item["id"], item.get("da_chi", ""),
+        ), tags=tags)
+
+    def _toggle(self, iid: str):
+        item = next((i for i in self._items if i["iid"] == iid), None)
+        if item is None:
+            return
+        item["selected"] = not item["selected"]
+        self._update_item_ui(item)
+        self._refresh_count()
+        self._run_btn.configure(
+            state="normal" if any(i["selected"] for i in self._items) else "disabled"
+        )
+
+    def _on_click(self, event):
+        iid = self._tree.identify_row(event.y)
+        if iid:
+            self._toggle(iid)
+
+    def _on_space(self, _):
+        for iid in self._tree.selection():
+            self._toggle(iid)
+
+    def _set_all(self, value: bool):
+        for item in self._items:
+            item["selected"] = value
+            self._update_item_ui(item)
+        self._refresh_count()
+        self._run_btn.configure(state="normal" if value and self._items else "disabled")
+
+    def _refresh_count(self):
+        total    = len(self._items)
+        selected = sum(1 for i in self._items if i["selected"])
+        self._count_lbl.configure(
+            text=f"{selected}/{total} được chọn" if total else "Danh sách trống"
+        )
+
+    # ── Run ───────────────────────────────────────────────────────────────────
+
+    def _run(self):
+        accounts = [i for i in self._items if i["selected"]]
+        if not accounts:
+            messagebox.showwarning("Chưa chọn", "Chưa bật tài khoản nào.")
+            return
+        auto_by_spend = self._spend_var.get() if self._spend_var else False
+        self._run_btn.configure(state="disabled")
+        self._progress.start(12)
+        self._set_status(f"Đang chạy {len(accounts)} tài khoản...")
+        threading.Thread(target=self._run_worker,
+                         args=(list(accounts), auto_by_spend), daemon=True).start()
+
+    def _run_worker(self, accounts: list[dict], auto_by_spend: bool = False):
+        try:
+            run_for_accounts(self._spreadsheet, accounts, auto_by_spend=auto_by_spend)
+            self.after(0, self._done)
+        except RateLimitError as e:
+            self.after(0, lambda e=e: self._rate_limited(str(e)))
+        except Exception as e:
+            self.after(0, lambda e=e: self._error(str(e)))
+
+    def _done(self):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._set_status("✓ Hoàn thành!")
+        messagebox.showinfo("Hoàn thành", "Đã lấy xong campaign cho các tài khoản được chọn.")
+
+    def _rate_limited(self, msg: str):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._set_status("⚠ Rate limit — đã lưu dữ liệu", error=True)
+        messagebox.showwarning("Rate Limit", f"{msg}\n\nDữ liệu các tài khoản đã xử lý xong đã được lưu.")
+
+    def _error(self, msg: str):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._set_status(f"✗ Lỗi: {msg}", error=True)
+        messagebox.showerror("Lỗi", msg)
+
+    def _set_status(self, text: str, error: bool = False):
+        self._status_lbl.configure(
+            text=text, foreground="#CC0000" if error else self.MUTED
+        )
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
-    main()
+    if tk is None:
+        sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
+    App().mainloop()

@@ -14,9 +14,13 @@ from collections import OrderedDict
 
 import requests
 
-MAX_RETRIES = 3
-RETRY_BASE_DELAY = 30  # giây; backoff: 30s, 60s, 120s
 RATE_LIMIT_CODES = (4, 17, 32, 613)
+CALL_DELAY = 1.0  # giây nghỉ sau mỗi lần gọi API — tăng lên nếu vẫn bị limit
+
+
+class RateLimitError(RuntimeError):
+    """Facebook trả về rate limit — dừng ngay, không retry."""
+    pass
 
 # ── Bộ đếm toàn cục theo endpoint ────────────────────────────────────────────
 _api_calls: "OrderedDict[str, int]" = OrderedDict()
@@ -42,41 +46,37 @@ def graph_get(url: str, params: dict, label: str | None = None) -> dict:
     global _total_calls
     endpoint = label or _endpoint_label(url)
 
-    attempt = 0
-    while True:
-        _total_calls += 1
-        _api_calls[endpoint] = _api_calls.get(endpoint, 0) + 1
-        print(f"  [API #{_total_calls}] GET {endpoint}"
-              f"  (lần {_api_calls[endpoint]} cho endpoint này)")
+    _total_calls += 1
+    _api_calls[endpoint] = _api_calls.get(endpoint, 0) + 1
+    print(f"  [API #{_total_calls}] GET {endpoint}"
+          f"  (lần {_api_calls[endpoint]} cho endpoint này)")
 
-        resp = requests.get(url, params=params)
-        try:
-            data = resp.json()
-        except ValueError:
-            data = {}
+    resp = requests.get(url, params=params)
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
 
-        if "error" in data:
-            err = data["error"]
-            if err.get("code") in RATE_LIMIT_CODES and attempt < MAX_RETRIES:
-                attempt += 1
-                wait = RETRY_BASE_DELAY * (2 ** (attempt - 1))
-                print(f"    ⏳ Rate limit (code={err.get('code')}). "
-                      f"Chờ {wait}s rồi thử lại ({attempt}/{MAX_RETRIES})...")
-                time.sleep(wait)
-                continue
-
-            print("    --- Facebook usage headers ---")
-            for h in ("X-App-Usage", "X-Business-Use-Case-Usage", "X-Ad-Account-Usage"):
-                if h in resp.headers:
-                    print(f"      {h}: {resp.headers[h]}")
-            raise RuntimeError(
-                f"Facebook API lỗi (HTTP {resp.status_code}): {err.get('message')} "
-                f"[type={err.get('type')}, code={err.get('code')}, "
-                f"subcode={err.get('error_subcode')}]"
+    if "error" in data:
+        err = data["error"]
+        print("    --- Facebook usage headers ---")
+        for h in ("X-App-Usage", "X-Business-Use-Case-Usage", "X-Ad-Account-Usage"):
+            if h in resp.headers:
+                print(f"      {h}: {resp.headers[h]}")
+        if err.get("code") in RATE_LIMIT_CODES:
+            raise RateLimitError(
+                f"Rate limit (code={err.get('code')}): {err.get('message')}"
             )
+        raise RuntimeError(
+            f"Facebook API lỗi (HTTP {resp.status_code}): {err.get('message')} "
+            f"[type={err.get('type')}, code={err.get('code')}, "
+            f"subcode={err.get('error_subcode')}]"
+        )
 
-        resp.raise_for_status()
-        return data
+    resp.raise_for_status()
+    if CALL_DELAY > 0:
+        time.sleep(CALL_DELAY)
+    return data
 
 
 def graph_paginate(url: str, params: dict, label: str | None = None) -> list:
