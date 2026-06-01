@@ -309,15 +309,19 @@ def main(cuoi_thang: bool = False):
 # ── GUI ────────────────────────────────────────────────────────────────────────
 
 class App(tk.Tk):
-    BG     = "#EDF1F7"
-    ACCENT = "#2D6CDF"
-    TEXT   = "#1E293B"
-    MUTED  = "#64748B"
+    BG     = "#eef2f6"
+    ACCENT = "#3b82f6"
+    TEXT   = "#334155"
+    MUTED  = "#64748b"
 
     def __init__(self):
         super().__init__()
         self.title("Cập Nhật Tài Khoản")
-        self.geometry("340x160")
+        
+        w, h = 340, 160
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.resizable(False, False)
         self.configure(bg=self.BG)
 
@@ -328,13 +332,13 @@ class App(tk.Tk):
         s = ttk.Style(self)
         s.theme_use("clam")
         s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(14, 7),
-                    background="#E2E8F0", foreground="#334155", relief="flat")
-        s.map("TButton", background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")])
+                    background="#e2e8f0", foreground=self.TEXT, relief="flat")
+        s.map("TButton", background=[("active", "#cbd5e1"), ("disabled", self.BG)], foreground=[("disabled", self.MUTED)])
         s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(22, 9),
                     background=self.ACCENT, foreground="#FFFFFF", relief="flat")
-        s.map("Accent.TButton", background=[("active", "#1F5AC4"), ("disabled", "#AEC4EC")])
+        s.map("Accent.TButton", background=[("active", "#2563eb"), ("disabled", "#93c5fd")])
         s.configure("TProgressbar", background=self.ACCENT,
-                    troughcolor="#E2E8F0", borderwidth=0, thickness=5)
+                    troughcolor="#cbd5e1", borderwidth=0, thickness=5)
 
         outer = tk.Frame(self, bg=self.BG)
         outer.pack(fill="both", expand=True, padx=20, pady=16)
@@ -383,7 +387,7 @@ class App(tk.Tk):
     def _error(self, msg: str):
         self._progress.stop()
         self._run_btn.configure(state="normal")
-        self._status.configure(text=f"✗ Lỗi: {msg}", fg="#CC0000")
+        self._status.configure(text=f"✗ Lỗi: {msg}", fg="#dc3545")
         messagebox.showerror("Lỗi", msg)
 
 

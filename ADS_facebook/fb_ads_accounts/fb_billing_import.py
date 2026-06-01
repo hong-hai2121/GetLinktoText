@@ -395,20 +395,28 @@ class App(tk.Tk):
         "error":     "✗ Lỗi",
     }
 
-    # ── Bảng màu ───────────────────────────────────────────────────────────
-    BG        = "#EDF1F7"   # nền cửa sổ
-    CARD      = "#FFFFFF"   # nền thẻ
-    BORDER    = "#DCE3EC"   # viền thẻ
-    ACCENT    = "#2D6CDF"   # xanh chủ đạo
-    ACCENT_HV = "#1F5AC4"   # xanh khi hover
-    ACCENT_DIS= "#AEC4EC"   # xanh khi disabled
-    TEXT      = "#1E293B"   # chữ chính
-    MUTED     = "#64748B"   # chữ phụ
+    # ── Bảng màu (Soft Light / Eye Care đồng bộ với hub.py) ────────────────
+    BG         = "#eef2f6"
+    CARD       = "#f8fafc"
+    BORDER     = "#cbd5e1"
+    ACCENT     = "#3b82f6"
+    ACCENT_HV  = "#2563eb"
+    ACCENT_DIS = "#93c5fd"
+    TEXT       = "#334155"
+    MUTED      = "#64748b"
+    GREEN      = "#10b981"
+    YELLOW     = "#f59e0b"
+    RED        = "#ef4444"
+    CODE_BG    = "#f1f5f9"
 
     def __init__(self):
         super().__init__()
         self.title("FB Billing Import → Google Sheet")
-        self.geometry("1200x720")
+        
+        w, h = 1200, 720
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.minsize(960, 600)
         self.configure(bg=self.BG)
 
@@ -434,54 +442,54 @@ class App(tk.Tk):
         s.configure("TLabel",      background=self.BG,
                     font=("Segoe UI", 10), foreground=self.TEXT)
 
-        # Nút thường (xám đậm, viền rõ)
+        # Nút thường
         s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(15, 8),
-                    background="#E2E8F0", foreground="#334155",
-                    bordercolor="#B9C4D4", relief="flat", borderwidth=1)
+                    background=self.BORDER, foreground=self.TEXT,
+                    bordercolor=self.BORDER, relief="flat", borderwidth=1)
         s.map("TButton",
-              background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")],
-              foreground=[("disabled", "#B0B8C4")],
-              bordercolor=[("active", "#94A3B8")])
+              background=[("active", "#cbd5e1"), ("disabled", self.BG)],
+              foreground=[("disabled", self.MUTED)],
+              bordercolor=[("active", "#94a3b8")])
 
-        # Nút phụ nổi bật (accent nhạt) — cho "Thêm file..."
+        # Nút phụ nổi bật
         s.configure("Soft.TButton", font=("Segoe UI", 9, "bold"), padding=(15, 8),
-                    background="#DBE7FB", foreground=self.ACCENT_HV,
-                    bordercolor="#B6CFF6", relief="flat", borderwidth=1)
+                    background="#e0f2fe", foreground=self.ACCENT,
+                    bordercolor=self.BORDER, relief="flat", borderwidth=1)
         s.map("Soft.TButton",
-              background=[("active", "#C7DAFA"), ("disabled", "#EEF3FC")],
-              foreground=[("disabled", "#AEC4EC")],
-              bordercolor=[("active", "#9CBEF3")])
+              background=[("active", "#bae6fd"), ("disabled", self.BG)],
+              foreground=[("disabled", self.MUTED)],
+              bordercolor=[("active", "#7dd3fc")])
 
-        # Nút chính (accent)
+        # Nút chính
         s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"),
                     padding=(24, 10), background=self.ACCENT,
                     foreground="#FFFFFF", relief="flat", borderwidth=0)
         s.map("Accent.TButton",
               background=[("active", self.ACCENT_HV), ("disabled", self.ACCENT_DIS)],
-              foreground=[("disabled", "#EEF2FB")])
+              foreground=[("disabled", "#ffffff")])
 
         # Treeview
         s.configure("Treeview", font=("Segoe UI", 9), rowheight=29,
                     background=self.CARD, fieldbackground=self.CARD,
                     foreground=self.TEXT, borderwidth=0)
         s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
-                    background="#F1F5F9", foreground="#475569",
+                    background=self.BORDER, foreground=self.MUTED,
                     relief="flat", padding=(8, 7))
         s.map("Treeview",
-              background=[("selected", "#DBE7FB")],
-              foreground=[("selected", self.TEXT)])
-        s.map("Treeview.Heading", background=[("active", "#E2E8F0")])
+              background=[("selected", self.ACCENT)],
+              foreground=[("selected", "#ffffff")])
+        s.map("Treeview.Heading", background=[("active", "#cbd5e1")])
 
         # Scrollbar
         for o in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
-            s.configure(o, background="#CBD5E1", troughcolor="#EEF2F7",
-                        bordercolor="#EEF2F7", arrowcolor="#64748B",
+            s.configure(o, background=self.BORDER, troughcolor=self.BG,
+                        bordercolor=self.BG, arrowcolor=self.MUTED,
                         relief="flat", borderwidth=0)
-            s.map(o, background=[("active", "#94A3B8")])
+            s.map(o, background=[("active", "#cbd5e1")])
 
         # Progressbar
         s.configure("TProgressbar", background=self.ACCENT,
-                    troughcolor="#E2E8F0", borderwidth=0, thickness=8)
+                    troughcolor=self.BORDER, borderwidth=0, thickness=8)
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
@@ -509,7 +517,7 @@ class App(tk.Tk):
         # ── Trái: danh sách tab ─────────────────────────────────────────
         left = self._card_frame(paned, "1", "Tab Google Sheet")
         tk.Label(left.body, text="Chọn file ở bảng phải, rồi click tab để gán",
-                 bg=self.CARD, font=("Segoe UI", 8), fg="#94A3B8",
+                 bg=self.CARD, font=("Segoe UI", 8), fg=self.MUTED,
                  anchor="w", justify="left").pack(fill="x", pady=(0, 6))
 
         tab_wrap = tk.Frame(left.body, bg=self.BORDER, bd=0,
@@ -517,7 +525,7 @@ class App(tk.Tk):
         tab_wrap.pack(fill="both", expand=True)
         self._tab_list = tk.Listbox(
             tab_wrap, selectmode="single", font=("Segoe UI", 10),
-            activestyle="none", selectbackground="#DBE7FB", selectforeground=self.TEXT,
+            activestyle="none", selectbackground=self.ACCENT, selectforeground="#ffffff",
             relief="flat", bd=0, highlightthickness=0,
             bg=self.CARD, fg=self.TEXT,
         )
@@ -567,30 +575,30 @@ class App(tk.Tk):
         qvb.grid(row=0, column=1, sticky="ns")
         qhb.grid(row=1, column=0, sticky="ew")
         # Sọc xen kẽ + màu theo trạng thái
-        self._q_tree.tag_configure("odd",       background="#F8FAFC")
-        self._q_tree.tag_configure("loading",   foreground="#94A3B8")
-        self._q_tree.tag_configure("checking",  foreground="#94A3B8")
-        self._q_tree.tag_configure("ready",     foreground="#15803D")
-        self._q_tree.tag_configure("mismatch",  foreground="#D97706")
-        self._q_tree.tag_configure("no_tab",    foreground="#C47A00")
-        self._q_tree.tag_configure("new_tab",   foreground="#7C3AED")
-        self._q_tree.tag_configure("error",     foreground="#DC2626")
-        self._q_tree.tag_configure("done",      foreground="#2563EB")
-        self._q_tree.tag_configure("importing", foreground="#475569")
+        self._q_tree.tag_configure("odd",       background=self.BG)
+        self._q_tree.tag_configure("loading",   foreground=self.MUTED)
+        self._q_tree.tag_configure("checking",  foreground=self.MUTED)
+        self._q_tree.tag_configure("ready",     foreground=self.GREEN)
+        self._q_tree.tag_configure("mismatch",  foreground=self.YELLOW)
+        self._q_tree.tag_configure("no_tab",    foreground=self.YELLOW)
+        self._q_tree.tag_configure("new_tab",   foreground=self.ACCENT)
+        self._q_tree.tag_configure("error",     foreground=self.RED)
+        self._q_tree.tag_configure("done",      foreground=self.GREEN)
+        self._q_tree.tag_configure("importing", foreground=self.TEXT)
         self._q_tree.bind("<<TreeviewSelect>>", self._on_queue_select)
 
         # Info box (chi tiết file đang chọn)
         self._info_box = tk.Text(
             right.body, height=5, font=("Consolas", 9),
-            state="disabled", bg="#F8FAFC", fg=self.TEXT, relief="flat", bd=0,
-            padx=10, pady=8,
+            state="disabled", bg=self.CODE_BG, fg=self.TEXT, relief="flat", bd=0,
+            padx=10, pady=8, insertbackground=self.TEXT,
             highlightthickness=1, highlightcolor=self.BORDER, highlightbackground=self.BORDER,
         )
         self._info_box.pack(fill="x", pady=(8, 0))
-        self._info_box.tag_config("ok",   foreground="#15803D")
-        self._info_box.tag_config("warn", foreground="#C47A00")
-        self._info_box.tag_config("err",  foreground="#DC2626")
-        self._info_box.tag_config("info", foreground="#2563EB")
+        self._info_box.tag_config("ok",   foreground=self.GREEN)
+        self._info_box.tag_config("warn", foreground=self.YELLOW)
+        self._info_box.tag_config("err",  foreground=self.RED)
+        self._info_box.tag_config("info", foreground=self.ACCENT)
         self._info_box.tag_config("dim",  foreground=self.MUTED)
 
         paned.add(right, minsize=440, stretch="always", padx=0, pady=0)
@@ -610,7 +618,7 @@ class App(tk.Tk):
             bot, text="Thay thế dữ liệu cũ", variable=self._replace_var,
             bg=self.BG, fg=self.TEXT, font=("Segoe UI", 9),
             activebackground=self.BG, activeforeground=self.TEXT,
-            selectcolor=self.CARD, relief="flat", bd=0,
+            selectcolor=self.BORDER, relief="flat", bd=0,
             highlightthickness=0, cursor="hand2", takefocus=0,
         )
         self._replace_chk.pack(side="left", padx=(14, 0))
@@ -964,7 +972,7 @@ class App(tk.Tk):
         dlg.result = False
 
         tk.Label(dlg, text="⚠  Một số file có cột KHÁC với tab Google Sheet",
-                 bg=self.CARD, fg="#B45309", font=("Segoe UI Semibold", 12)
+                 bg=self.CARD, fg=self.YELLOW, font=("Segoe UI Semibold", 12)
                  ).pack(anchor="w", padx=18, pady=(16, 4))
         tk.Label(dlg,
                  text="Hãy kiểm tra xem có gán nhầm file vào sai tab không trước khi tiếp tục.",
@@ -975,21 +983,21 @@ class App(tk.Tk):
             tk.Label(dlg,
                      text="⚠ Chế độ THAY THẾ đang bật: toàn bộ dữ liệu cũ trong các tab "
                           "trên sẽ bị XÓA trước khi import.",
-                     bg=self.CARD, fg="#DC2626", font=("Segoe UI Semibold", 9),
+                     bg=self.CARD, fg=self.RED, font=("Segoe UI Semibold", 9),
                      justify="left", wraplength=560
                      ).pack(anchor="w", padx=18, pady=(0, 10))
 
         # Vùng cuộn liệt kê chi tiết
         box = tk.Text(dlg, width=84, height=16, font=("Consolas", 9),
-                      bg="#F8FAFC", fg=self.TEXT, relief="flat", bd=0,
-                      padx=10, pady=8, wrap="word",
+                      bg=self.CODE_BG, fg=self.TEXT, relief="flat", bd=0,
+                      padx=10, pady=8, wrap="word", insertbackground=self.TEXT,
                       highlightthickness=1, highlightbackground=self.BORDER)
         sb = ttk.Scrollbar(dlg, orient="vertical", command=box.yview)
         box.configure(yscrollcommand=sb.set)
         box.pack(side="top", fill="both", expand=True, padx=(18, 0), pady=(0, 6))
         sb.place(in_=box, relx=1.0, rely=0, relheight=1.0, anchor="ne")
         box.tag_config("file", foreground=self.TEXT, font=("Consolas", 9, "bold"))
-        box.tag_config("warn", foreground="#B45309")
+        box.tag_config("warn", foreground=self.YELLOW)
         box.tag_config("dim",  foreground=self.MUTED)
 
         for it in mismatched:
@@ -1082,7 +1090,7 @@ class App(tk.Tk):
 
     def _set_status(self, text: str, error: bool = False):
         self._status_lbl.configure(
-            text=text, foreground="#CC0000" if error else "#555555")
+            text=text, foreground=self.RED if error else self.MUTED)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────

@@ -29,17 +29,17 @@ PRESETS = [
 PRESET_LABELS = [p[0] for p in PRESETS]
 PRESET_MAP    = {p[0]: p[1] for p in PRESETS}
 
-# ── Palette ────────────────────────────────────────────────────────────────────
-BG      = "#0f1117"
-SURFACE = "#1a1d27"
-BORDER  = "#2a2d3a"
-ACCENT  = "#4f8ef7"
-GREEN   = "#3ecf8e"
-YELLOW  = "#f0a500"
-RED     = "#e05260"
-TEXT    = "#d4d8e8"
-MUTED   = "#7a7f96"
-CODE_BG = "#131620"
+# ── Palette (Soft Light / Eye Care) ───────────────────────────────────────────
+BG         = "#eef2f6"
+SURFACE    = "#f8fafc"
+BORDER     = "#cbd5e1"
+ACCENT     = "#3b82f6"
+GREEN      = "#10b981"
+YELLOW     = "#f59e0b"
+RED        = "#ef4444"
+TEXT       = "#334155"
+MUTED      = "#64748b"
+CODE_BG    = "#f1f5f9"
 
 
 def write_config(date_preset: str, time_range: dict | None):
@@ -99,7 +99,11 @@ class App(tk.Tk):
         super().__init__()
         self.title("FB Ads Data Pipeline")
         self.configure(bg=BG)
-        self.geometry("700x660")
+        
+        w, h = 700, 660
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.resizable(True, True)
         self.minsize(600, 520)
 
@@ -148,38 +152,38 @@ class App(tk.Tk):
                  font=("Segoe UI", 9), width=8, anchor="w").pack(side="left")
 
         style = ttk.Style()
-        style.configure("Dark.TCombobox",
-                        fieldbackground=BORDER, background=BORDER,
+        style.configure("Modern.TCombobox",
+                        fieldbackground=SURFACE, background=SURFACE,
                         foreground=TEXT, selectbackground=ACCENT,
                         selectforeground="white", arrowcolor=MUTED)
-        style.map("Dark.TCombobox",
-                  fieldbackground=[("readonly", BORDER)],
+        style.map("Modern.TCombobox",
+                  fieldbackground=[("readonly", SURFACE)],
                   selectbackground=[("readonly", ACCENT)])
 
         self.preset_cb = ttk.Combobox(
             self.row_preset, textvariable=self.preset_var,
             values=PRESET_LABELS, state="readonly", width=24,
-            style="Dark.TCombobox")
+            style="Modern.TCombobox")
         self.preset_cb.pack(side="left", padx=(0, 0))
 
         # Custom row
         self.row_custom = tk.Frame(c1, bg=SURFACE)
         self.row_custom.pack(fill="x", pady=(0, 0))
 
-        style.configure("Dark.TEntry",
-                        fieldbackground=BORDER, foreground=TEXT,
-                        insertbackground=TEXT)
+        style.configure("Modern.TEntry",
+                        fieldbackground=SURFACE, foreground=TEXT,
+                        insertbackground=TEXT, bordercolor=BORDER)
 
         tk.Label(self.row_custom, text="Từ ngày:", bg=SURFACE, fg=MUTED,
                  font=("Segoe UI", 9), width=8, anchor="w").pack(side="left")
         self.since_e = ttk.Entry(self.row_custom, textvariable=self.since_var,
-                                 width=13, style="Dark.TEntry")
+                                 width=13, style="Modern.TEntry")
         self.since_e.pack(side="left")
 
         tk.Label(self.row_custom, text="Đến ngày:", bg=SURFACE, fg=MUTED,
                  font=("Segoe UI", 9)).pack(side="left", padx=(16, 0))
         self.until_e = ttk.Entry(self.row_custom, textvariable=self.until_var,
-                                 width=13, style="Dark.TEntry")
+                                 width=13, style="Modern.TEntry")
         self.until_e.pack(side="left")
 
         tk.Label(self.row_custom, text="(YYYY-MM-DD)", bg=SURFACE, fg=MUTED,
@@ -209,7 +213,7 @@ class App(tk.Tk):
         self.run_btn = tk.Button(
             btn_row, text="▶   Chạy ngay",
             bg=ACCENT, fg="white",
-            activebackground="#3a7de8", activeforeground="white",
+            activebackground="#2563eb", activeforeground="white",
             font=("Segoe UI", 11, "bold"), relief="flat", bd=0,
             padx=28, pady=10, cursor="hand2",
             command=self._run)

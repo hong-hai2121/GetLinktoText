@@ -371,19 +371,23 @@ def _apply_format(out_ws, spreadsheet):
 # ── GUI ───────────────────────────────────────────────────────────────────────
 
 class App(tk.Tk):
-    BG        = "#EDF1F7"
-    CARD      = "#FFFFFF"
-    BORDER    = "#DCE3EC"
-    ACCENT    = "#2D6CDF"
-    ACCENT_HV = "#1F5AC4"
-    ACCENT_DIS= "#AEC4EC"
-    TEXT      = "#1E293B"
-    MUTED     = "#64748B"
+    BG         = "#eef2f6"
+    CARD       = "#f8fafc"
+    BORDER     = "#cbd5e1"
+    ACCENT     = "#3b82f6"
+    ACCENT_HV  = "#2563eb"
+    ACCENT_DIS = "#93c5fd"
+    TEXT       = "#334155"
+    MUTED      = "#64748b"
 
     def __init__(self):
         super().__init__()
         self.title("Tổng Hợp – Chọn Tab Sheet")
-        self.geometry("680x520")
+        
+        w, h = 680, 520
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.minsize(520, 380)
         self.configure(bg=self.BG)
         self.resizable(True, True)
@@ -405,28 +409,28 @@ class App(tk.Tk):
         s.configure("TLabel",      background=self.BG,
                     font=("Segoe UI", 10), foreground=self.TEXT)
         s.configure("TButton",     font=("Segoe UI", 9, "bold"), padding=(14, 7),
-                    background="#E2E8F0", foreground="#334155",
-                    bordercolor="#B9C4D4", relief="flat", borderwidth=1)
+                    background=self.BORDER, foreground=self.TEXT,
+                    bordercolor=self.BORDER, relief="flat", borderwidth=1)
         s.map("TButton",
-              background=[("active", "#CBD5E1"), ("disabled", "#F1F5F9")],
-              foreground=[("disabled", "#B0B8C4")])
+              background=[("active", "#cbd5e1"), ("disabled", self.BG)],
+              foreground=[("disabled", self.MUTED)])
         s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"),
                     padding=(22, 9), background=self.ACCENT,
                     foreground="#FFFFFF", relief="flat", borderwidth=0)
         s.map("Accent.TButton",
               background=[("active", self.ACCENT_HV), ("disabled", self.ACCENT_DIS)],
-              foreground=[("disabled", "#EEF2FB")])
+              foreground=[("disabled", "#ffffff")])
         s.configure("Treeview", font=("Segoe UI", 9), rowheight=28,
                     background=self.CARD, fieldbackground=self.CARD,
                     foreground=self.TEXT, borderwidth=0)
         s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
-                    background="#F1F5F9", foreground="#475569",
+                    background=self.BORDER, foreground=self.MUTED,
                     relief="flat", padding=(8, 6))
         s.map("Treeview",
-              background=[("selected", "#DBE7FB")],
-              foreground=[("selected", self.TEXT)])
+              background=[("selected", self.ACCENT)],
+              foreground=[("selected", "#ffffff")])
         s.configure("TProgressbar", background=self.ACCENT,
-                    troughcolor="#E2E8F0", borderwidth=0, thickness=6)
+                    troughcolor=self.BORDER, borderwidth=0, thickness=6)
 
     # ── Layout ────────────────────────────────────────────────────────────────
 
@@ -476,9 +480,9 @@ class App(tk.Tk):
         vsb.grid(row=0, column=1, sticky="ns")
         hsb.grid(row=1, column=0, sticky="ew")
 
-        self._tree.tag_configure("found",   foreground="#15803D")
-        self._tree.tag_configure("missing", foreground="#DC2626")
-        self._tree.tag_configure("odd",     background="#F8FAFC")
+        self._tree.tag_configure("found",   foreground="#198754")
+        self._tree.tag_configure("missing", foreground="#dc3545")
+        self._tree.tag_configure("odd",     background="#f1f3f5")
 
         # Double-click → copy tên tab; chuột phải → menu copy
         self._tree.bind("<Double-1>", self._on_double_click)
@@ -681,7 +685,7 @@ class App(tk.Tk):
 
     def _set_status(self, text: str, error: bool = False):
         self._status_lbl.configure(
-            text=text, foreground="#CC0000" if error else self.MUTED
+            text=text, foreground="#dc3545" if error else self.MUTED
         )
 
 

@@ -46,19 +46,19 @@ PRESETS = [
 PRESET_LABELS = [p[0] for p in PRESETS]
 PRESET_MAP    = {p[0]: p[1] for p in PRESETS}
 
-# ── Palette (dark) ─────────────────────────────────────────────────────────────
-BG       = "#0f1117"
-SIDEBAR  = "#151823"
-SURFACE  = "#1a1d27"
-BORDER   = "#2a2d3a"
-ACCENT   = "#4f8ef7"
-ACCENT_HV= "#3a7de8"
-GREEN    = "#3ecf8e"
-YELLOW   = "#f0a500"
-RED      = "#e05260"
-TEXT     = "#d4d8e8"
-MUTED    = "#7a7f96"
-CODE_BG  = "#0b0d14"
+# ── Palette (Soft Light / Eye Care) ─────────────────────────────────────────
+BG       = "#eef2f6"  # Xám xanh nhạt dịu mắt
+SIDEBAR  = "#f8fafc"  # Trắng ngà (slate-50) thay vì trắng tinh
+SURFACE  = "#f8fafc"
+BORDER   = "#cbd5e1"  # Viền mềm hơn (slate-300)
+ACCENT   = "#3b82f6"  # blue-500
+ACCENT_HV= "#2563eb"  # blue-600
+GREEN    = "#10b981"
+YELLOW   = "#f59e0b"
+RED      = "#ef4444"
+TEXT     = "#334155"  # Giảm tương phản gắt của chữ đen (slate-700)
+MUTED    = "#64748b"  # slate-500
+CODE_BG  = "#f1f5f9"  # Nền code block (slate-100)
 
 
 def write_config(date_preset: str, time_range: dict | None):
@@ -150,12 +150,16 @@ class Hub(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("FB Ads Suite — Trung Tâm Điều Khiển")
-        self.geometry("1040x720")
+        
+        w, h = 1040, 720
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.minsize(880, 600)
         self.configure(bg=BG)
 
         self._running = False
-        self._nav_btns: dict[str, tk.Label] = {}
+        self._nav_btns: dict[str, tuple] = {}
         self._active = None
 
         # State khoảng thời gian (dùng chung Phase 1 & 2)
@@ -179,13 +183,13 @@ class Hub(tk.Tk):
     def _styles(self):
         s = ttk.Style(self)
         s.theme_use("clam")
-        s.configure("Dark.TCombobox",
-                    fieldbackground=BORDER, background=BORDER, foreground=TEXT,
+        s.configure("Modern.TCombobox",
+                    fieldbackground=SURFACE, background=SURFACE, foreground=TEXT,
                     selectbackground=ACCENT, selectforeground="white", arrowcolor=MUTED)
-        s.map("Dark.TCombobox",
-              fieldbackground=[("readonly", BORDER)],
+        s.map("Modern.TCombobox",
+              fieldbackground=[("readonly", SURFACE)],
               selectbackground=[("readonly", ACCENT)])
-        s.configure("Dark.TEntry", fieldbackground=BORDER, foreground=TEXT,
+        s.configure("Modern.TEntry", fieldbackground=SURFACE, foreground=TEXT,
                     insertbackground=TEXT, bordercolor=BORDER)
 
     # ── Build khung chính ─────────────────────────────────────────────────────
@@ -194,27 +198,44 @@ class Hub(tk.Tk):
         self.rowconfigure(0, weight=1)
 
         # Sidebar
-        side = tk.Frame(self, bg=SIDEBAR, width=240)
+        side = tk.Frame(self, bg=SIDEBAR, width=260)
         side.grid(row=0, column=0, sticky="ns")
         side.grid_propagate(False)
 
-        tk.Label(side, text="FB Ads Suite", bg=SIDEBAR, fg=TEXT,
-                 font=("Segoe UI", 14, "bold")).pack(anchor="w", padx=20, pady=(20, 2))
+        # Viền mờ ngăn cách sidebar và main
+        side_border = tk.Frame(side, bg=BORDER, width=1)
+        side_border.place(relx=1.0, rely=0, relheight=1.0, anchor="ne")
+
+        tk.Label(side, text="FB Ads Suite", bg=SIDEBAR, fg=ACCENT,
+                 font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=24, pady=(24, 2))
         tk.Label(side, text="Trung tâm điều khiển", bg=SIDEBAR, fg=MUTED,
-                 font=("Segoe UI", 8)).pack(anchor="w", padx=20, pady=(0, 14))
+                 font=("Segoe UI", 9)).pack(anchor="w", padx=24, pady=(0, 20))
 
         for group, items in NAV:
             tk.Label(side, text=group, bg=SIDEBAR, fg=MUTED,
-                     font=("Segoe UI", 7, "bold")).pack(anchor="w", padx=20, pady=(12, 2))
+                     font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=24, pady=(16, 6))
             for key, label, _script in items:
-                lbl = tk.Label(side, text=label, bg=SIDEBAR, fg=TEXT,
+                row = tk.Frame(side, bg=SIDEBAR)
+                row.pack(fill="x", padx=12, pady=2)
+                
+                ind = tk.Frame(row, bg=SIDEBAR, width=4)
+                ind.pack(side="left", fill="y", pady=4)
+                
+                lbl = tk.Label(row, text=label, bg=SIDEBAR, fg=TEXT,
                                font=("Segoe UI", 10), anchor="w", cursor="hand2",
-                               padx=20, pady=7)
-                lbl.pack(fill="x")
-                lbl.bind("<Button-1>", lambda e, k=key: self._show(k))
-                lbl.bind("<Enter>", lambda e, w=lbl: self._hover(w, True))
-                lbl.bind("<Leave>", lambda e, w=lbl: self._hover(w, False))
-                self._nav_btns[key] = lbl
+                               padx=12, pady=8)
+                lbl.pack(side="left", fill="x", expand=True)
+                
+                def on_click(e, k=key): self._show(k)
+                def on_enter(e, r=row): self._hover(r, True)
+                def on_leave(e, r=row): self._hover(r, False)
+                
+                for w in (row, ind, lbl):
+                    w.bind("<Button-1>", on_click)
+                    w.bind("<Enter>", on_enter)
+                    w.bind("<Leave>", on_leave)
+                
+                self._nav_btns[key] = (row, ind, lbl)
 
         # Main column
         main = tk.Frame(self, bg=BG)
@@ -225,56 +246,67 @@ class Hub(tk.Tk):
 
         # Header
         hdr = tk.Frame(main, bg=BG)
-        hdr.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 4))
+        hdr.grid(row=0, column=0, sticky="ew", padx=32, pady=(28, 4))
         self.title_lbl = tk.Label(hdr, text="", bg=BG, fg=TEXT,
-                                   font=("Segoe UI", 15, "bold"))
+                                   font=("Segoe UI", 18, "bold"))
         self.title_lbl.pack(side="left")
-        self.status_lbl = tk.Label(hdr, text="", bg=BG, fg=MUTED, font=("Segoe UI", 9))
-        self.status_lbl.pack(side="right")
+        self.status_lbl = tk.Label(hdr, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
+        self.status_lbl.pack(side="right", pady=(6, 0))
         self.subtitle_lbl = tk.Label(main, text="", bg=BG, fg=MUTED,
-                                     font=("Segoe UI", 9), anchor="w", justify="left")
-        self.subtitle_lbl.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 8))
+                                     font=("Segoe UI", 10), anchor="w", justify="left")
+        self.subtitle_lbl.grid(row=1, column=0, sticky="ew", padx=32, pady=(0, 16))
 
         # Content (rebuilt per page)
         self.content = tk.Frame(main, bg=BG)
-        self.content.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 8))
+        self.content.grid(row=2, column=0, sticky="nsew", padx=32, pady=(0, 8))
 
         # Console
         cwrap = tk.Frame(main, bg=BG)
-        cwrap.grid(row=3, column=0, sticky="nsew", padx=24, pady=(0, 18))
+        cwrap.grid(row=3, column=0, sticky="nsew", padx=32, pady=(0, 24))
         cwrap.rowconfigure(1, weight=1)
         cwrap.columnconfigure(0, weight=1)
         chdr = tk.Frame(cwrap, bg=BG)
-        chdr.grid(row=0, column=0, sticky="ew")
+        chdr.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         tk.Label(chdr, text="OUTPUT", bg=BG, fg=MUTED,
-                 font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Button(chdr, text="Xoá", bg=SURFACE, fg=MUTED, relief="flat", bd=0,
-                  font=("Segoe UI", 8), cursor="hand2", padx=10,
-                  activebackground=BORDER, activeforeground=TEXT,
+                 font=("Segoe UI", 9, "bold")).pack(side="left")
+        tk.Button(chdr, text="Xoá", bg=BG, fg=MUTED, relief="flat", bd=0,
+                  font=("Segoe UI", 9, "underline"), cursor="hand2", padx=10,
+                  activebackground=BG, activeforeground=TEXT,
                   command=self._clear_console).pack(side="right")
         self.console = scrolledtext.ScrolledText(
             cwrap, bg=CODE_BG, fg=TEXT, insertbackground=TEXT,
-            font=("Consolas", 9), relief="flat", bd=0, wrap="word", state="disabled",
+            font=("Cascadia Code", 9), relief="flat", bd=0, wrap="word", state="disabled",
             highlightbackground=BORDER, highlightthickness=1, height=10)
-        self.console.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        self.console.grid(row=1, column=0, sticky="nsew")
         self.console.tag_config("ok",    foreground=GREEN)
         self.console.tag_config("err",   foreground=RED)
         self.console.tag_config("warn",  foreground=YELLOW)
         self.console.tag_config("muted", foreground=MUTED)
 
-    def _hover(self, widget, on):
-        if widget is self._nav_btns.get(self._active):
+    def _hover(self, row, on):
+        key = next(k for k, v in self._nav_btns.items() if v[0] == row)
+        if key == self._active:
             return
-        widget.configure(bg=BORDER if on else SIDEBAR)
+        bg_color = CODE_BG if on else SIDEBAR
+        r, ind, lbl = self._nav_btns[key]
+        r.configure(bg=bg_color)
+        lbl.configure(bg=bg_color)
+        ind.configure(bg=bg_color)
 
     # ── Điều hướng ────────────────────────────────────────────────────────────
     def _show(self, key: str):
         if self._active and self._active in self._nav_btns:
-            self._nav_btns[self._active].configure(bg=SIDEBAR, fg=TEXT)
+            r, ind, lbl = self._nav_btns[self._active]
+            r.configure(bg=SIDEBAR)
+            lbl.configure(bg=SIDEBAR, fg=TEXT, font=("Segoe UI", 10))
+            ind.configure(bg=SIDEBAR)
+
         self._active = key
-        btn = self._nav_btns.get(key)
-        if btn:
-            btn.configure(bg=ACCENT, fg="white")
+        if key in self._nav_btns:
+            r, ind, lbl = self._nav_btns[key]
+            r.configure(bg="#e0f2fe")  # Nền xanh nhạt dịu hơn
+            lbl.configure(bg="#e0f2fe", fg=ACCENT, font=("Segoe UI", 10, "bold"))
+            ind.configure(bg=ACCENT)   # Indicator xanh đậm
 
         for w in self.content.winfo_children():
             w.destroy()
@@ -291,29 +323,29 @@ class Hub(tk.Tk):
     def _card(self, parent=None) -> tk.Frame:
         parent = parent or self.content
         c = tk.Frame(parent, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
-        c.pack(fill="x", pady=(0, 12))
+        c.pack(fill="x", pady=(0, 16))
         return c
 
     def _primary_btn(self, parent, text, command) -> tk.Button:
         b = tk.Button(parent, text=text, bg=ACCENT, fg="white",
                       activebackground=ACCENT_HV, activeforeground="white",
-                      font=("Segoe UI", 11, "bold"), relief="flat", bd=0,
-                      padx=26, pady=10, cursor="hand2", command=command)
+                      font=("Segoe UI", 10, "bold"), relief="flat", bd=0,
+                      padx=24, pady=10, cursor="hand2", command=command)
         return b
 
     def _entry(self, parent, var, width=46):
-        return ttk.Entry(parent, textvariable=var, width=width, style="Dark.TEntry")
+        return ttk.Entry(parent, textvariable=var, width=width, style="Modern.TEntry")
 
     def _desc(self, parent, text):
         tk.Label(parent, text=text, bg=SURFACE, fg=TEXT, font=("Segoe UI", 10),
-                 justify="left", anchor="w", wraplength=640).pack(
-                 anchor="w", padx=16, pady=(14, 10))
+                 justify="left", anchor="w", wraplength=660).pack(
+                 anchor="w", padx=20, pady=(16, 12))
 
     def _date_bar(self, parent):
         """Thanh chọn khoảng thời gian dùng cho Phase 1 & 2."""
         card = self._card(parent)
-        tk.Label(card, text="KHOẢNG THỜI GIAN", bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=16, pady=(12, 4))
+        tk.Label(card, text="KHOẢNG THỜI GIAN", bg=SURFACE, fg=TEXT,
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=20, pady=(16, 4))
 
         row = tk.Frame(card, bg=SURFACE)
         row.pack(fill="x", padx=16, pady=(0, 6))
@@ -324,11 +356,11 @@ class Hub(tk.Tk):
                        cursor="hand2").pack(side="left")
         self.preset_cb = ttk.Combobox(row, textvariable=self.preset_var,
                                        values=PRESET_LABELS, state="readonly",
-                                       width=18, style="Dark.TCombobox")
+                                       width=18, style="Modern.TCombobox")
         self.preset_cb.pack(side="left", padx=(8, 0))
 
         row2 = tk.Frame(card, bg=SURFACE)
-        row2.pack(fill="x", padx=16, pady=(0, 14))
+        row2.pack(fill="x", padx=16, pady=(0, 20))
         tk.Radiobutton(row2, text="Tuỳ chỉnh", variable=self.mode_var, value="custom",
                        command=self._toggle_dates, bg=SURFACE, fg=TEXT,
                        selectcolor=BORDER, activebackground=SURFACE,
@@ -381,27 +413,27 @@ class Hub(tk.Tk):
         for key, title, script, desc in FUNC_INFO:
             card = tk.Frame(inner, bg=SURFACE, highlightbackground=BORDER,
                             highlightthickness=1, cursor="hand2")
-            card.pack(fill="x", pady=(0, 10), padx=(0, 4))
+            card.pack(fill="x", pady=(0, 12), padx=(0, 4))
 
             top = tk.Frame(card, bg=SURFACE)
-            top.pack(fill="x", padx=14, pady=(11, 2))
-            t = tk.Label(top, text=title, bg=SURFACE, fg=TEXT,
+            top.pack(fill="x", padx=20, pady=(16, 4))
+            t = tk.Label(top, text=title, bg=SURFACE, fg=ACCENT,
                          font=("Segoe UI", 11, "bold"))
             t.pack(side="left")
             s = tk.Label(top, text=script, bg=SURFACE, fg=MUTED,
-                         font=("Consolas", 8))
+                         font=("Consolas", 9))
             s.pack(side="right")
-            d = tk.Label(card, text=desc, bg=SURFACE, fg=MUTED,
+            d = tk.Label(card, text=desc, bg=SURFACE, fg=TEXT,
                          font=("Segoe UI", 9), justify="left", anchor="w",
-                         wraplength=600)
-            d.pack(fill="x", padx=14, pady=(0, 12))
+                         wraplength=620)
+            d.pack(fill="x", padx=20, pady=(0, 16))
 
             # Bấm bất kỳ đâu trong thẻ → mở tab
             for w in (card, top, t, s, d):
                 w.bind("<Button-1>", lambda e, k=key: self._show(k))
             # Hover sáng viền
             def _enter(e, c=card):
-                c.configure(highlightbackground=ACCENT)
+                c.configure(highlightbackground=ACCENT_HV)
             def _leave(e, c=card):
                 c.configure(highlightbackground=BORDER)
             for w in (card, top, t, s, d):
@@ -418,7 +450,7 @@ class Hub(tk.Tk):
                        variable=self.cuoi_thang_var, bg=SURFACE, fg=TEXT,
                        selectcolor=BORDER, activebackground=SURFACE,
                        activeforeground=TEXT, font=("Segoe UI", 10),
-                       cursor="hand2").pack(anchor="w", padx=16, pady=(0, 12))
+                       cursor="hand2").pack(anchor="w", padx=20, pady=(0, 20))
         self._primary_btn(
             self.content, "▶  Cập nhật ngay",
             lambda: self._run_stream(
