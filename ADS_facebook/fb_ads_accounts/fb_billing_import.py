@@ -304,32 +304,37 @@ def _format_text_columns(worksheet, headers: list):
         worksheet.spreadsheet.batch_update({"requests": requests})
 
 
-def upsert(worksheet, csv_headers: list, csv_rows: list) -> dict:
+def upsert(worksheet, csv_headers: list, csv_rows: list, replace: bool = False) -> dict:
     # Lookup chuẩn hóa: "Số tiền" ≈ "Số tiền (₫)"
     csv_norm_map = {_normalize(h): h for h in csv_headers}
 
-    existing = worksheet.get_all_values()
-    if existing:
-        sheet_hdr  = existing[0]
-        sheet_body = [list(r) for r in existing[1:]]
-    else:
-        sheet_hdr  = []
-        sheet_body = []
-
-    if not sheet_hdr:
+    if replace:
+        # Thay thế toàn bộ: bỏ qua dữ liệu cũ, header + dòng lấy hết từ file
         sheet_hdr  = list(csv_headers)
         sheet_body = []
     else:
-        # Thêm cột mới từ CSV nếu chưa có trong sheet
-        sheet_norm = {_normalize(h) for h in sheet_hdr}
-        for h in csv_headers:
-            if _normalize(h) not in sheet_norm:
-                sheet_hdr.append(h)
-                sheet_norm.add(_normalize(h))
-        ncols = len(sheet_hdr)
-        for r in sheet_body:
-            while len(r) < ncols:
-                r.append("")
+        existing = worksheet.get_all_values()
+        if existing:
+            sheet_hdr  = existing[0]
+            sheet_body = [list(r) for r in existing[1:]]
+        else:
+            sheet_hdr  = []
+            sheet_body = []
+
+        if not sheet_hdr:
+            sheet_hdr  = list(csv_headers)
+            sheet_body = []
+        else:
+            # Thêm cột mới từ CSV nếu chưa có trong sheet
+            sheet_norm = {_normalize(h) for h in sheet_hdr}
+            for h in csv_headers:
+                if _normalize(h) not in sheet_norm:
+                    sheet_hdr.append(h)
+                    sheet_norm.add(_normalize(h))
+            ncols = len(sheet_hdr)
+            for r in sheet_body:
+                while len(r) < ncols:
+                    r.append("")
 
     id_idx = sheet_hdr.index(ID_COL) if ID_COL in sheet_hdr else None
     existing_ids: dict = {}
@@ -384,6 +389,7 @@ class App(tk.Tk):
         "ready":     "✓ Sẵn sàng",
         "mismatch":  "⚠ Cột khác",
         "no_tab":    "⚠ Chưa có tab",
+        "new_tab":   "✨ Tab mới tạo",
         "importing": "Đang import...",
         "done":      "✓ Hoàn tất",
         "error":     "✗ Lỗi",
@@ -567,6 +573,7 @@ class App(tk.Tk):
         self._q_tree.tag_configure("ready",     foreground="#15803D")
         self._q_tree.tag_configure("mismatch",  foreground="#D97706")
         self._q_tree.tag_configure("no_tab",    foreground="#C47A00")
+        self._q_tree.tag_configure("new_tab",   foreground="#7C3AED")
         self._q_tree.tag_configure("error",     foreground="#DC2626")
         self._q_tree.tag_configure("done",      foreground="#2563EB")
         self._q_tree.tag_configure("importing", foreground="#475569")
@@ -596,6 +603,18 @@ class App(tk.Tk):
             style="Accent.TButton", command=self._run_import_all, state="disabled",
         )
         self._import_btn.pack(side="left")
+
+        # Checkbox: thay thế toàn bộ dữ liệu cũ trong tab trước khi import
+        self._replace_var = tk.BooleanVar(value=False)
+        self._replace_chk = tk.Checkbutton(
+            bot, text="Thay thế dữ liệu cũ", variable=self._replace_var,
+            bg=self.BG, fg=self.TEXT, font=("Segoe UI", 9),
+            activebackground=self.BG, activeforeground=self.TEXT,
+            selectcolor=self.CARD, relief="flat", bd=0,
+            highlightthickness=0, cursor="hand2", takefocus=0,
+        )
+        self._replace_chk.pack(side="left", padx=(14, 0))
+
         self._progress = ttk.Progressbar(bot, mode="indeterminate", length=170)
         self._progress.pack(side="left", padx=14)
         self._result_lbl = tk.Label(bot, text="", bg=self.BG,
@@ -666,16 +685,16 @@ class App(tk.Tk):
 
     @staticmethod
     def _tab_candidates_from_stem(stem: str) -> list:
-        candidates = []
+        """Tên tab = phần trước hậu tố '_fb_billing...'. Giữ nguyên phần '(ID)'.
+
+        KHÔNG cắt ngắn về tên trước dấu '(' — phần '(ID tài khoản)' là một phần
+        của tên tab. Cắt ngắn dễ trỏ nhầm sang một tab khác có cột khác.
+        Ví dụ: 'Tk2 A Hải +7 (796502949963935)_fb_billing_DANH_SACH_2026-06-01'
+               → 'Tk2 A Hải +7 (796502949963935)'
+        """
         m = re.match(r'^(.+?)_fb_billing', stem, re.IGNORECASE)
-        if m:
-            candidates.append(m.group(1).strip())
-        m2 = re.match(r'^(.+?)\s*\(', stem)
-        if m2:
-            short = m2.group(1).strip()
-            if short not in candidates:
-                candidates.append(short)
-        return candidates
+        name = m.group(1).strip() if m else stem.strip()
+        return [name] if name else []
 
     @staticmethod
     def _norm_for_match(s: str) -> str:
@@ -708,9 +727,12 @@ class App(tk.Tk):
             p = Path(path_str)
             if any(i["path"] == p for i in self._queue):
                 continue  # bỏ qua file trùng
-            ws   = self._find_ws(self._tab_candidates_from_stem(p.stem))
+            candidates = self._tab_candidates_from_stem(p.stem)
+            ws         = self._find_ws(candidates)
+            pending    = candidates[0] if not ws and candidates else ""
             item = {
                 "path": p, "ws": ws,
+                "pending_tab_name": pending, "is_new_tab": False,
                 "headers": [], "rows": [],
                 "sheet_headers": None, "analysis": None,
                 "status": "loading", "error": "", "iid": "",
@@ -727,18 +749,33 @@ class App(tk.Tk):
 
     def _load_file_worker(self, item: dict):
         try:
-            headers, rows  = read_file(item["path"])
+            headers, rows   = read_file(item["path"])
             item["headers"] = headers
             item["rows"]    = rows
-            item["status"]  = "checking" if item["ws"] else "no_tab"
+            if item["ws"]:
+                item["status"] = "checking"
+            elif item.get("pending_tab_name"):
+                ncols = max(len(headers), 1)            # số cột = số cột file import
+                nrows = max(len(rows) + 1, 100)         # +1 dòng header
+                new_ws = self._spreadsheet.add_worksheet(
+                    title=item["pending_tab_name"], rows=nrows, cols=ncols
+                )
+                item["ws"]         = new_ws
+                item["is_new_tab"] = True
+                item["status"]     = "new_tab"
+            else:
+                item["status"] = "no_tab"
         except Exception as e:
             item["status"] = "error"
             item["error"]  = str(e)
         self.after(0, lambda i=item: self._on_file_loaded(i))
 
     def _on_file_loaded(self, item: dict):
+        if item.get("is_new_tab") and item["ws"]:
+            self._worksheets.append(item["ws"])
+            self._tab_list.insert("end", item["ws"].title)
         self._refresh_tree_row(item)
-        if item["status"] == "checking" and item["ws"]:
+        if item["status"] in ("checking", "new_tab") and item["ws"]:
             self._ensure_analysis(item)   # đã có tab → so cột với sheet
         self._refresh_import_btn()
 
@@ -784,8 +821,9 @@ class App(tk.Tk):
     def _compute_analysis(self, item: dict):
         a = analyze_structure(item["headers"], item["sheet_headers"] or [])
         item["analysis"] = a
-        # sheet trống → không có gì để lệch; có khác cột → cảnh báo
-        if a["sheet_empty"] or (not a["new_cols"] and not a["missing"]):
+        if item.get("is_new_tab"):
+            item["status"] = "new_tab"   # giữ trạng thái tab mới tạo
+        elif a["sheet_empty"] or (not a["new_cols"] and not a["missing"]):
             item["status"] = "ready"
         else:
             item["status"] = "mismatch"
@@ -815,7 +853,7 @@ class App(tk.Tk):
                           tags=tags)
 
     def _refresh_import_btn(self):
-        ok = any(i["ws"] and i["status"] in ("ready", "mismatch")
+        ok = any(i["ws"] and i["status"] in ("ready", "mismatch", "new_tab")
                  for i in self._queue)
         self._import_btn.configure(state="normal" if ok else "disabled")
 
@@ -832,7 +870,10 @@ class App(tk.Tk):
             ("dim", f"File : {item['path'].name}\n"),
         ]
         if item["ws"]:
-            lines.append(("ok",  f"Tab  : {item['ws'].title}\n"))
+            if item.get("is_new_tab"):
+                lines.append(("info", f"Tab  : {item['ws'].title}  ✨ (tab mới tạo tự động)\n"))
+            else:
+                lines.append(("ok",  f"Tab  : {item['ws'].title}\n"))
         else:
             lines.append(("warn", "Tab  : Chưa gán — click tab bên trái để gán\n"))
         if item["status"] == "error":
@@ -884,18 +925,23 @@ class App(tk.Tk):
 
     def _run_import_all(self):
         importable = [i for i in self._queue
-                      if i["ws"] and i["status"] in ("ready", "mismatch")]
+                      if i["ws"] and i["status"] in ("ready", "mismatch", "new_tab")]
         mismatched = [i for i in importable if i["status"] == "mismatch"]
         no_tab     = [i for i in self._queue if i["status"] == "no_tab"]
         if not importable:
             return
 
+        replace = self._replace_var.get()
+
         # Có file lệch cột → cảnh báo chi tiết, đề phòng gán nhầm sheet
         if mismatched:
-            if not self._confirm_mismatch(importable, mismatched, no_tab):
+            if not self._confirm_mismatch(importable, mismatched, no_tab, replace):
                 return
         else:
             lines = [f"Sẽ import {len(importable)} file vào {len(importable)} tab."]
+            if replace:
+                lines.append("⚠ Chế độ THAY THẾ: xóa toàn bộ dữ liệu cũ trong tab "
+                             "trước khi import.")
             if no_tab:
                 lines.append(f"Bỏ qua {len(no_tab)} file chưa gán tab.")
             if not messagebox.askyesno("Xác nhận Import", "\n".join(lines)):
@@ -905,9 +951,10 @@ class App(tk.Tk):
         self._progress.start(12)
         self._result_lbl.configure(text="Đang import...")
         threading.Thread(target=self._import_all_worker,
-                         args=(importable,), daemon=True).start()
+                         args=(importable, replace), daemon=True).start()
 
-    def _confirm_mismatch(self, importable: list, mismatched: list, no_tab: list) -> bool:
+    def _confirm_mismatch(self, importable: list, mismatched: list, no_tab: list,
+                          replace: bool = False) -> bool:
         """Hộp thoại cảnh báo: liệt kê file có cột khác sheet. Trả về True nếu vẫn import."""
         dlg = tk.Toplevel(self)
         dlg.title("⚠ Cảnh báo lệch cột")
@@ -923,6 +970,14 @@ class App(tk.Tk):
                  text="Hãy kiểm tra xem có gán nhầm file vào sai tab không trước khi tiếp tục.",
                  bg=self.CARD, fg=self.MUTED, font=("Segoe UI", 9), justify="left"
                  ).pack(anchor="w", padx=18, pady=(0, 10))
+
+        if replace:
+            tk.Label(dlg,
+                     text="⚠ Chế độ THAY THẾ đang bật: toàn bộ dữ liệu cũ trong các tab "
+                          "trên sẽ bị XÓA trước khi import.",
+                     bg=self.CARD, fg="#DC2626", font=("Segoe UI Semibold", 9),
+                     justify="left", wraplength=560
+                     ).pack(anchor="w", padx=18, pady=(0, 10))
 
         # Vùng cuộn liệt kê chi tiết
         box = tk.Text(dlg, width=84, height=16, font=("Consolas", 9),
@@ -978,14 +1033,14 @@ class App(tk.Tk):
         self.wait_window(dlg)
         return dlg.result
 
-    def _import_all_worker(self, items: list):
+    def _import_all_worker(self, items: list, replace: bool = False):
         total_added = total_updated = errors = 0
         for item in items:
             item["status"] = "importing"
             self.after(0, lambda i=item: self._refresh_tree_row(i))
             try:
                 filtered, _ = filter_by_status(item["headers"], item["rows"])
-                stats = upsert(item["ws"], item["headers"], filtered)
+                stats = upsert(item["ws"], item["headers"], filtered, replace=replace)
                 item["status"] = "done"
                 self._sheet_hdr_cache.pop(item["ws"].title, None)  # cột sheet đã đổi
                 total_added   += stats["added"]

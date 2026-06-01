@@ -7,18 +7,29 @@ Thư mục này chứa pipeline thu thập dữ liệu **Facebook Ads → Google
 ## Luồng hoạt động tổng quát
 
 ```
-launcher.py  (GUI điều phối)
+hub.py  (TRUNG TÂM ĐIỀU KHIỂN — 1 giao diện gộp mọi chức năng)
     │
     ├─► main.py          → lấy danh sách tài khoản quảng cáo (TKQC API sheet)
     │
     ├─► get_campaigns.py → Phase 1: lấy Campaign + metrics (tab từng tài khoản)
     │
-    └─► get_details.py   → Phase 2: lấy Adset / Ad / Creative (chèn vào cùng tab)
-                                         └─► tab "{TK} - Creative"
+    ├─► get_details.py   → Phase 2: lấy Adset / Ad / Creative (chèn vào cùng tab)
+    │                                    └─► tab "{TK} - Creative"
+    │
+    ├─► fb_billing_import.py → nhập lịch sử thanh toán CSV/XLS
+    ├─► TongHop.py           → tạo sheet "Tổng Hợp T{tháng}"
+    ├─► check_spend.py       → kiểm tra Spend Campaign = Σ Adset = Σ Ad
+    └─► check_billing_vs_campaigns.py → đối chiếu billing với chiến dịch
 
-fb_billing_import.py    (GUI riêng — nhập lịch sử thanh toán CSV/XLS)
 config.py               (biến cấu hình: access token, khoảng thời gian)
+launcher.py             (GUI cũ — chỉ điều phối Phase 1 & 2; hub.py thay thế)
 ```
+
+> **`hub.py` là entry point chính.** Chạy `python hub.py` để mở 1 cửa sổ duy nhất
+> có sidebar điều hướng tất cả công cụ, thanh chọn khoảng thời gian dùng chung
+> (Phase 1 & 2), và 1 console hiển thị kết quả. Các công cụ cần thao tác chọn
+> (tài khoản / tab / file) sẽ mở cửa sổ chuyên dụng sẵn có của chúng; công cụ
+> còn lại (cập nhật TKQC, check spend, check billing) chạy thẳng và in vào console.
 
 ---
 
