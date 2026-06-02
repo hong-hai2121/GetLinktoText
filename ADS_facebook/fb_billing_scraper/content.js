@@ -799,23 +799,22 @@
     'tên nhóm quảng cáo', 'kết quả', 'số tiền', 'id nhóm quảng cáo',
   ]);
 
-  function scrapeCampaigns() {
+  async function scrapeCampaigns() {
     const campaigns = [];
 
     // aria-level="1" = page title, aria-level="4" = column headers/values.
-    // Campaign names are exclusively aria-level="2". Filter hidden/transitioning duplicates.
-    const seen = new Set();
+    // Campaign names are exclusively aria-level="2". Chỉ loại heading ẩn (rect 0x0).
+    // KHÔNG dedup theo TÊN — vì 2 campaign khác nhau có thể trùng tên
+    // (vd "Purchase - Livestream 05/05" xuất hiện nhiều lần). Dedup theo
+    // DOM section node bên dưới để tránh bỏ sót campaign trùng tên.
     const campaignHeadings = Array.from(
       document.querySelectorAll('[aria-level="2"][role="heading"]')
     ).filter(el => {
       const rect = el.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return false;
-      const text = normalizeText(el.innerText || el.textContent);
-      if (seen.has(text)) return false;
-      seen.add(text);
-      return true;
+      return !(rect.width === 0 && rect.height === 0);
     });
 
+    const seenSections = new Set();
     for (const heading of campaignHeadings) {
       const campaignName = normalizeText(heading.innerText || heading.textContent);
       if (!campaignName) continue;
@@ -842,9 +841,15 @@
       }
       if (!sectionEl || sectionEl === document.body) continue;
 
+      // Dedup theo DOM node: nếu cùng 1 section đã xử lý (bản DOM nhân đôi lúc
+      // transition trỏ về cùng container) thì bỏ qua. Campaign trùng TÊN nhưng
+      // khác section vẫn được giữ lại đầy đủ.
+      if (seenSections.has(sectionEl)) continue;
+      seenSections.add(sectionEl);
+
       // Categorise direct children of sectionEl.
-      let totalRowEl = null;
-      let dataRowEl  = null;
+      let totalRowEl  = null;
+      const dataRowEls = [];  // collect ALL adgroup rows (one campaign may have multiple)
 
       for (const child of Array.from(sectionEl.children)) {
         if (child.contains(heading)) continue; // skip the name/time section
@@ -858,7 +863,7 @@
         } else if (h4Texts.length > 0 && h4Texts.every(t => COL_HEADER_LABELS.has(t))) {
           // All level-4 headings are column label names → header row, skip
         } else if (child.querySelector('span')) {
-          dataRowEl = child; // has span values but no level-4 column-name headings
+          dataRowEls.push(child); // collect every adgroup data row
         }
       }
 
@@ -886,34 +891,60 @@
         }
       }
 
-      // Ad group data: 4 direct children of dataRowEl = [name, result, amount, id]
-      let adGroup = null;
-      if (dataRowEl) {
-        const cols = Array.from(dataRowEl.children);
+      // Ad group data: one entry per data row (campaign may have multiple adgroups)
+      // getText: nhanh, cho số (Kết quả, Số tiền) — không bao giờ bị cắt "...".
+      const getText = col => {
+        const heading = col?.querySelector('[role="heading"]');
+        const target  = heading || col;
+        return normalizeText(target?.innerText || target?.textContent || '').replace(/\.{3}$/, '').trimEnd();
+      };
+      // getFull: hover lấy giá trị đầy đủ cho Tên nhóm + ID nhóm (hay bị cắt "...").
+      // getFullTextHover tự return ngay nếu chuỗi không kết thúc bằng "..." nên
+      // không tốn thời gian hover với ô ngắn.
+      const getFull = async (col) => {
+        const heading = col?.querySelector('[role="heading"]');
+        return normalizeText(await getFullTextHover(heading || col));
+      };
+
+      // Dòng tổng đại diện cả giao dịch ("Lập hóa đơn và thanh toán") KHÔNG phải
+      // khoản phân bổ campaign → để ô Số tiền (cột F) TRỐNG, tránh lặp tổng tiền
+      // (cột E) sang cột F làm sai phép so sánh sum(F) == E trong check_billing.
+      const cnLower = campaignName.toLowerCase();
+      const isBillingSummary =
+        cnLower.includes('lập h') && cnLower.includes('đơn') && cnLower.includes('thanh toán');
+
+      const adGroups = [];
+      for (const rowEl of dataRowEls) {
+        const cols = Array.from(rowEl.children);
         if (cols.length >= 3) {
-          const getText = col => {
-            const heading = col?.querySelector('[role="heading"]');
-            const target  = heading || col;
-            return normalizeText(target?.innerText || target?.textContent || '').replace(/\.{3}$/, '').trimEnd();
-          };
-          adGroup = {
-            name:       getText(cols[0]),
+          adGroups.push({
+            name:       await getFull(cols[0]),
             result:     getText(cols[1]),
             resultType: resultType,
-            amount:     totalRowAmount || cleanNumber(getText(cols[2])),
-            id:         cols[3] ? getText(cols[3]) : '',
+            amount:     isBillingSummary ? '' : cleanNumber(getText(cols[2])),
+            id:         cols[3] ? await getFull(cols[3]) : '',
             note:       '',
-          };
+          });
         }
       }
 
-      campaigns.push({ campaignName, timePeriod, adGroups: adGroup ? [adGroup] : [] });
+      // Fallback: nếu không tìm được data rows nhưng có totalRowAmount → 1 adgroup tổng.
+      // Với dòng billing-summary thì vẫn giữ dòng nhưng để ô Số tiền trống.
+      if (adGroups.length === 0 && (totalRowAmount || isBillingSummary)) {
+        adGroups.push({
+          name: '', result: '', resultType,
+          amount: isBillingSummary ? '' : totalRowAmount,
+          id: '', note: '',
+        });
+      }
+
+      campaigns.push({ campaignName, timePeriod, adGroups });
     }
 
     return campaigns;
   }
 
-  function scrapeDetailPage(listItem = {}) {
+  async function scrapeDetailPage(listItem = {}) {
     const rawDate = findValueByLabels(['Ngày thanh toán', 'Ngày']) || listItem.date || '';
     const rawTime = findValueByLabels(['Giờ thanh toán']);
     const split = splitDateTime(rawDate);
@@ -925,6 +956,7 @@
     const tax = cleanNumber(findValueByLabels(['Thuế', 'Thuế VAT', 'VAT', 'Tax']));
     const status = findValueByLabels(['Trạng thái', 'Trạng thái thanh toán', 'Status']) || listItem.status || '';
     const note = findValueByLabels(['Ghi chú', 'Ghi chú giao dịch', 'Note', 'Notes']);
+    const campaigns = await scrapeCampaigns();
 
     return {
       txId:          findValueByLabels(['ID giao dịch', 'Transaction ID']) || listItem.txId || '',
@@ -943,7 +975,7 @@
       reason:        findValueByLabels(['Lý do lập hóa đơn', 'Lý do tính phí', 'Billing reason']),
       product:       findValueByLabels(['Sản phẩm', 'Product']),
       note,
-      campaigns:     scrapeCampaigns(),
+      campaigns,
     };
   }
 
@@ -1016,7 +1048,7 @@
         if (!onDetail) throw new Error('Trang chi tiết không tải được sau 15 giây');
         await delay(3000); // wait for full React render including campaign sections
 
-        const detail = scrapeDetailPage(item);
+        const detail = await scrapeDetailPage(item);
         detail.listTxId = item.txId;
         state.scrapedDetail.push(detail);
 
