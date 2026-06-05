@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(venv\\\\Scripts\\\\pip install *)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(python -c ' *)",
+      "Bash(python -c *)",
+      "PowerShell($dst = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; New-Item -ItemType Directory -Force $dst | Out-Null; $src = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_accounts\"; Copy-Item \"$src\\\\fb_api.py\" $dst; Copy-Item \"$src\\\\service_account.json\" $dst; Copy-Item \"$src\\\\requirements.txt\" $dst; Get-ChildItem $dst | Select-Object Name,Length)",
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -m py_compile \"$d\\\\get_pages.py\" \"$d\\\\get_page_campaigns.py\" \"$d\\\\config.py\" \"$d\\\\fb_api.py\"; if \\($?\\) { \"OK - cu phap hop le\" })",
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_pages import fetch_managed_pages; from config import ACCESS_TOKEN; p = fetch_managed_pages\\(ACCESS_TOKEN\\); print\\('TONG PAGE:', len\\(p\\)\\); [print\\(' -', x.get\\('id'\\), x.get\\('name'\\), '|', x.get\\('category'\\)\\) for x in p[:15]]\")",
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_page_campaigns import connect_spreadsheet; ss = connect_spreadsheet\\(\\); print\\('SHEET OK:', ss.title\\); print\\('Tabs:', [w.title for w in ss.worksheets\\(\\)]\\)\")",
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -m py_compile \"$d\\\\get_pages.py\" \"$d\\\\get_page_campaigns.py\"; if \\($?\\) { \"OK - cu phap hop le sau khi sua\" })"
     ]
   }
 }

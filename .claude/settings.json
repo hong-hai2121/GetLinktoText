@@ -27,7 +27,8 @@
       "Bash(rm D:/Python/GetLinktoText/Misatothue/output_xbh*.xls D:/Python/GetLinktoText/Misatothue/convert_misa_xbh.log 2>/dev/null; echo done)",
       "Bash(Out-String)",
       "Bash(git ls-files *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_pages import fetch_managed_pages; from config import ACCESS_TOKEN; p = fetch_managed_pages\\(ACCESS_TOKEN\\); print\\('TONG PAGE:', len\\(p\\)\\); [print\\(' -', x.get\\('id'\\), x.get\\('name'\\), '|', x.get\\('category'\\)\\) for x in p[:15]]\")"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"

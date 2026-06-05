@@ -898,9 +898,9 @@
         const target  = heading || col;
         return normalizeText(target?.innerText || target?.textContent || '').replace(/\.{3}$/, '').trimEnd();
       };
-      // getFull: hover lấy giá trị đầy đủ cho Tên nhóm + ID nhóm (hay bị cắt "...").
-      // getFullTextHover tự return ngay nếu chuỗi không kết thúc bằng "..." nên
-      // không tốn thời gian hover với ô ngắn.
+      // getFull: hover lấy giá trị đầy đủ — CHỈ dùng cho ID nhóm quảng cáo (cột
+      // quan trọng, hay bị cắt "..."). Các cột khác lấy getText cho nhanh.
+      // getFullTextHover tự return ngay nếu chuỗi không kết thúc bằng "...".
       const getFull = async (col) => {
         const heading = col?.querySelector('[role="heading"]');
         return normalizeText(await getFullTextHover(heading || col));
@@ -918,11 +918,11 @@
         const cols = Array.from(rowEl.children);
         if (cols.length >= 3) {
           adGroups.push({
-            name:       await getFull(cols[0]),
+            name:       getText(cols[0]),
             result:     getText(cols[1]),
             resultType: resultType,
             amount:     isBillingSummary ? '' : cleanNumber(getText(cols[2])),
-            id:         cols[3] ? await getFull(cols[3]) : '',
+            id:         cols[3] ? await getFull(cols[3]) : '',  // chỉ hover ID nhóm
             note:       '',
           });
         }

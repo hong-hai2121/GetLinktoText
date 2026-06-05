@@ -263,6 +263,18 @@ def _normalize_name(s: str) -> str:
     return " ".join(s.lower().split())
 
 
+def _strip_leading_zeros(s: str, n: int) -> str:
+    """Bỏ tối đa n số 0 ở đầu chuỗi (dùng cho Số HĐ ở các dòng thuế kế tiếp).
+    VD: ('00004471', 1) → '0004471'; ('00004471', 2) → '004471'.
+    Không bao giờ trả về chuỗi rỗng."""
+    s = str(s)
+    i = 0
+    while i < n and i < len(s) and s[i] == "0":
+        i += 1
+    stripped = s[i:]
+    return stripped if stripped else s
+
+
 # =============================================================================
 # 1b. Danh mục hàng hóa → tra Mã HH
 # =============================================================================
@@ -526,12 +538,14 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
         ngay_str   = _format_date_str(g(first, "ngay_hd"))
         ma_khach   = ma_khach_seq.get(so_ct) or g(first, "ma_khach") or "KH00001"
         ten_khach  = g(first, "ten_khach")
+        nguoi_mua  = g(first, "nguoi_mua")
         mst        = g(first, "mst")
         ghi_chu_hd = g(first, "ghi_chu")
 
         ma_kho        = CONFIG.get("MA_KHO", "K1")
-        ng_nhan_out   = ten_khach or CONFIG.get("DEFAULT_NG_NHAN",   "Khách hàng không cung cấp thông tin")
-        ten_khach_out = ten_khach or CONFIG.get("DEFAULT_TEN_KHACH", "Khách hàng không cung cấp thông tin")
+        # Cột E "Ng Nhận hàng" và AF "Tên khách": ưu tiên Người mua hàng (J), thiếu thì lấy Tên khách hàng (F)
+        ng_nhan_out   = nguoi_mua or ten_khach or CONFIG.get("DEFAULT_NG_NHAN",   "Khách hàng không cung cấp thông tin")
+        ten_khach_out = nguoi_mua or ten_khach or CONFIG.get("DEFAULT_TEN_KHACH", "Khách hàng không cung cấp thông tin")
         dien_giai_f   = CONFIG.get("DIEN_GIAI", "Bán hàng cho khách HĐ:")
 
         # ── Gom nhóm theo thuế suất, giữ thứ tự xuất hiện ──────────────────
@@ -642,14 +656,15 @@ def transform_groups(df: pd.DataFrame, col_map: dict, dm_map: dict) -> list:
                     "tien_von":  "",  # Y
                     # ── Z: dồn lên theo doc_row_idx ──────────────────────────
                     "nhom_hd":    summary["nhom_hd"]    if summary else "",  # Z
-                    # ── AA-AG: chỉ hàng đầu chứng từ ────────────────────────
-                    "mau_so":    CONFIG.get("MAU_SO",  "")  if is_first_doc else "",  # AA
-                    "ky_hieu":   ky_hieu                    if is_first_doc else "",  # AB
-                    "so_hd":     so_hd                      if is_first_doc else "",  # AC
-                    "ngay_ph":   ngay_str                   if is_first_doc else "",  # AD
-                    "ma_khach2": ma_khach                   if is_first_doc else "",  # AE
-                    "ten_khach": ten_khach_out              if is_first_doc else "",  # AF
-                    "mst":       mst                        if is_first_doc else "",  # AG
+                    # ── AA-AF: mỗi dòng có Z (mỗi nhóm thuế) là 1 hóa đơn → lặp lại header ──
+                    # AC: mỗi dòng thuế kế tiếp bỏ bớt 1 số 0 ở đầu Số HĐ để không trùng
+                    "mau_so":    CONFIG.get("MAU_SO",  "")  if summary else "",  # AA
+                    "ky_hieu":   ky_hieu                    if summary else "",  # AB
+                    "so_hd":     _strip_leading_zeros(so_hd, doc_row_idx) if summary else "",  # AC
+                    "ngay_ph":   ngay_str                   if summary else "",  # AD
+                    "ma_khach2": ma_khach                   if summary else "",  # AE
+                    "ten_khach": ten_khach_out              if summary else "",  # AF
+                    "mst":       mst                        if is_first_doc else "",  # AG (chỉ dòng đầu)
                     # ── AH-AM: dồn lên theo doc_row_idx ─────────────────────
                     "dien_giai2": summary["dien_giai2"] if summary else "",  # AH
                     "tien_hang2": summary["tien_hang2"] if summary else "",  # AI
