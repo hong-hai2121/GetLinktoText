@@ -28,7 +28,15 @@
       "Bash(Out-String)",
       "Bash(git ls-files *)",
       "Bash(git rm *)",
-      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_pages import fetch_managed_pages; from config import ACCESS_TOKEN; p = fetch_managed_pages\\(ACCESS_TOKEN\\); print\\('TONG PAGE:', len\\(p\\)\\); [print\\(' -', x.get\\('id'\\), x.get\\('name'\\), '|', x.get\\('category'\\)\\) for x in p[:15]]\")"
+      "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_pages import fetch_managed_pages; from config import ACCESS_TOKEN; p = fetch_managed_pages\\(ACCESS_TOKEN\\); print\\('TONG PAGE:', len\\(p\\)\\); [print\\(' -', x.get\\('id'\\), x.get\\('name'\\), '|', x.get\\('category'\\)\\) for x in p[:15]]\")",
+      "Bash(python -m py_compile get_accounts.py get_campaigns.py)",
+      "Bash(cd /d/Python/GetLinktoText/ADS_facebook/fb_ads_tsAnhDuc && ls -la)",
+      "Read(//d/d/Python/GetLinktoText/ADS_facebook/**)",
+      "Bash(python -m py_compile get_accounts.py)",
+      "Read(//c/Users/PC/.claude/projects/d--Python-GetLinktoText/memory/**)",
+      "Bash(python -m py_compile get_campaigns.py get_details.py)",
+      "Bash(python -m py_compile get_details.py)",
+      "Bash(git check-ignore *)"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"

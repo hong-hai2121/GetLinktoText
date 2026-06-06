@@ -1,29 +1,24 @@
 """
-Lấy chi tiết chiến dịch (Campaign) cho các Page đã chọn ở get_pages.py.
+Lấy chi tiết chiến dịch (Campaign) cho các Tài Khoản Quảng Cáo (TKQC) được chọn.
 
 Cách hoạt động:
-  Facebook KHÔNG có endpoint "campaign của 1 page". Campaign luôn thuộc về Tài
-  Khoản Quảng Cáo (TKQC); page chỉ liên kết qua creative của từng quảng cáo
-  (object_story_spec.page_id hoặc effective_object_story_id = "{page_id}_{post_id}").
+    1. Đọc sheet "TKQC API" (do get_accounts.py ghi) → lọc các TKQC có cột
+       "Chọn Lấy Camp" = TRUE.
+    2. Với mỗi TKQC đã chọn: lấy toàn bộ campaign (/act_{id}/campaigns) + insights
+       cấp campaign (this_month theo config).
+    3. Ghi mỗi TKQC 1 tab trong Google Sheets, mỗi campaign 1 dòng (sắp xếp theo
+       spend giảm dần).
+    4. Cột "Chọn Lấy Chi Tiết" (TRUE/FALSE) cho người dùng đánh dấu campaign muốn
+       mở rộng Adset/Ad — giá trị cũ được giữ nguyên qua mỗi lần chạy.
+       → Chạy get_details.py sau đó để chèn Adset/Ad cho các campaign được chọn.
 
-  Vì vậy script:
-    1. Lấy toàn bộ TKQC của token (/me/adaccounts).
-    2. Quét ads của từng TKQC, suy ra page mỗi ad quảng cáo, gom campaign_id theo
-       (TKQC, page).
-    3. Với các TKQC có campaign khớp page đã chọn → lấy campaign + insights cấp
-       campaign (this_month theo config).
-    4. Ghi mỗi page 1 tab trong Google Sheets, mỗi campaign 1 dòng.
-
-  Lưu ý: metric là của TOÀN campaign (nếu campaign có ad quảng cáo nhiều page thì
-  số liệu gộp chung). Cột "Số Ad Của Page" cho biết bao nhiêu ad trong campaign
-  quảng cáo page đang xét.
-
-Chạy:  python get_page_campaigns.py [đường_dẫn_file_page_đã_chọn.json]
-        (Thường được get_pages.py mở tự động, không cần chạy tay.)
+Chạy:  python get_campaigns.py
+        (Lấy danh sách TKQC trực tiếp từ sheet TKQC API, không cần tham số.)
 """
 
 import sys
 import json
+import time
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -49,12 +44,17 @@ from fb_api import graph_paginate, api_summary, RateLimitError
 
 BASE_DIR = Path(__file__).parent
 
-# Google Sheet mới — mỗi page 1 tab, tab thiếu sẽ tự tạo.
+# Cùng Google Sheet với get_accounts.py — đọc tab "TKQC API" để biết TKQC nào TRUE.
 SPREADSHEET_ID = "1aBWyX1f3yjMVbbJ7HxDbvS3ZvjBL9JsXc3Ycm_gTwAc"
+TKQC_SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
-SELECTED_FILE = BASE_DIR / "_pages_selected.json"
+
+ACCOUNT_DELAY = 3  # giây nghỉ giữa mỗi TKQC — giảm tần suất gọi API (chống rate limit)
 
 SERVICE_ACCOUNT_EMAIL = "ads-392@hai-ads-check.iam.gserviceaccount.com"
+
+# Giá trị coi là "đã chọn" ở cột Chọn Lấy Camp (khớp get_accounts.py).
+TRUE_VALUES = {"TRUE", "ĐÚNG", "1", "X", "✓"}
 
 STATUS_MAP = {
     "ACTIVE":   "Đang chạy",
@@ -89,35 +89,34 @@ RESULT_TYPES = (
 )
 
 HEADERS = [
-    "TKQC",               # A
-    "Account ID",         # B
-    "Campaign ID",        # C
-    "Tên Campaign",       # D
+    "Chọn Lấy Chi Tiết",  # A  – chỉ dòng Campaign mới có giá trị TRUE/FALSE
+    "Cấp",                # B  – "Campaign" / "Adset" / "Ad"
+    "Campaign ID",        # C  – giữ nguyên ở mọi cấp (Adset/Ad tham chiếu campaign)
+    "Tên",                # D  – Campaign / Adset / Ad Name tùy Cấp
     "Trạng Thái",         # E
-    "Số Ad Của Page",     # F  – số ad trong campaign quảng cáo page này
-    "Spend Tháng Này",    # G
-    "Lượt Hiển Thị",      # H
-    "Lượt Click",         # I
-    "CTR (%)",            # J
-    "CPC",                # K
-    "CPM",                # L
-    "Tiếp Cận",           # M
-    "Tần Suất",           # N
-    "Số Inbox",           # O
-    "CPI",                # P
-    "Số Lead",            # Q
-    "CPL",                # R
-    "Số Đơn Hàng",        # S
-    "CPS",                # T
-    "Doanh Thu",          # U
-    "ROAS",               # V
-    "Kết Quả",            # W
-    "Chi Phí / Kết Quả",  # X
-    "Chi Phí Campaign",   # Y
-    "Cập Nhật Lúc",       # Z
+    "Spend Tháng Này",    # F
+    "Lượt Hiển Thị",      # G
+    "Lượt Click",         # H
+    "CTR (%)",            # I
+    "CPC",                # J
+    "CPM",                # K
+    "Tiếp Cận",           # L
+    "Tần Suất",           # M
+    "Số Inbox",           # N
+    "CPI",                # O
+    "Số Lead",            # P
+    "CPL",                # Q
+    "Số Đơn Hàng",        # R
+    "CPS",                # S
+    "Doanh Thu",          # T
+    "ROAS",               # U
+    "Kết Quả",            # V
+    "Chi Phí / Kết Quả",  # W
+    "Chi Phí Campaign",   # X
+    "Cập Nhật Lúc",       # Y
 ]
 
-COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # có spend → xanh nhạt
+COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # Chọn Lấy Chi Tiết = TRUE → xanh nhạt
 COLOR_DEFAULT  = {"red": 1.0,  "green": 1.0,  "blue": 1.0}
 
 SCOPES = [
@@ -173,7 +172,7 @@ def get_or_create_worksheet(spreadsheet, title: str):
     existing = {ws.title: ws for ws in spreadsheet.worksheets()}
     if safe in existing:
         return existing[safe]
-    return spreadsheet.add_worksheet(title=safe, rows=2000, cols=len(HEADERS))
+    return spreadsheet.add_worksheet(title=safe, rows=2000, cols=26)
 
 
 def write_to_sheet(worksheet, rows: list[list]):
@@ -184,14 +183,13 @@ def write_to_sheet(worksheet, rows: list[list]):
     worksheet.update(values=rows, range_name="A2", value_input_option="RAW")
 
     last_col = col_to_letter(len(HEADERS))
-    spend_idx = HEADERS.index("Spend Tháng Này")
     formats = []
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        has_spend = bool(row[spend_idx]) and row[spend_idx] != ""
+        is_selected = row[0] == "TRUE"  # cột A = Chọn Lấy Chi Tiết
         formats.append({
             "range":  f"A{sheet_row}:{last_col}{sheet_row}",
-            "format": {"backgroundColor": COLOR_SELECTED if has_spend else COLOR_DEFAULT},
+            "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT},
         })
     worksheet.batch_format(formats)
 
@@ -203,25 +201,10 @@ def _act_id(account_id: str) -> str:
     return account_id if account_id.startswith("act_") else f"act_{account_id}"
 
 
-def fetch_ad_accounts() -> list[dict]:
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
-    params = {
-        "fields": "id,name,currency,account_status",
-        "access_token": ACCESS_TOKEN,
-        "limit": 500,
-    }
-    return graph_paginate(url, params, label="me/adaccounts")
-
-
-def fetch_ads_page_map(account_id: str) -> list[dict]:
-    """Lấy ads của 1 TKQC kèm campaign_id + tham chiếu page trong creative."""
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/ads"
-    params = {
-        "fields": "campaign_id,creative{effective_object_story_id,object_story_spec{page_id}}",
-        "access_token": ACCESS_TOKEN,
-        "limit": 200,
-    }
-    return graph_paginate(url, params, label="act_{id}/ads")
+def paginate(url: str, params: dict) -> list[dict]:
+    """Ủy thác sang fb_api.graph_paginate (đếm + log + retry rate limit).
+    Dùng chung bởi get_details.py."""
+    return graph_paginate(url, params)
 
 
 def fetch_campaigns(account_id: str) -> list[dict]:
@@ -244,19 +227,6 @@ def fetch_insights_campaign_level(account_id: str) -> list[dict]:
         "limit": 500,
     }
     return graph_paginate(url, params, label="act_{id}/insights")
-
-
-def resolve_page_id(ad: dict) -> str:
-    """Suy ra page_id mà 1 ad quảng cáo, từ creative."""
-    creative = ad.get("creative") or {}
-    spec = creative.get("object_story_spec") or {}
-    pid = spec.get("page_id")
-    if pid:
-        return str(pid)
-    story_id = creative.get("effective_object_story_id") or ""
-    if "_" in story_id:
-        return story_id.split("_", 1)[0]
-    return ""
 
 
 # ── Insights metrics ───────────────────────────────────────────────────────────
@@ -338,6 +308,38 @@ def parse_insight_metrics(insight: dict) -> dict:
     }
 
 
+def aggregate_metrics(metrics_list: list[dict]) -> dict:
+    """Tổng hợp metrics từ nhiều Ad thành metrics Adset (dùng bởi get_details.py)."""
+    spend     = sum(m["spend"]     for m in metrics_list)
+    impr      = sum(m["impr"]      for m in metrics_list)
+    clicks    = sum(m["clicks"]    for m in metrics_list)
+    reach     = sum(m["reach"]     for m in metrics_list)
+    inbox     = sum(m["inbox"]     for m in metrics_list)
+    leads     = sum(m["leads"]     for m in metrics_list)
+    purchases = sum(m["purchases"] for m in metrics_list)
+    revenue   = sum(m["revenue"]   for m in metrics_list)
+    ket_qua   = sum(m["ket_qua"]   for m in metrics_list)
+
+    return {
+        "spend": spend, "impr": impr, "clicks": clicks,
+        "ctr":  clicks / impr * 100  if impr      > 0 else 0.0,
+        "cpc":  spend  / clicks      if clicks    > 0 else 0.0,
+        "cpm":  spend  / impr * 1000 if impr      > 0 else 0.0,
+        "reach": reach,
+        "freq": impr   / reach       if reach     > 0 else 0.0,
+        "inbox": inbox,
+        "cpi":  spend  / inbox       if inbox     > 0 else 0.0,
+        "leads": leads,
+        "cpl":  spend  / leads       if leads     > 0 else 0.0,
+        "purchases": purchases,
+        "cps":  spend  / purchases   if purchases > 0 else 0.0,
+        "revenue": revenue,
+        "roas": revenue / spend      if spend     > 0 else 0.0,
+        "ket_qua": ket_qua,
+        "cpkq": spend  / ket_qua     if ket_qua   > 0 else 0.0,
+    }
+
+
 def _insights_cols(m: dict) -> list:
     def num(v, decimals=0):
         return round(v, decimals) if v > 0 else ""
@@ -350,120 +352,148 @@ def _insights_cols(m: dict) -> list:
     ]
 
 
-def _campaign_row(acc_name, acc_id, camp_id, camp_name, status, ad_count,
-                  m: dict, now_str: str) -> list:
+def _campaign_row(camp_id, camp_name, is_selected, m: dict, status: str,
+                  now_str: str, auto_by_spend: bool = False) -> list:
+    chon = "TRUE" if (m["spend"] > 0 if auto_by_spend else is_selected) else "FALSE"
     return [
-        acc_name,                          # A
-        acc_id,                            # B
-        camp_id,                           # C
-        camp_name,                         # D
-        STATUS_MAP.get(status, status),    # E
-        ad_count,                          # F
+        chon,                              # A  Chọn Lấy Chi Tiết
+        "Campaign",                        # B  Cấp
+        camp_id,                           # C  Campaign ID
+        camp_name,                         # D  Tên
+        STATUS_MAP.get(status, status),    # E  Trạng Thái
     ] + _insights_cols(m) + [
-        int(round(m["spend"])) if m["spend"] > 0 else "",  # Y
-        now_str,                                            # Z
+        int(round(m["spend"])) if m["spend"] > 0 else "",  # X  Chi Phí Campaign
+        now_str,                                            # Y  Cập Nhật Lúc
     ]
 
 
 # ── Core ─────────────────────────────────────────────────────────────────────
 
-def load_selected_pages(path: Path) -> list[dict]:
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Không tìm thấy {path.name}. Hãy chạy get_pages.py, chọn page rồi bấm "
-            "'Lấy chi tiết chiến dịch'."
+def load_selected_accounts(spreadsheet) -> list[dict]:
+    """Đọc sheet TKQC API → [{id, name}] cho các TKQC có Chọn Lấy Camp = TRUE."""
+    try:
+        ws = spreadsheet.worksheet(TKQC_SHEET_NAME)
+    except Exception:
+        raise RuntimeError(
+            f"Không tìm thấy sheet '{TKQC_SHEET_NAME}'. Hãy chạy get_accounts.py trước "
+            "để tạo danh sách TKQC."
         )
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
+    values = ws.get_all_values()
+    if len(values) < 2:
+        return []
 
-def gather(pages: list[dict], log) -> tuple[dict, dict, dict, dict]:
-    """Quét TKQC + ads, trả về:
-    - acct_page_camp[acc_id][page_id] = {campaign_id: số_ad}
-    - camp_meta[acc_id] = {campaign_id: {name,status}}
-    - insights[acc_id]  = {campaign_id: insight_dict}
-    - acct_info[acc_id] = {name, currency}
-    """
-    selected_ids = {str(p["id"]) for p in pages}
+    header = values[0]
+    try:
+        id_col   = header.index("ID Tài Khoản")
+        name_col = header.index("Tên Tài Khoản")
+        chon_col = header.index("Chọn Lấy Camp")
+    except ValueError:
+        raise RuntimeError(
+            f"Sheet '{TKQC_SHEET_NAME}' thiếu cột bắt buộc "
+            "(ID Tài Khoản / Tên Tài Khoản / Chọn Lấy Camp)."
+        )
 
-    log("Lấy danh sách TKQC (/me/adaccounts)...")
-    accounts = fetch_ad_accounts()
-    log(f"  → {len(accounts)} TKQC.")
-
-    acct_info: dict[str, dict] = {}
-    acct_page_camp: dict[str, dict] = {}
-
-    # Phase 1 – quét ads từng TKQC, lọc theo page đã chọn
-    for i, acc in enumerate(accounts, 1):
-        acc_id = acc.get("id", "")
-        acc_name = acc.get("name", acc_id)
-        acct_info[acc_id] = {"name": acc_name, "currency": acc.get("currency", "")}
-        log(f"[{i}/{len(accounts)}] Quét ads: {acc_name}")
-        try:
-            ads = fetch_ads_page_map(acc_id)
-        except RateLimitError:
-            raise  # rate limit → dừng hẳn, để handler ngoài lưu/log
-        except RuntimeError as e:
-            log(f"    ⚠ Bỏ qua (lỗi: {e})")
+    accounts = []
+    for row in values[1:]:
+        acc_id = row[id_col].strip().removeprefix("act_") if id_col < len(row) else ""
+        if not acc_id:
             continue
-
-        matched = 0
-        for ad in ads:
-            pid = resolve_page_id(ad)
-            if pid not in selected_ids:
-                continue
-            cid = ad.get("campaign_id")
-            if not cid:
-                continue
-            acct_page_camp.setdefault(acc_id, {}).setdefault(pid, {})
-            acct_page_camp[acc_id][pid][cid] = acct_page_camp[acc_id][pid].get(cid, 0) + 1
-            matched += 1
-        if matched:
-            log(f"    → {matched} ad khớp page đã chọn.")
-
-    # Phase 2 – chỉ lấy campaign + insights cho TKQC có khớp
-    camp_meta: dict[str, dict] = {}
-    insights: dict[str, dict] = {}
-    relevant_accts = list(acct_page_camp.keys())
-    log(f"\n{len(relevant_accts)} TKQC có campaign khớp page. Lấy campaign + insights...")
-    for acc_id in relevant_accts:
-        acc_name = acct_info[acc_id]["name"]
-        log(f"  • {acc_name}: campaigns + insights")
-        camps = fetch_campaigns(acc_id)
-        camp_meta[acc_id] = {
-            c["id"]: {"name": c.get("name", ""), "status": c.get("status", "")}
-            for c in camps if "id" in c
-        }
-        ins = fetch_insights_campaign_level(acc_id)
-        insights[acc_id] = {r["campaign_id"]: r for r in ins if "campaign_id" in r}
-
-    return acct_page_camp, camp_meta, insights, acct_info
+        chon = row[chon_col].strip().upper() if chon_col < len(row) else ""
+        if chon in TRUE_VALUES:
+            name = (row[name_col].strip() if name_col < len(row) else "") or acc_id
+            accounts.append({"id": acc_id, "name": name})
+    return accounts
 
 
-def build_rows_for_page(page_id, acct_page_camp, camp_meta, insights, acct_info,
-                        now_str: str) -> list[list]:
+def get_all_accounts(spreadsheet) -> list[dict]:
+    """Đọc sheet TKQC API, trả về TẤT CẢ tài khoản kèm cờ 'selected' (Chọn Lấy Camp).
+    Dùng bởi GUI của get_details.py để liệt kê tài khoản."""
+    ws = spreadsheet.worksheet(TKQC_SHEET_NAME)
+    values = ws.get_all_values()
+    if len(values) < 2:
+        return []
+    header = values[0]
+    try:
+        id_col   = header.index("ID Tài Khoản")
+        name_col = header.index("Tên Tài Khoản")
+        chon_col = header.index("Chọn Lấy Camp")
+    except ValueError as e:
+        raise RuntimeError(f"Sheet '{TKQC_SHEET_NAME}' thiếu cột: {e}.")
+    da_chi_col = header.index("Đã Chi") if "Đã Chi" in header else -1
+
+    accounts = []
+    for row in values[1:]:
+        acc_id   = row[id_col].strip().removeprefix("act_") if id_col   < len(row) else ""
+        acc_name = row[name_col].strip()                    if name_col < len(row) else ""
+        chon_val = row[chon_col].strip().upper()            if chon_col < len(row) else ""
+        da_chi   = row[da_chi_col].strip() if da_chi_col >= 0 and da_chi_col < len(row) else ""
+        if acc_id:
+            accounts.append({
+                "id":       acc_id,
+                "name":     acc_name or acc_id,
+                "selected": chon_val in TRUE_VALUES,
+                "da_chi":   da_chi,
+            })
+    return accounts
+
+
+def read_detail_selections(worksheet) -> dict[str, bool]:
+    """Đọc cột 'Chọn Lấy Chi Tiết' trong tab tài khoản → {campaign_id: bool}.
+    Chỉ xét dòng có Cấp = 'Campaign'."""
+    try:
+        all_values = worksheet.get_all_values()
+    except Exception:
+        return {}
+    if len(all_values) < 2:
+        return {}
+
+    header = all_values[0]
+    try:
+        chon_col    = header.index("Chọn Lấy Chi Tiết")
+        cap_col     = header.index("Cấp")
+        camp_id_col = header.index("Campaign ID")
+    except ValueError:
+        return {}
+
+    selections = {}
+    for row in all_values[1:]:
+        cap = row[cap_col].strip() if cap_col < len(row) else ""
+        if cap != "Campaign":
+            continue
+        camp_id  = row[camp_id_col].strip() if camp_id_col < len(row) else ""
+        chon_val = row[chon_col].strip().upper() if chon_col < len(row) else ""
+        if camp_id:
+            selections[camp_id] = chon_val in TRUE_VALUES
+    return selections
+
+
+def build_rows_for_account(worksheet, acc_id: str, now_str: str,
+                           auto_by_spend: bool = False) -> list[list]:
+    """Lấy toàn bộ campaign + insights của 1 TKQC, trả về list dòng (spend giảm dần).
+    Giữ nguyên cột 'Chọn Lấy Chi Tiết' cũ trong tab để không mất lựa chọn."""
+    detail_selections = read_detail_selections(worksheet)
+    camps = fetch_campaigns(acc_id)
+    camp_meta = {
+        c["id"]: {"name": c.get("name", ""), "status": c.get("status", "")}
+        for c in camps if "id" in c
+    }
+    ins = fetch_insights_campaign_level(acc_id)
+    insights = {r["campaign_id"]: r for r in ins if "campaign_id" in r}
+
     rows = []
-    for acc_id, page_map in acct_page_camp.items():
-        camp_map = page_map.get(page_id)
-        if not camp_map:
-            continue
-        acc_name = acct_info[acc_id]["name"]
-        acc_num = acc_id.removeprefix("act_")
-        meta = camp_meta.get(acc_id, {})
-        ins = insights.get(acc_id, {})
-        for cid, ad_count in camp_map.items():
-            cmeta = meta.get(cid, {})
-            m = parse_insight_metrics(ins.get(cid, {}))
-            rows.append((m["spend"], _campaign_row(
-                acc_name, acc_num, cid, cmeta.get("name", "(không rõ)"),
-                cmeta.get("status", ""), ad_count, m, now_str,
-            )))
-    # Spend giảm dần
+    for cid, cmeta in camp_meta.items():
+        m = parse_insight_metrics(insights.get(cid, {}))
+        rows.append((m["spend"], _campaign_row(
+            cid, cmeta.get("name", "(không rõ)"),
+            detail_selections.get(cid, False), m, cmeta.get("status", ""),
+            now_str, auto_by_spend,
+        )))
     rows.sort(key=lambda t: t[0], reverse=True)
     return [r for _, r in rows]
 
 
-def run(pages: list[dict], log):
+def run(log):
     log(f"Kết nối Google Sheets ({SPREADSHEET_ID})...")
     try:
         ss = connect_spreadsheet()
@@ -474,17 +504,30 @@ def run(pages: list[dict], log):
         )
     log(f"  → OK: {ss.title}")
 
-    acct_page_camp, camp_meta, insights, acct_info = gather(pages, log)
+    log(f"Đọc TKQC được chọn (Chọn Lấy Camp = TRUE) từ sheet '{TKQC_SHEET_NAME}'...")
+    accounts = load_selected_accounts(ss)
+    if not accounts:
+        log("Không có TKQC nào được chọn (Chọn Lấy Camp = TRUE). Dừng.")
+        return
+    log(f"  → {len(accounts)} TKQC được chọn.")
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    log("\nGhi dữ liệu vào Sheets...")
-    for pg in pages:
-        pid, pname = str(pg["id"]), pg.get("name", pg["id"])
-        rows = build_rows_for_page(pid, acct_page_camp, camp_meta, insights,
-                                   acct_info, now_str)
-        ws = get_or_create_worksheet(ss, pname)
+    for i, acc in enumerate(accounts, 1):
+        acc_id, acc_name = acc["id"], acc["name"]
+        if i > 1:
+            log(f"  ⏱ Nghỉ {ACCOUNT_DELAY}s trước TKQC tiếp theo...")
+            time.sleep(ACCOUNT_DELAY)
+        log(f"[{i}/{len(accounts)}] {acc_name}: lấy campaign + insights...")
+        ws = get_or_create_worksheet(ss, acc_name)  # lấy tab trước để đọc 'Chọn Lấy Chi Tiết' cũ
+        try:
+            rows = build_rows_for_account(ws, acc_id, now_str)
+        except RateLimitError:
+            raise  # rate limit → dừng hẳn, để handler ngoài lưu/log
+        except RuntimeError as e:
+            log(f"    ⚠ Bỏ qua (lỗi: {e})")
+            continue
         write_to_sheet(ws, rows)
-        log(f"  • {pname}: {len(rows)} campaign → tab '{sanitize_sheet_name(pname)}'")
+        log(f"    → {len(rows)} campaign → tab '{sanitize_sheet_name(acc_name)}'")
 
     api_summary()
     log("\n✓ Hoàn thành!")
@@ -497,10 +540,9 @@ class ProgressApp(tk.Tk):
     FG = "#e2e8f0"
     ACCENT = "#3b82f6"
 
-    def __init__(self, pages: list[dict]):
+    def __init__(self):
         super().__init__()
-        self._pages = pages
-        self.title("Lấy chi tiết chiến dịch của Page")
+        self.title("Lấy chiến dịch của TKQC được chọn")
 
         w, h = 640, 420
         x = (self.winfo_screenwidth() - w) // 2
@@ -508,8 +550,8 @@ class ProgressApp(tk.Tk):
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.configure(bg=self.BG)
 
-        names = ", ".join(p.get("name", p["id"]) for p in pages)
-        tk.Label(self, text=f"Page: {names}", bg=self.BG, fg=self.FG,
+        tk.Label(self, text="Lấy chiến dịch cho các TKQC có 'Chọn Lấy Camp' = TRUE "
+                 f"trong sheet '{TKQC_SHEET_NAME}'", bg=self.BG, fg=self.FG,
                  font=("Segoe UI", 10, "bold"), anchor="w", justify="left",
                  wraplength=600).pack(fill="x", padx=14, pady=(12, 4))
 
@@ -549,7 +591,7 @@ class ProgressApp(tk.Tk):
 
     def _worker(self):
         try:
-            run(self._pages, self.log)
+            run(self.log)
         except RateLimitError as e:
             self.log(f"\n⚠ Rate limit: {e}")
         except Exception as e:
@@ -565,13 +607,8 @@ class ProgressApp(tk.Tk):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else SELECTED_FILE
-    pages = load_selected_pages(path)
-    if not pages:
-        sys.exit("Không có page nào được chọn.")
-
     if tk is None:
         # Không có tkinter → chạy console.
-        run(pages, lambda m: print(m))
+        run(lambda m: print(m))
     else:
-        ProgressApp(pages).mainloop()
+        ProgressApp().mainloop()

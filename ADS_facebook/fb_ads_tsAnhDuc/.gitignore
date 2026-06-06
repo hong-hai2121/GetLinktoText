@@ -1,0 +1,4 @@
+# Bỏ qua mọi file JSON trong thư mục này (dữ liệu dump, state, credential).
+# Gồm: main.json, get_details.json, get_details_checkpoint.json,
+#      _pages_selected.json, service_account.json ...
+*.json

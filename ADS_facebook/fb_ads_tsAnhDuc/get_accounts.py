@@ -1,326 +1,409 @@
 """
-Lấy danh sách Page đang quản lý (Graph API /me/accounts) và hiển thị GUI để chọn.
+Cập nhật danh sách Tài Khoản Quảng Cáo (TKQC) vào Google Sheet — giống hệt
+chức năng main() của fb_ads_accounts/main.py, chỉ khác 2 chỗ:
 
-- Tích chọn 1 hoặc nhiều page → bấm "Lấy chi tiết chiến dịch".
-- Tool ghi các page đã chọn ra _pages_selected.json rồi MỞ get_page_campaigns.py
-  (một tiến trình / cửa sổ Python mới) để quét các TKQC, lọc campaign chạy cho
-  page đó và ghi vào Google Sheets.
+  1. ACCESS_TOKEN: lấy từ config.py của thư mục này (token của dự án tsAnhDuc).
+  2. SPREADSHEET_ID: file Google Sheet riêng của dự án này.
 
-Chạy:  python get_pages.py
+service_account.json cũng tự dùng của thư mục này (BASE_DIR).
+
+Chạy:  python get_accounts.py
 """
 
-import sys
+import gspread
 import json
-import subprocess
 import threading
+import tkinter as tk
+from tkinter import ttk, messagebox
+from google.oauth2.service_account import Credentials
+from datetime import datetime, timedelta
 from pathlib import Path
-
-# Console Windows có thể là cp1252 → ép UTF-8 để log tiếng Việt không crash.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except Exception:
-    pass
-
-try:
-    import tkinter as tk
-    from tkinter import ttk, messagebox
-except ImportError:
-    tk = None
 
 from config import ACCESS_TOKEN
 from fb_api import graph_paginate, api_summary
 
 BASE_DIR = Path(__file__).parent
+
+# ── Khác main.py: file Google Sheet riêng của dự án này ───────────────────────
+SPREADSHEET_ID = "1aBWyX1f3yjMVbbJ7HxDbvS3ZvjBL9JsXc3Ycm_gTwAc"
+SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
 
-DETAIL_SCRIPT = BASE_DIR / "get_page_campaigns.py"
-SELECTED_FILE = BASE_DIR / "_pages_selected.json"
-PAGES_JSON = BASE_DIR / "pages.json"
+# Màu nền hàng theo cột "Chọn Lấy Camp"
+COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # TRUE → xanh nhạt
+COLOR_DEFAULT = {"red": 1.0, "green": 1.0, "blue": 1.0}       # FALSE → trắng
+
+ACCOUNT_STATUS_MAP = {
+    1: "Đang hoạt động",
+    2: "Đã tắt",
+    3: "Chưa thanh toán",
+    7: "Đang xét duyệt rủi ro",
+    9: "Trong thời gian ân hạn",
+    100: "Chờ đóng",
+    101: "Đã đóng",
+    201: "Bất kỳ (đang hoạt động)",
+    202: "Bất kỳ (đã đóng)",
+}
+
+ZERO_DECIMAL_CURRENCIES = {
+    "VND", "JPY", "KRW", "BIF", "CLP", "GNF", "ISK", "KMF",
+    "MGA", "PYG", "RWF", "UGX", "VUV", "XAF", "XOF", "XPF",
+}
+
+HEADERS = [
+    "ID Tài Khoản",
+    "Tên Tài Khoản",
+    "ID Business",
+    "Tên Business",
+    "Trạng Thái",
+    "Tiền Tệ",
+    "Múi Giờ",
+    "Đã Chi",
+    "Số Dư",
+    "Số Dư Trước",
+    "Phương Thức Thanh Toán",
+    "Chọn Lấy Camp",   # TRUE = sẽ được get_campaigns.py xử lý
+    "Cập Nhật Lúc",
+    "Số Dư Số",
+]
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
 
-# ── Facebook Graph API ───────────────────────────────────────────────────────
+def connect_sheet(credentials_file: str = "service_account.json"):
+    credentials_path = BASE_DIR / credentials_file
+    creds = Credentials.from_service_account_file(str(credentials_path), scopes=SCOPES)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-def fetch_managed_pages(access_token: str) -> list[dict]:
-    """Trả về danh sách Page user/token đang có quyền (/me/accounts)."""
-    url = f"https://graph.facebook.com/{FB_API_VERSION}/me/accounts"
-    params = {
-        "fields": "id,name,category,tasks",
-        "access_token": access_token,
-        "limit": 200,
-    }
-    return graph_paginate(url, params, label="me/accounts")
+    available = [ws.title for ws in spreadsheet.worksheets()]
+    if SHEET_NAME not in available:
+        print(f"Chưa có sheet '{SHEET_NAME}' → tạo mới.")
+        # Tạo dư cột tới cột Z (26 cột) để còn chỗ trống phía sau các cột dữ liệu.
+        return spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=26)
 
-
-def save_pages_json(pages: list[dict]):
-    with open(PAGES_JSON, "w", encoding="utf-8") as f:
-        json.dump(pages, f, ensure_ascii=False, indent=2)
-    print(f"Đã lưu danh sách page → {PAGES_JSON}")
+    return spreadsheet.worksheet(SHEET_NAME)
 
 
-def launch_detail(pages: list[dict]):
-    """Ghi page đã chọn ra file rồi mở get_page_campaigns.py (tiến trình mới)."""
-    with open(SELECTED_FILE, "w", encoding="utf-8") as f:
-        json.dump(pages, f, ensure_ascii=False, indent=2)
+def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict[str, str], dict[str, str]]:
+    """Đọc sheet hiện tại, trả về:
+    - {account_id: chọn_lấy_camp}
+    - {account_id: số_dư}         ← để tính Số Dư Trước khi > 24h
+    - {account_id: số_dư_trước}   ← giữ nguyên khi < 24h
+    - {account_id: cập_nhật_lúc}  ← để kiểm tra 24h
+    """
+    try:
+        all_values = worksheet.get_all_values()
+    except Exception:
+        return {}, {}, {}, {}
 
-    if not DETAIL_SCRIPT.exists():
-        raise FileNotFoundError(f"Không tìm thấy {DETAIL_SCRIPT.name}")
+    if len(all_values) < 2:
+        return {}, {}, {}, {}
 
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NEW_CONSOLE  # cửa sổ console riêng
+    header = all_values[0]
+    try:
+        id_col = header.index("ID Tài Khoản")
+        chon_col = header.index("Chọn Lấy Camp")
+    except ValueError:
+        return {}, {}, {}, {}
 
-    subprocess.Popen(
-        [sys.executable, str(DETAIL_SCRIPT), str(SELECTED_FILE)],
-        cwd=str(BASE_DIR),
-        creationflags=creationflags,
-    )
+    so_du_col        = header.index("Số Dư")        if "Số Dư"        in header else -1
+    so_du_truoc_col  = header.index("Số Dư Trước")  if "Số Dư Trước"  in header else -1
+    cap_nhat_col     = header.index("Cập Nhật Lúc") if "Cập Nhật Lúc" in header else -1
+
+    selections, prev_balances, stored_prev_balances, last_updates = {}, {}, {}, {}
+    for row in all_values[1:]:
+        acc_id = row[id_col].strip().removeprefix("act_") if id_col < len(row) else ""
+        if not acc_id:
+            continue
+        chon_val = row[chon_col].strip() if chon_col < len(row) else ""
+        selections[acc_id] = chon_val.upper() in ("TRUE", "ĐÚNG", "1", "X", "✓")
+        if so_du_col >= 0:
+            prev_balances[acc_id] = row[so_du_col].strip() if so_du_col < len(row) else ""
+        if so_du_truoc_col >= 0:
+            stored_prev_balances[acc_id] = row[so_du_truoc_col].strip() if so_du_truoc_col < len(row) else ""
+        if cap_nhat_col >= 0:
+            last_updates[acc_id] = row[cap_nhat_col].strip() if cap_nhat_col < len(row) else ""
+    return selections, prev_balances, stored_prev_balances, last_updates
 
 
-# ── GUI ──────────────────────────────────────────────────────────────────────
+def fetch_ad_accounts(access_token: str) -> list[dict]:
+    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business,funding_source_details"
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
+    params = {"fields": fields, "access_token": access_token, "limit": 500}
+    return graph_paginate(url, params, label="me/adaccounts")
+
+
+def format_money(amount_raw, currency: str) -> str:
+    try:
+        value = float(amount_raw)
+    except (ValueError, TypeError):
+        return "0"
+    currency = currency.upper()
+    if currency not in ZERO_DECIMAL_CURRENCIES:
+        value = value / 100
+    formatted = f"{int(round(value)):,}".replace(",", ".")
+    return f"{formatted} ₫" if currency == "VND" else f"{formatted} {currency}"
+
+
+def money_number(amount_raw, currency: str):
+    try:
+        value = float(amount_raw)
+    except (ValueError, TypeError):
+        return 0
+    if currency.upper() not in ZERO_DECIMAL_CURRENCIES:
+        value = value / 100
+    return int(round(value)) if value.is_integer() else round(value, 2)
+
+
+def _format_id_columns_as_text(worksheet):
+    """Ep cac cot ID (bat dau bang 'ID ') sang dinh dang TEXT de Sheets
+    khong dien giai chuoi ID 16 chu so thanh so roi lam tron."""
+    id_indices = [i for i, h in enumerate(HEADERS) if h.startswith("ID ")]
+    requests = []
+    for ci in id_indices:
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": worksheet.id,
+                    "startColumnIndex": ci,
+                    "endColumnIndex": ci + 1,
+                },
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        })
+    if requests:
+        worksheet.spreadsheet.batch_update({"requests": requests})
+
+
+def write_to_sheet(worksheet, accounts: list[dict], selections: dict[str, bool],
+                   prev_balances: dict[str, str], stored_prev_balances: dict[str, str],
+                   last_updates: dict[str, str]):
+    def sort_key(acc):
+        biz = acc.get("business") or {}
+        return (biz.get("name", "") or "￿", acc.get("name", ""))
+
+    sorted_accounts = sorted(accounts, key=sort_key)
+
+    now = datetime.now()
+    now_str = now.strftime("%d/%m/%Y %H:%M:%S")
+    cutoff = now - timedelta(hours=24)
+
+    rows = []
+    for acc in sorted_accounts:
+        currency = acc.get("currency", "")
+        status_code = acc.get("account_status", 0)
+        biz = acc.get("business") or {}
+        acc_id = acc.get("id", "").removeprefix("act_")
+        current_balance = format_money(acc.get("balance", "0"), currency)
+        current_balance_number = money_number(acc.get("balance", "0"), currency)
+        prev_balance = prev_balances.get(acc_id, "")
+        balance_changed = prev_balance != "" and current_balance != prev_balance
+        chon = "TRUE" if (selections.get(acc_id, False) or balance_changed) else "FALSE"
+        funding = acc.get("funding_source_details") or {}
+        payment_method = funding.get("display_string", "")
+
+        # Chỉ cập nhật Số Dư Trước khi lần cập nhật cuối > 24h (hoặc chưa có)
+        last_update_str = last_updates.get(acc_id, "")
+        within_24h = False
+        if last_update_str:
+            try:
+                last_update_dt = datetime.strptime(last_update_str, "%d/%m/%Y %H:%M:%S")
+                within_24h = last_update_dt >= cutoff
+            except ValueError:
+                pass
+
+        if within_24h:
+            so_du_truoc = stored_prev_balances.get(acc_id, prev_balance)
+        else:
+            so_du_truoc = prev_balance
+
+        rows.append([
+            acc_id,
+            acc.get("name", ""),
+            biz.get("id", ""),
+            biz.get("name", ""),
+            ACCOUNT_STATUS_MAP.get(status_code, str(status_code)),
+            currency,
+            acc.get("timezone_name", ""),
+            format_money(acc.get("amount_spent", "0"), currency),
+            format_money(acc.get("balance", "0"), currency),
+            so_du_truoc,
+            payment_method,
+            chon,
+            now_str,
+            current_balance_number,
+        ])
+
+    col_letter = chr(64 + len(HEADERS))
+    worksheet.update(values=[HEADERS], range_name="A1")
+
+    last_row = worksheet.row_count
+    if last_row >= 2:
+        worksheet.batch_clear([f"A2:{col_letter}{last_row}"])
+
+    if rows:
+        # RAW: giu nguyen chuoi ID, khong de Sheets dien giai thanh so
+        # roi lam tron 16 chu so (4197654223887206 -> 4197654223887200).
+        worksheet.update(values=rows, range_name="A2", value_input_option="RAW")
+
+        # Ep cot ID sang TEXT de khong bi lam tron.
+        _format_id_columns_as_text(worksheet)
+
+        # Tô màu nền hàng theo cột "Chọn Lấy Camp": TRUE = xanh nhạt, FALSE = trắng
+        chon_col = HEADERS.index("Chọn Lấy Camp")
+        formats = []
+        for i, row in enumerate(rows):
+            sheet_row = i + 2  # dữ liệu bắt đầu từ hàng 2
+            is_selected = row[chon_col] == "TRUE"
+            formats.append({
+                "range": f"A{sheet_row}:{col_letter}{sheet_row}",
+                "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT},
+            })
+        worksheet.batch_format(formats)
+
+        print(f"Đã ghi {len(rows)} tài khoản quảng cáo vào sheet '{SHEET_NAME}' (từ A1).")
+    else:
+        print("Không có tài khoản quảng cáo nào.")
+
+
+def save_json(accounts: list[dict]):
+    out_path = BASE_DIR / "main.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(accounts, f, ensure_ascii=False, indent=2)
+    print(f"Đã lưu JSON → {out_path}")
+
+
+def create_snapshot_sheet(spreadsheet):
+    """Tạo sheet mới tên 'HH:MM TM' (ví dụ '11:54 T5') là bản sao TKQC API."""
+    now = datetime.now()
+    title = f"{now.strftime('%H:%M')} T{now.month}"
+    src = spreadsheet.worksheet(SHEET_NAME)
+    body = {"requests": [{"duplicateSheet": {
+        "sourceSheetId": src.id,
+        "insertSheetIndex": len(spreadsheet.worksheets()),
+        "newSheetName": title,
+    }}]}
+    spreadsheet.batch_update(body)
+    print(f"  → Đã tạo sheet snapshot '{title}'.")
+    return title
+
+
+def main(cuoi_thang: bool = False):
+    print("Kết nối Google Sheets...")
+    ws = connect_sheet()
+    spreadsheet = ws.spreadsheet
+
+    print("Đọc dữ liệu hiện tại (giữ lại Chọn Lấy Camp + Số Dư Trước)...")
+    selections, prev_balances, stored_prev_balances, last_updates = read_existing_data(ws)
+    selected_count = sum(1 for v in selections.values() if v)
+    print(f"  → {selected_count} tài khoản đang được chọn.")
+
+    print("Lấy danh sách tài khoản quảng cáo từ Facebook Graph API...")
+    accounts = fetch_ad_accounts(ACCESS_TOKEN)
+    print(f"Tìm thấy {len(accounts)} tài khoản quảng cáo.")
+
+    save_json(accounts)
+
+    print(f"Ghi dữ liệu vào sheet '{SHEET_NAME}'...")
+    write_to_sheet(ws, accounts, selections, prev_balances, stored_prev_balances, last_updates)
+
+    if cuoi_thang:
+        print("Cuối tháng — tạo sheet snapshot...")
+        create_snapshot_sheet(spreadsheet)
+
+    api_summary()
+    print("Hoàn thành!")
+
+
+# ── GUI ────────────────────────────────────────────────────────────────────────
 
 class App(tk.Tk):
-    BG         = "#eef2f6"
-    CARD       = "#f8fafc"
-    BORDER     = "#cbd5e1"
-    ACCENT     = "#3b82f6"
-    ACCENT_HV  = "#2563eb"
-    ACCENT_DIS = "#93c5fd"
-    TEXT       = "#334155"
-    MUTED      = "#64748b"
+    BG     = "#eef2f6"
+    ACCENT = "#3b82f6"
+    TEXT   = "#334155"
+    MUTED  = "#64748b"
 
     def __init__(self):
         super().__init__()
-        self.title("Get Pages – Chọn Page Quản Lý")
+        self.title("Cập Nhật Tài Khoản")
 
-        w, h = 760, 460
+        w, h = 340, 160
         x = (self.winfo_screenwidth() - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(560, 320)
+        self.resizable(False, False)
         self.configure(bg=self.BG)
 
-        self._items: list[dict] = []
-
-        self._apply_styles()
+        self._cuoi_thang = tk.BooleanVar(value=False)
         self._build_ui()
-        self._load_async()
-
-    # ── Styles ────────────────────────────────────────────────────────────────
-
-    def _apply_styles(self):
-        s = ttk.Style(self)
-        s.theme_use("clam")
-        s.configure("TFrame", background=self.BG)
-        s.configure("TLabel", background=self.BG,
-                    font=("Segoe UI", 10), foreground=self.TEXT)
-        s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(14, 7),
-                    background=self.BORDER, foreground=self.TEXT,
-                    bordercolor=self.BORDER, relief="flat", borderwidth=1)
-        s.map("TButton",
-              background=[("active", "#cbd5e1"), ("disabled", self.BG)],
-              foreground=[("disabled", self.MUTED)])
-        s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"),
-                    padding=(22, 9), background=self.ACCENT,
-                    foreground="#FFFFFF", relief="flat", borderwidth=0)
-        s.map("Accent.TButton",
-              background=[("active", self.ACCENT_HV), ("disabled", self.ACCENT_DIS)],
-              foreground=[("disabled", "#ffffff")])
-        s.configure("Treeview", font=("Segoe UI", 9), rowheight=28,
-                    background=self.CARD, fieldbackground=self.CARD,
-                    foreground=self.TEXT, borderwidth=0)
-        s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
-                    background=self.BORDER, foreground=self.MUTED,
-                    relief="flat", padding=(8, 6))
-        s.map("Treeview",
-              background=[("selected", self.ACCENT)],
-              foreground=[("selected", "#ffffff")])
-        s.configure("TProgressbar", background=self.ACCENT,
-                    troughcolor=self.BORDER, borderwidth=0, thickness=6)
-
-    # ── Layout ────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        s = ttk.Style(self)
+        s.theme_use("clam")
+        s.configure("TButton", font=("Segoe UI", 9, "bold"), padding=(14, 7),
+                    background="#e2e8f0", foreground=self.TEXT, relief="flat")
+        s.map("TButton", background=[("active", "#cbd5e1"), ("disabled", self.BG)], foreground=[("disabled", self.MUTED)])
+        s.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(22, 9),
+                    background=self.ACCENT, foreground="#FFFFFF", relief="flat")
+        s.map("Accent.TButton", background=[("active", "#2563eb"), ("disabled", "#93c5fd")])
+        s.configure("TProgressbar", background=self.ACCENT,
+                    troughcolor="#cbd5e1", borderwidth=0, thickness=5)
+
         outer = tk.Frame(self, bg=self.BG)
-        outer.pack(fill="both", expand=True, padx=18, pady=14)
+        outer.pack(fill="both", expand=True, padx=20, pady=16)
 
-        hdr = tk.Frame(outer, bg=self.BG)
-        hdr.pack(fill="x", pady=(0, 10))
-        tk.Label(hdr, text="Get Pages", bg=self.BG,
-                 font=("Segoe UI Semibold", 15), fg=self.TEXT).pack(side="left")
-        self._status_lbl = tk.Label(hdr, text="Đang kết nối...",
-                                     bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED)
-        self._status_lbl.pack(side="right")
+        tk.Checkbutton(
+            outer, text="Cuối tháng — tạo sheet snapshot (HH:MM TM)",
+            variable=self._cuoi_thang,
+            bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+            font=("Segoe UI", 9), relief="flat",
+        ).pack(anchor="w", pady=(0, 12))
 
-        tk.Label(outer,
-                 text="Click dòng để bật / tắt. Tích page rồi bấm \"Lấy chi tiết chiến dịch\" "
-                      "để mở cửa sổ quét campaign của page.",
-                 bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED,
-                 justify="left", anchor="w").pack(fill="x", pady=(0, 8))
+        self._status = tk.Label(outer, text="", bg=self.BG,
+                                font=("Segoe UI", 9), fg=self.MUTED)
+        self._status.pack(anchor="w")
+
+        self._progress = ttk.Progressbar(outer, mode="indeterminate", length=300)
+        self._progress.pack(fill="x", pady=(4, 10))
 
         bot = tk.Frame(outer, bg=self.BG)
-        bot.pack(fill="x", pady=(12, 0), side="bottom")
-
-        card = tk.Frame(outer, bg=self.CARD,
-                        highlightthickness=1, highlightbackground=self.BORDER)
-        card.pack(fill="both", expand=True)
-        card.rowconfigure(0, weight=1)
-        card.columnconfigure(0, weight=1)
-
-        cols = ("chon", "page_name", "page_id", "category")
-        self._tree = ttk.Treeview(card, columns=cols, show="headings",
-                                  selectmode="browse")
-        self._tree.heading("chon",      text="Chọn",       anchor="center")
-        self._tree.heading("page_name", text="Tên Page",   anchor="w")
-        self._tree.heading("page_id",   text="Page ID",    anchor="w")
-        self._tree.heading("category",  text="Danh Mục",   anchor="w")
-        self._tree.column("chon",      width=56,  stretch=False, anchor="center", minwidth=50)
-        self._tree.column("page_name", width=260, stretch=True,  minwidth=140)
-        self._tree.column("page_id",   width=170, stretch=False, minwidth=110)
-        self._tree.column("category",  width=170, stretch=False, minwidth=110)
-
-        vsb = ttk.Scrollbar(card, orient="vertical",   command=self._tree.yview)
-        hsb = ttk.Scrollbar(card, orient="horizontal", command=self._tree.xview)
-        self._tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        self._tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        self._tree.tag_configure("on",  foreground="#198754")
-        self._tree.tag_configure("off", foreground="#dc3545")
-        self._tree.tag_configure("odd", background="#f1f3f5")
-
-        self._tree.bind("<ButtonRelease-1>", self._on_click)
-        self._tree.bind("<space>",           self._on_space)
-
-        ttk.Button(bot, text="Bật tất cả",
-                   command=lambda: self._set_all(True)).pack(side="left")
-        ttk.Button(bot, text="Tắt tất cả",
-                   command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
-
-        self._count_lbl = tk.Label(bot, text="", bg=self.BG,
-                                   font=("Segoe UI", 9), fg=self.MUTED)
-        self._count_lbl.pack(side="left", padx=10)
-
-        self._run_btn = ttk.Button(bot, text="Lấy chi tiết chiến dịch",
-                                   style="Accent.TButton",
-                                   command=self._run, state="disabled")
-        self._run_btn.pack(side="right")
-        ttk.Button(bot, text="Đóng", command=self.destroy).pack(side="right", padx=(0, 8))
-        self._progress = ttk.Progressbar(bot, mode="indeterminate", length=110)
-        self._progress.pack(side="right", padx=(0, 10))
-
-    # ── Load pages ──────────────────────────────────────────────────────────────
-
-    def _load_async(self):
-        self._progress.start(12)
-        threading.Thread(target=self._load_worker, daemon=True).start()
-
-    def _load_worker(self):
-        try:
-            pages = fetch_managed_pages(ACCESS_TOKEN)
-            save_pages_json(pages)
-            api_summary()
-            self.after(0, lambda: self._load_items(pages))
-        except Exception as e:
-            self.after(0, lambda e=e: self._set_status(f"Lỗi: {e}", error=True))
-            self.after(0, self._progress.stop)
-
-    def _load_items(self, pages: list[dict]):
-        self._progress.stop()
-        self._set_status(f"Tìm thấy {len(pages)} page đang quản lý")
-        self._items = []
-        for i, pg in enumerate(pages):
-            tags = ("odd", "off") if i % 2 != 0 else ("off",)
-            iid = self._tree.insert("", "end", values=(
-                "✗",
-                pg.get("name", ""),
-                pg.get("id", ""),
-                pg.get("category", ""),
-            ), tags=tags)
-            self._items.append({
-                "id": pg.get("id", ""),
-                "name": pg.get("name", ""),
-                "category": pg.get("category", ""),
-                "iid": iid,
-                "selected": False,
-            })
-        self._refresh_count()
-
-    # ── Toggle ──────────────────────────────────────────────────────────────────
-
-    def _update_item_ui(self, item: dict):
-        idx = self._items.index(item)
-        base_tag = "on" if item["selected"] else "off"
-        tags = ("odd", base_tag) if idx % 2 != 0 else (base_tag,)
-        self._tree.item(item["iid"], values=(
-            "✓" if item["selected"] else "✗",
-            item["name"], item["id"], item["category"],
-        ), tags=tags)
-
-    def _toggle(self, iid: str):
-        item = next((i for i in self._items if i["iid"] == iid), None)
-        if item is None:
-            return
-        item["selected"] = not item["selected"]
-        self._update_item_ui(item)
-        self._refresh_count()
-        self._run_btn.configure(
-            state="normal" if any(i["selected"] for i in self._items) else "disabled"
-        )
-
-    def _on_click(self, event):
-        iid = self._tree.identify_row(event.y)
-        if iid:
-            self._toggle(iid)
-
-    def _on_space(self, _):
-        for iid in self._tree.selection():
-            self._toggle(iid)
-
-    def _set_all(self, value: bool):
-        for item in self._items:
-            item["selected"] = value
-            self._update_item_ui(item)
-        self._refresh_count()
-        self._run_btn.configure(state="normal" if value and self._items else "disabled")
-
-    def _refresh_count(self):
-        total = len(self._items)
-        selected = sum(1 for i in self._items if i["selected"])
-        self._count_lbl.configure(
-            text=f"{selected}/{total} được chọn" if total else "Danh sách trống"
-        )
-
-    # ── Run ───────────────────────────────────────────────────────────────────
+        bot.pack(fill="x")
+        ttk.Button(bot, text="Huỷ", command=self.destroy).pack(side="right")
+        self._run_btn = ttk.Button(bot, text="Chạy", style="Accent.TButton",
+                                   command=self._run)
+        self._run_btn.pack(side="right", padx=(0, 8))
 
     def _run(self):
-        pages = [{"id": i["id"], "name": i["name"]} for i in self._items if i["selected"]]
-        if not pages:
-            messagebox.showwarning("Chưa chọn", "Chưa tích page nào.")
-            return
+        self._run_btn.configure(state="disabled")
+        self._progress.start(12)
+        self._status.configure(text="Đang chạy...")
+        cuoi_thang = self._cuoi_thang.get()
+        threading.Thread(target=self._worker, args=(cuoi_thang,), daemon=True).start()
+
+    def _worker(self, cuoi_thang: bool):
         try:
-            launch_detail(pages)
+            main(cuoi_thang=cuoi_thang)
+            self.after(0, self._done)
         except Exception as e:
-            messagebox.showerror("Lỗi", str(e))
-            return
-        names = ", ".join(p["name"] for p in pages)
-        self._set_status(f"Đã mở cửa sổ lấy chi tiết cho {len(pages)} page")
-        messagebox.showinfo(
-            "Đã mở",
-            f"Đang lấy chi tiết chiến dịch cho:\n{names}\n\n"
-            "Một cửa sổ mới (get_page_campaigns.py) đã mở để xử lý.",
-        )
+            self.after(0, lambda e=e: self._error(str(e)))
 
-    def _set_status(self, text: str, error: bool = False):
-        self._status_lbl.configure(
-            text=text, foreground="#dc3545" if error else self.MUTED
-        )
+    def _done(self):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._status.configure(text="✓ Hoàn thành!")
+        messagebox.showinfo("Hoàn thành", "Đã cập nhật tài khoản quảng cáo.")
 
+    def _error(self, msg: str):
+        self._progress.stop()
+        self._run_btn.configure(state="normal")
+        self._status.configure(text=f"✗ Lỗi: {msg}", fg="#dc3545")
+        messagebox.showerror("Lỗi", msg)
 
-# ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if tk is None:
-        sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
     App().mainloop()
