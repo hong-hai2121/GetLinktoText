@@ -39,7 +39,10 @@
       "Bash(git check-ignore *)",
       "PowerShell($env:PYTHONIOENCODING='utf-8'; python -m py_compile 'd:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_tsAnhDuc\\\\get_campaigns.py'; if \\($?\\) { Write-Output \"COMPILE OK\" })",
       "Bash(python -m py_compile tong_hop.py)",
-      "Bash(python -m py_compile get_campaigns.py)"
+      "Bash(python -m py_compile get_campaigns.py)",
+      "Bash(python -m py_compile get_details.py tong_hop.py get_campaigns.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(python -m py_compile get_campaigns.py get_details.py tong_hop.py)"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"

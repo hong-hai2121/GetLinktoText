@@ -33,16 +33,14 @@ import get_campaigns  # để set get_campaigns.SELECTED_PRESET (khoảng thời
 from get_campaigns import (
     # Constants & config
     BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
-    _date_params, HEADERS, current_range_label,
+    _date_params, HEADERS, COL_CAMP_ID, current_range_label,
     # Google Sheets
     col_to_letter, connect_spreadsheet,
     read_detail_selections, get_or_create_worksheet, list_campaign_tabs,
     # Facebook API
     paginate, fetch_insights_campaign_level,
-    # Metrics
-    parse_insight_metrics, aggregate_metrics,
-    # Formatting
-    _insights_cols,
+    # Row builders (schema cột định nghĩa tập trung ở get_campaigns.COLUMNS)
+    aggregate_insights, build_detail_row, merge_metric_row,
 )
 
 # Màu nền nhạt theo Cấp để dễ nhìn (Google Sheets dùng RGB 0–1).
@@ -118,35 +116,21 @@ def fetch_insights_ad_level(account_id: str) -> list[dict]:
 
 # ── Row builders ───────────────────────────────────────────────────────────────
 
-def _adset_row(camp_id, adset, m: dict, now_str: str) -> list:
-    """Dòng Adset — 25 cột. B = Cấp, C = Campaign ID (reference), D = Adset Name."""
-    return [
-        "",                                                                # A  Chọn (trống)
-        "Adset",                                                           # B  Cấp
-        camp_id,                                                           # C  Campaign ID
-        adset.get("name", ""),                                             # D  Adset Name
-        STATUS_MAP.get(adset.get("status", ""), adset.get("status", "")),  # E
-    ] + _insights_cols(m) + ["", now_str]  # X trống + Y
+def _adset_row(camp_id, adset, insight: dict) -> list:
+    return build_detail_row("Adset", camp_id, adset, insight)
 
 
-def _ad_row(camp_id, ad, m: dict, now_str: str) -> list:
-    """Dòng Ad — 25 cột. B = Cấp, C = Campaign ID (reference), D = Ad Name."""
-    return [
-        "",                                                          # A  Chọn (trống)
-        "Ad",                                                        # B  Cấp
-        camp_id,                                                     # C  Campaign ID
-        ad.get("name", ""),                                          # D  Ad Name
-        STATUS_MAP.get(ad.get("status", ""), ad.get("status", "")),  # E
-    ] + _insights_cols(m) + ["", now_str]  # X trống + Y
+def _ad_row(camp_id, ad, insight: dict) -> list:
+    return build_detail_row("Ad", camp_id, ad, insight)
 
 
 # ── Per-campaign write ─────────────────────────────────────────────────────────
 
 def _write_one_campaign(worksheet, camp_id: str, adsets: list,
-                        ad_insights_map: dict, now_str: str,
+                        ad_insights_map: dict,
                         camp_insights_map: dict | None = None) -> int:
     """Xóa Adset/Ad cũ của đúng 1 campaign rồi chèn dữ liệu mới — không đụng campaign khác.
-    Nếu có camp_insights_map, cập nhật luôn metrics dòng Campaign (cột F–Y)."""
+    Nếu có camp_insights_map, cập nhật luôn metrics dòng Campaign (cột I–T)."""
     all_data = worksheet.get_all_values()
     if len(all_data) < 2:
         return 0
@@ -154,7 +138,7 @@ def _write_one_campaign(worksheet, camp_id: str, adsets: list,
     header = all_data[0]
     try:
         cap_col     = header.index("Cấp")
-        camp_id_col = header.index("Campaign ID")
+        camp_id_col = header.index(COL_CAMP_ID)
     except ValueError:
         return 0
 
@@ -184,25 +168,25 @@ def _write_one_campaign(worksheet, camp_id: str, adsets: list,
     if camp_row is None:
         return 0
 
-    # Cập nhật metrics dòng Campaign (F–Y) với dữ liệu mới nhất
+    # Cập nhật metrics dòng Campaign với dữ liệu mới nhất — giữ nguyên cột Chọn +
+    # entity (Mục Tiêu/Ngân Sách...), chỉ thay cột metric (vị trí metric không liền kề).
     if camp_insights_map and camp_id in camp_insights_map:
-        m = parse_insight_metrics(camp_insights_map[camp_id])
-        camp_update = _insights_cols(m) + [
-            int(round(m["spend"])) if m["spend"] > 0 else "",  # X
-            now_str,                                            # Y
-        ]
-        worksheet.update(f"F{camp_row}:Y{camp_row}", [camp_update])
+        existing = all_data[camp_row - 1]  # all_data 0-based, camp_row 1-based
+        full_row = merge_metric_row(existing, camp_insights_map[camp_id])
+        end_col = col_to_letter(len(HEADERS))
+        worksheet.update(values=[full_row], range_name=f"A{camp_row}:{end_col}{camp_row}",
+                         value_input_option="RAW")
 
     # Build và insert dòng Adset/Ad
     new_rows = []
     for adset in sorted(adsets, key=lambda a: (status_order.get(a.get("status", ""), 9), a.get("name", ""))):
         ads = sorted(adset.get("_ads", []),
                      key=lambda a: (status_order.get(a.get("status", ""), 9), a.get("name", "")))
-        ad_mets = [parse_insight_metrics(ad_insights_map.get(ad.get("id", ""), {})) for ad in ads]
-        adset_m  = aggregate_metrics(ad_mets) if ad_mets else parse_insight_metrics({})
-        new_rows.append(_adset_row(camp_id, adset, adset_m, now_str))
-        for ad, ad_m in zip(ads, ad_mets):
-            new_rows.append(_ad_row(camp_id, ad, ad_m, now_str))
+        ad_insights = [ad_insights_map.get(ad.get("id", ""), {}) for ad in ads]
+        adset_insight = aggregate_insights(ad_insights)
+        new_rows.append(_adset_row(camp_id, adset, adset_insight))
+        for ad, ad_insight in zip(ads, ad_insights):
+            new_rows.append(_ad_row(camp_id, ad, ad_insight))
 
     if new_rows:
         worksheet.insert_rows(new_rows, camp_row + 1)
@@ -314,9 +298,8 @@ def run_for_tabs(spreadsheet, tabs: list[dict]):
 
                     acc_dump["campaigns"][camp_id] = adsets
 
-                    now_str  = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                     inserted = _write_one_campaign(
-                        ws, camp_id, adsets, ad_insights_map, now_str,
+                        ws, camp_id, adsets, ad_insights_map,
                         camp_insights_map=camp_insights_map,
                     )
                     print(f"  → [{camp_id}] {len(adsets)} adsets — "

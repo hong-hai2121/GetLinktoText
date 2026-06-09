@@ -94,8 +94,7 @@ def build_combined_sheet(spreadsheet, tab_titles: list[str],
     """Đọc từng tab trong tab_titles, xếp chồng dữ liệu vào sheet output_title."""
     all_ws = {ws.title: ws for ws in spreadsheet.worksheets()}
 
-    header = HEADERS.copy()
-    header[5] = "Spend"  # gộp nhiều kỳ → cột Spend dùng tên chung (kỳ ở dòng tiêu đề)
+    header = HEADERS.copy()  # 20 cột A–T; kỳ đã nằm ở dòng tiêu đề ▼ của mỗi tab
 
     all_rows: list[list] = [header]
     styles: list[tuple[int, str]] = []   # (row_1based, style_key) cho từng hàng sau header

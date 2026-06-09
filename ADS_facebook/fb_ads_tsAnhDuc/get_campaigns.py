@@ -89,33 +89,19 @@ RESULT_TYPES = (
     + ["post_engagement", "page_engagement", "link_click", "video_view", "app_install"]
 )
 
-HEADERS = [
-    "Chọn Lấy Chi Tiết",  # A  – chỉ dòng Campaign mới có giá trị TRUE/FALSE
-    "Cấp",                # B  – "Campaign" / "Adset" / "Ad"
-    "Campaign ID",        # C  – giữ nguyên ở mọi cấp (Adset/Ad tham chiếu campaign)
-    "Tên",                # D  – Campaign / Adset / Ad Name tùy Cấp
-    "Trạng Thái",         # E
-    "Spend Tháng Này",    # F
-    "Lượt Hiển Thị",      # G
-    "Lượt Click",         # H
-    "CTR (%)",            # I
-    "CPC",                # J
-    "CPM",                # K
-    "Tiếp Cận",           # L
-    "Tần Suất",           # M
-    "Số Inbox",           # N
-    "CPI",                # O
-    "Số Lead",            # P
-    "CPL",                # Q
-    "Số Đơn Hàng",        # R
-    "CPS",                # S
-    "Doanh Thu",          # T
-    "ROAS",               # U
-    "Kết Quả",            # V
-    "Chi Phí / Kết Quả",  # W
-    "Chi Phí Campaign",   # X
-    "Cập Nhật Lúc",       # Y
-]
+# ── action_type cho các cột "kết quả" của campaign (chỉnh tại đây nếu FB đổi) ───
+ACTION_RESULT        = "onsite_conversion.messaging_conversation_started_7d"  # cột Kết Quả
+ACTION_MESSAGING     = "onsite_conversion.messaging_conversation_started_7d"  # Lượt bắt đầu trò chuyện
+ACTION_ORDER_CREATED = "omni_purchase"                                        # Đơn Hàng Đã Tạo
+
+# Tên cột khớp Trình quản lý quảng cáo (tiếng Việt). A + B giữ logic cũ
+# (Chọn Lấy Chi Tiết ↔ get_details, Cấp = Campaign/Adset/Ad). C trở đi là thông tin
+# campaign. Adset/Ad (do get_details ghi) chỉ điền các cột có nghĩa (C, D, E + metric).
+COL_CAMP_ID = "ID Chiến Dịch"   # dùng làm khóa nối với get_details/tong_hop
+COL_SPEND   = "Số Tiền Đã Chi Tiêu"  # build_headers() gắn thêm (Kỳ) vào cột này
+
+# Thứ tự & cách tính từng cột định nghĩa tập trung ở COLUMNS (mục Insights metrics).
+# HEADERS được derive từ COLUMNS. Muốn đổi thứ tự cột → sửa COLUMNS, mọi nơi tự theo.
 
 COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # Chọn Lấy Chi Tiết = TRUE → xanh nhạt
 COLOR_DEFAULT  = {"red": 1.0,  "green": 1.0,  "blue": 1.0}
@@ -270,9 +256,13 @@ def parse_tab_title(title: str) -> tuple[str, str | None]:
 
 
 def build_headers() -> list[str]:
-    """HEADERS với cột Spend (F) đổi tên theo khoảng thời gian đang chọn."""
+    """HEADERS với cột Số Tiền Đã Chi Tiêu kèm khoảng thời gian đang chọn (tìm theo
+    tên nên không phụ thuộc vị trí cột)."""
     headers = HEADERS.copy()
-    headers[5] = f"Spend ({current_range_label()})"  # F – Spend Tháng Này → kỳ đã chọn
+    try:
+        headers[headers.index(COL_SPEND)] = f"{COL_SPEND} ({current_range_label()})"
+    except ValueError:
+        pass
     return headers
 
 
@@ -311,7 +301,7 @@ def paginate(url: str, params: dict) -> list[dict]:
 def fetch_campaigns(account_id: str) -> list[dict]:
     url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/campaigns"
     params = {
-        "fields": "id,name,status",
+        "fields": "id,name,status,effective_status,objective,daily_budget",
         "access_token": ACCESS_TOKEN,
         "limit": 200,
     }
@@ -490,31 +480,197 @@ def aggregate_metrics(metrics_list: list[dict]) -> dict:
     }
 
 
-def _insights_cols(m: dict) -> list:
-    def num(v, decimals=0):
-        return round(v, decimals) if v > 0 else ""
-    return [
-        num(m["spend"], 2), num(m["impr"]), num(m["clicks"]), num(m["ctr"], 2),
-        num(m["cpc"], 2), num(m["cpm"], 2), num(m["reach"]), num(m["freq"], 2),
-        num(m["inbox"]), num(m["cpi"], 2), num(m["leads"]), num(m["cpl"], 2),
-        num(m["purchases"]), num(m["cps"], 2), num(m["revenue"], 2), num(m["roas"], 2),
-        num(m["ket_qua"]), num(m["cpkq"], 2),
-    ]
+def _num(v, decimals=0):
+    """Số > 0 → làm tròn; 0/None/không parse được → ô trống."""
+    f = safe_float(v)
+    return round(f, decimals) if f > 0 else ""
 
 
-def _campaign_row(camp_id, camp_name, is_selected, m: dict, status: str,
-                  now_str: str, auto_by_spend: bool = False) -> list:
-    chon = "TRUE" if (m["spend"] > 0 if auto_by_spend else is_selected) else "FALSE"
-    return [
-        chon,                              # A  Chọn Lấy Chi Tiết
-        "Campaign",                        # B  Cấp
-        camp_id,                           # C  Campaign ID
-        camp_name,                         # D  Tên
-        STATUS_MAP.get(status, status),    # E  Trạng Thái
-    ] + _insights_cols(m) + [
-        int(round(m["spend"])) if m["spend"] > 0 else "",  # X  Chi Phí Campaign
-        now_str,                                            # Y  Cập Nhật Lúc
-    ]
+def _budget(v):
+    """daily_budget (FB trả chuỗi theo đơn vị nhỏ nhất của tiền tệ) → số nguyên."""
+    if v in (None, "", 0, "0"):
+        return ""
+    try:
+        return int(float(v))
+    except (ValueError, TypeError):
+        return v
+
+
+def format_actions(items) -> str:
+    """Mảng [{action_type, value}] → chuỗi 'type: value; ...' để đưa vào 1 ô.
+    Dùng chung cho cột Hành Động (actions) và Chi Phí / Hành Động (cost_per_action_type)."""
+    if not items:
+        return ""
+    parts = []
+    for it in items:
+        atype = it.get("action_type", "")
+        if not atype:
+            continue
+        f = safe_float(it.get("value"))
+        val = str(int(f)) if f == int(f) else f"{f:.2f}"
+        parts.append(f"{atype}: {val}")
+    return "; ".join(parts)
+
+
+def _action_value(actions, action_type: str) -> float:
+    """value của 1 action_type cụ thể trong mảng actions (0.0 nếu không có)."""
+    for it in (actions or []):
+        if it.get("action_type") == action_type:
+            return safe_float(it.get("value"))
+    return 0.0
+
+
+def _merge_action_arrays(arrays) -> list:
+    """Gộp nhiều mảng actions → 1 mảng cộng dồn value theo action_type (cho Adset)."""
+    totals: dict[str, float] = {}
+    for arr in arrays:
+        for it in (arr or []):
+            atype = it.get("action_type", "")
+            if atype:
+                totals[atype] = totals.get(atype, 0.0) + safe_float(it.get("value"))
+    return [{"action_type": t, "value": v} for t, v in totals.items()]
+
+
+def aggregate_insights(insights: list[dict]) -> dict:
+    """Gộp nhiều dict insight thô (các Ad) → 1 dict tổng cho Adset.
+    Cộng spend/impressions/clicks/reach + gộp actions; ctr/cpc/cpm/frequency để
+    _insight_metric_cols tự tính lại. cost_per_action_type bỏ trống (không cộng dồn được)."""
+    if not insights:
+        return {}
+    return {
+        "spend":       sum(safe_float(i.get("spend"))       for i in insights),
+        "impressions": sum(safe_float(i.get("impressions")) for i in insights),
+        "clicks":      sum(safe_float(i.get("clicks"))      for i in insights),
+        "reach":       sum(safe_float(i.get("reach"))       for i in insights),
+        "actions":     _merge_action_arrays([i.get("actions") for i in insights]),
+        "date_start":  insights[0].get("date_start", ""),
+        "date_stop":   insights[0].get("date_stop", ""),
+    }
+
+
+def _metrics(insight: dict) -> dict:
+    """Tính toàn bộ giá trị metric từ 1 dict insight thô — dùng chung Campaign/Adset/Ad.
+    ctr/cpc/cpm/frequency: ưu tiên giá trị FB trả, thiếu thì tự tính từ số gốc."""
+    spend  = safe_float(insight.get("spend"))
+    impr   = safe_float(insight.get("impressions"))
+    clicks = safe_float(insight.get("clicks"))
+    reach  = safe_float(insight.get("reach"))
+    actions = insight.get("actions") or []
+    result    = _action_value(actions, ACTION_RESULT)
+    order     = _action_value(actions, ACTION_ORDER_CREATED)
+    messaging = _action_value(actions, ACTION_MESSAGING)
+    return {
+        "spend": spend, "impr": impr, "reach": reach, "clicks": clicks,
+        "ctr":  safe_float(insight.get("ctr"))       or (clicks / impr * 100 if impr   > 0 else 0),
+        "cpc":  safe_float(insight.get("cpc"))        or (spend / clicks      if clicks > 0 else 0),
+        "cpm":  safe_float(insight.get("cpm"))        or (spend / impr * 1000 if impr   > 0 else 0),
+        "freq": safe_float(insight.get("frequency"))  or (impr / reach        if reach  > 0 else 0),
+        "result":         result,
+        "cost_result":    spend / result    if result    > 0 else 0,
+        "order":          order,
+        "cost_order":     spend / order      if order     > 0 else 0,
+        "messaging":      messaging,
+        "cost_messaging": spend / messaging  if messaging > 0 else 0,
+        "actions_str":    format_actions(actions),
+        "cpa_str":        format_actions(insight.get("cost_per_action_type")),
+        "date_start":     insight.get("date_start", ""),
+        "date_stop":      insight.get("date_stop", ""),
+    }
+
+
+# ── Getter cho cột entity (chỉ Campaign có hiệu lực; Adset/Ad để trống) ─────────
+
+def _g_chon(ctx):
+    if ctx["level"] != "Campaign":
+        return ""                       # Adset/Ad: cột Chọn để trống
+    sel = ctx["m"]["spend"] > 0 if ctx["auto_by_spend"] else ctx["is_selected"]
+    return "TRUE" if sel else "FALSE"
+
+def _g_status(ctx):
+    s = ctx["entity"].get("status", "")
+    return STATUS_MAP.get(s, s)
+
+def _g_eff(ctx):
+    if ctx["level"] != "Campaign":
+        return ""
+    s = ctx["entity"].get("effective_status", "")
+    return STATUS_MAP.get(s, s)
+
+def _g_objective(ctx):
+    return ctx["entity"].get("objective", "") if ctx["level"] == "Campaign" else ""
+
+def _g_budget(ctx):
+    return _budget(ctx["entity"].get("daily_budget")) if ctx["level"] == "Campaign" else ""
+
+
+# ── COLUMNS: nguồn chân lý duy nhất cho THỨ TỰ + CÁCH TÍNH từng cột ─────────────
+# Mỗi cột: (header, metric?, getter(ctx)). ctx = {level, camp_id, entity, m,
+# is_selected, auto_by_spend}. metric=True → giá trị suy từ insight (get_details sẽ
+# refresh khi cập nhật dòng Campaign); metric=False → entity/Chọn (get_details giữ
+# nguyên). ĐỔI THỨ TỰ CỘT = đổi thứ tự danh sách này; mọi file tự theo.
+COLUMNS: list[tuple[str, bool, object]] = [
+    ("Chọn Lấy Chi Tiết",                       False, _g_chon),
+    ("Cấp",                                     False, lambda c: c["level"]),
+    (COL_CAMP_ID,                               False, lambda c: c["camp_id"]),
+    ("Tên Chiến Dịch",                          False, lambda c: c["entity"].get("name", "")),
+    ("Trạng Thái",                              False, _g_status),
+    ("Tình Trạng Phân Phối",                    False, _g_eff),
+    ("Lượt Bắt Đầu Cuộc Trò Chuyện Qua Tin Nhắn", True, lambda c: _num(c["m"]["messaging"])),
+    ("Chi Phí / Lượt Bắt Đầu Cuộc Trò Chuyện",  True,  lambda c: _num(c["m"]["cost_messaging"], 2)),
+    ("Đơn Hàng Đã Tạo",                         True,  lambda c: _num(c["m"]["order"])),
+    ("Chi Phí / Đơn Hàng",                      True,  lambda c: _num(c["m"]["cost_order"], 2)),
+    ("Kết Quả",                                 True,  lambda c: _num(c["m"]["result"])),
+    ("Chi Phí / Kết Quả",                       True,  lambda c: _num(c["m"]["cost_result"], 2)),
+    ("Ngân Sách Hằng Ngày",                     False, _g_budget),
+    (COL_SPEND,                                 True,  lambda c: _num(c["m"]["spend"], 2)),
+    ("Lượt Hiển Thị",                           True,  lambda c: _num(c["m"]["impr"])),
+    ("Người Tiếp Cận",                          True,  lambda c: _num(c["m"]["reach"])),
+    ("Tần Suất",                                True,  lambda c: _num(c["m"]["freq"], 2)),
+    ("Số Lần Nhấp",                             True,  lambda c: _num(c["m"]["clicks"])),
+    ("CTR (%)",                                 True,  lambda c: _num(c["m"]["ctr"], 2)),
+    ("CPC",                                     True,  lambda c: _num(c["m"]["cpc"], 2)),
+    ("CPM",                                     True,  lambda c: _num(c["m"]["cpm"], 2)),
+    ("Hành Động",                               True,  lambda c: c["m"]["actions_str"]),
+    ("Chi Phí / Hành Động",                     True,  lambda c: c["m"]["cpa_str"]),
+    ("Mục Tiêu",                                False, _g_objective),
+    ("Ngày Bắt Đầu",                            True,  lambda c: c["m"]["date_start"]),
+    ("Ngày Kết Thúc",                           True,  lambda c: c["m"]["date_stop"]),
+]
+
+HEADERS = [h for h, _metric, _get in COLUMNS]
+
+
+def _build_row(level: str, camp_id: str, entity: dict, insight: dict,
+               is_selected: bool = False, auto_by_spend: bool = False) -> list:
+    ctx = {"level": level, "camp_id": camp_id, "entity": entity,
+           "m": _metrics(insight), "is_selected": is_selected, "auto_by_spend": auto_by_spend}
+    return [get(ctx) for _h, _metric, get in COLUMNS]
+
+
+def _campaign_row(meta: dict, insight: dict, is_selected: bool,
+                  auto_by_spend: bool = False) -> list:
+    """Dòng Campaign theo thứ tự COLUMNS (entity từ /campaigns, metric từ insight)."""
+    return _build_row("Campaign", meta.get("id", ""), meta, insight, is_selected, auto_by_spend)
+
+
+def build_detail_row(level: str, camp_id: str, entity: dict, insight: dict) -> list:
+    """Dòng Adset/Ad (gọi bởi get_details). C = camp_id tham chiếu; cột campaign-only
+    (Mục Tiêu/Ngân Sách/Tình Trạng) tự để trống vì level != 'Campaign'."""
+    return _build_row(level, camp_id, entity, insight)
+
+
+def merge_metric_row(existing_row: list, insight: dict) -> list:
+    """Dùng cho get_details refresh dòng Campaign: giữ nguyên cột non-metric
+    (Chọn + entity) từ existing_row, chỉ thay cột metric bằng giá trị mới từ insight."""
+    ctx = {"level": "Campaign", "camp_id": "", "entity": {},
+           "m": _metrics(insight), "is_selected": False, "auto_by_spend": False}
+    out = []
+    for i, (_h, metric, get) in enumerate(COLUMNS):
+        if metric:
+            out.append(get(ctx))
+        else:
+            out.append(existing_row[i] if i < len(existing_row) else "")
+    return out
 
 
 # ── Core ─────────────────────────────────────────────────────────────────────
@@ -630,7 +786,7 @@ def read_detail_selections(worksheet) -> dict[str, bool]:
     try:
         chon_col    = header.index("Chọn Lấy Chi Tiết")
         cap_col     = header.index("Cấp")
-        camp_id_col = header.index("Campaign ID")
+        camp_id_col = header.index(COL_CAMP_ID)
     except ValueError:
         return {}
 
@@ -646,7 +802,7 @@ def read_detail_selections(worksheet) -> dict[str, bool]:
     return selections
 
 
-def build_rows_for_account(worksheet, acc_id: str, now_str: str,
+def build_rows_for_account(worksheet, acc_id: str,
                            auto_by_spend: bool = False,
                            raw_out: dict | None = None) -> list[list]:
     """Lấy toàn bộ campaign + insights của 1 TKQC, trả về list dòng (spend giảm dần).
@@ -656,23 +812,20 @@ def build_rows_for_account(worksheet, acc_id: str, now_str: str,
     camps = fetch_campaigns(acc_id)
     if raw_out is not None:
         raw_out["campaigns"] = camps
-    camp_meta = {
-        c["id"]: {"name": c.get("name", ""), "status": c.get("status", "")}
-        for c in camps if "id" in c
-    }
     ins = fetch_insights_campaign_level(acc_id)
     if raw_out is not None:
         raw_out["campaign_insights"] = ins
     insights = {r["campaign_id"]: r for r in ins if "campaign_id" in r}
 
     rows = []
-    for cid, cmeta in camp_meta.items():
-        m = parse_insight_metrics(insights.get(cid, {}))
-        rows.append((m["spend"], _campaign_row(
-            cid, cmeta.get("name", "(không rõ)"),
-            detail_selections.get(cid, False), m, cmeta.get("status", ""),
-            now_str, auto_by_spend,
-        )))
+    for meta in camps:
+        cid = meta.get("id")
+        if not cid:
+            continue
+        insight = insights.get(cid, {})
+        spend = safe_float(insight.get("spend"))
+        rows.append((spend, _campaign_row(
+            meta, insight, detail_selections.get(cid, False), auto_by_spend)))
     rows.sort(key=lambda t: t[0], reverse=True)
     return [r for _, r in rows]
 
@@ -712,7 +865,6 @@ def run(log):
         return
     log(f"  → {len(accounts)} TKQC được chọn.")
 
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     dump: dict[str, dict] = {}   # {tab_title: {acc_id, acc_name, campaigns, campaign_insights}}
     try:
         for i, acc in enumerate(accounts, 1):
@@ -726,7 +878,7 @@ def run(log):
             raw = {"acc_id": acc_id, "acc_name": acc_name}
             dump[title] = raw  # đăng ký trước để rate-limit vẫn giữ phần đã lấy
             try:
-                rows = build_rows_for_account(ws, acc_id, now_str, raw_out=raw)
+                rows = build_rows_for_account(ws, acc_id, raw_out=raw)
             except RateLimitError:
                 raise  # rate limit → dừng hẳn, để handler ngoài lưu/log
             except RuntimeError as e:
@@ -737,8 +889,8 @@ def run(log):
     finally:
         base = f"https://graph.facebook.com/{FB_API_VERSION}"
         save_json(dump, {
-            "campaigns":         f"GET {base}/act_{{id}}/campaigns  (fields=id,name,status)",
-            "insights_campaign": f"GET {base}/act_{{id}}/insights  (level=campaign)",
+            "campaigns":         f"GET {base}/act_{{id}}/campaigns  (fields=id,name,status,effective_status,objective,daily_budget)",
+            "insights_campaign": f"GET {base}/act_{{id}}/insights  (level=campaign, fields=campaign_id,campaign_name,{_INSIGHTS_FIELDS})",
             "date":              _date_params(),
             "preset":            _active_preset(),
             "note":              "Mỗi tab: acc_id, acc_name, campaigns[], campaign_insights[]",
