@@ -1,8 +1,12 @@
 """
 Phase 2 – Lấy chi tiết Adset / Ad + Insights cấp Ad cho các Campaign đã được
-         đánh TRUE ở cột "Chọn Lấy Chi Tiết" (trong các tab TKQC).
+         đánh TRUE ở cột "Chọn Lấy Chi Tiết" (trong các tab 'Tên TKQC (Kỳ)').
 
 Chạy SAU khi đã chạy get_campaigns.py và đánh dấu campaign muốn xem chi tiết.
+GUI liệt kê các tab campaign (mỗi tab = 1 TKQC × 1 khoảng thời gian) để người
+dùng tự tick chọn tab nào chạy — không chạy gộp tất cả. Khoảng thời gian lấy
+insights Adset/Ad tự suy từ tên tab (vd '… (Hôm nay)' → date_preset=today).
+
 Script CHÈN dòng Adset/Ad vào ngay dưới dòng Campaign tương ứng, KHÔNG xóa dữ
 liệu dòng Campaign hiện có (kể cả các cột ngoài cấu trúc script quản lý).
 
@@ -25,13 +29,14 @@ except ImportError:
     tk = None
 
 from fb_api import api_summary, RateLimitError
+import get_campaigns  # để set get_campaigns.SELECTED_PRESET (khoảng thời gian) lúc chạy
 from get_campaigns import (
     # Constants & config
     BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
-    _date_params, HEADERS,
+    _date_params, HEADERS, current_range_label,
     # Google Sheets
-    col_to_letter, connect_spreadsheet, get_all_accounts,
-    read_detail_selections, get_or_create_worksheet, sanitize_sheet_name,
+    col_to_letter, connect_spreadsheet,
+    read_detail_selections, get_or_create_worksheet, list_campaign_tabs,
     # Facebook API
     paginate, fetch_insights_campaign_level,
     # Metrics
@@ -238,22 +243,29 @@ def save_json(dump: dict, api_info: dict | None = None):
 
 # ── Core processing ────────────────────────────────────────────────────────────
 
-def run_for_accounts(spreadsheet, accounts: list[dict]):
-    month_label = datetime.now().strftime("%m/%Y")
+def run_for_tabs(spreadsheet, tabs: list[dict]):
+    """Chạy lấy chi tiết cho từng TAB đã chọn. Kỳ insights (date_preset) suy từ
+    tên tab và được set riêng cho mỗi tab. Checkpoint khóa theo tên tab nên các
+    kỳ khác nhau của cùng 1 TKQC không đè lên nhau."""
     checkpoint  = load_checkpoint()
-    dump: dict[str, dict] = {}   # {acc_name: {campaign_insights, ad_insights, campaigns}}
+    dump: dict[str, dict] = {}   # {tab_title: {campaign_insights, ad_insights, campaigns}}
 
     rate_limited = False
     try:
-        for ai, acc in enumerate(accounts):
-            if ai > 0:
-                print(f"⏱ Nghỉ {ACCOUNT_DELAY}s trước TKQC tiếp theo...")
+        for ti, tab in enumerate(tabs):
+            if ti > 0:
+                print(f"⏱ Nghỉ {ACCOUNT_DELAY}s trước tab tiếp theo...")
                 time.sleep(ACCOUNT_DELAY)
-            acc_id   = acc["id"]
-            acc_name = acc["name"]
-            print(f"\n[{acc_name}] Lấy chi tiết tháng {month_label}...")
 
-            ws = get_or_create_worksheet(spreadsheet, acc_name)
+            # Khoảng thời gian suy từ tên tab → set cho các hàm insights của get_campaigns
+            get_campaigns.SELECTED_PRESET = tab["preset"]
+            range_label = current_range_label()
+
+            acc_id    = tab["acc_id"]
+            tab_title = tab["title"]
+            print(f"\n[{tab_title}] Lấy chi tiết ({range_label})...")
+
+            ws = get_or_create_worksheet(spreadsheet, tab_title)
             detail_selections = read_detail_selections(ws)
             selected_camp_ids = {cid for cid, v in detail_selections.items() if v}
 
@@ -262,7 +274,7 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
                 continue
 
             # ── Checkpoint: tách campaign đã xong và còn lại ─────────────────
-            cp_acc    = checkpoint.setdefault(acc_name, {"done": []})
+            cp_acc    = checkpoint.setdefault(tab_title, {"done": []})
             done_set  = set(cp_acc.get("done", []))
             remaining = [c for c in selected_camp_ids if c not in done_set]
 
@@ -286,7 +298,7 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
                 print(f"  → {len(ad_insights)} dòng insights ad.")
 
                 # Gom dữ liệu thô để xuất JSON kiểm tra
-                acc_dump = dump.setdefault(acc_name, {"campaigns": {}})
+                acc_dump = dump.setdefault(tab_title, {"campaigns": {}})
                 acc_dump["campaign_insights"] = camp_insights
                 acc_dump["ad_insights"] = ad_insights
 
@@ -315,8 +327,8 @@ def run_for_accounts(spreadsheet, accounts: list[dict]):
                     cp_acc["done"] = list(done_set)
                     _save_checkpoint(checkpoint)
 
-            # Account xong hoàn toàn → xóa khỏi checkpoint
-            checkpoint.pop(acc_name, None)
+            # Tab xong hoàn toàn → xóa khỏi checkpoint
+            checkpoint.pop(tab_title, None)
             _save_checkpoint(checkpoint)
 
     except RateLimitError as e:
@@ -419,10 +431,11 @@ class App(tk.Tk):
         self._status_lbl.pack(side="right")
 
         tk.Label(outer,
-                 text="Chỉ tài khoản có 'Chọn Lấy Camp' = TRUE. "
-                      "Click dòng để bật / tắt tài khoản muốn lấy chi tiết Adset/Ad.",
+                 text="Mỗi dòng là 1 tab 'Tên TKQC (Kỳ)' do get_campaigns tạo. "
+                      "Click dòng để bật / tắt tab muốn lấy chi tiết Adset/Ad. "
+                      "Khoảng thời gian insights tự suy từ tên tab.",
                  bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED,
-                 justify="left", anchor="w").pack(fill="x", pady=(0, 8))
+                 justify="left", anchor="w", wraplength=660).pack(fill="x", pady=(0, 8))
 
         # Pack bot trước card để luôn hiển thị dù cửa sổ thấp
         bot = tk.Frame(outer, bg=self.BG)
@@ -434,15 +447,17 @@ class App(tk.Tk):
         card.rowconfigure(0, weight=1)
         card.columnconfigure(0, weight=1)
 
-        cols = ("chon", "acc_name", "acc_id")
+        cols = ("chon", "acc_name", "ky", "acc_id")
         self._tree = ttk.Treeview(card, columns=cols, show="headings",
                                   selectmode="browse")
         self._tree.heading("chon",     text="Chọn",          anchor="center")
         self._tree.heading("acc_name", text="Tên Tài Khoản",  anchor="w")
+        self._tree.heading("ky",       text="Kỳ",             anchor="w")
         self._tree.heading("acc_id",   text="ID Tài Khoản",   anchor="w")
         self._tree.column("chon",     width=56,  stretch=False, anchor="center", minwidth=50)
-        self._tree.column("acc_name", width=280, stretch=True,  minwidth=140)
-        self._tree.column("acc_id",   width=170, stretch=False, minwidth=110)
+        self._tree.column("acc_name", width=240, stretch=True,  minwidth=140)
+        self._tree.column("ky",       width=120, stretch=False, minwidth=90)
+        self._tree.column("acc_id",   width=160, stretch=False, minwidth=110)
 
         vsb = ttk.Scrollbar(card, orient="vertical",   command=self._tree.yview)
         hsb = ttk.Scrollbar(card, orient="horizontal", command=self._tree.xview)
@@ -480,31 +495,29 @@ class App(tk.Tk):
 
     def _connect_worker(self):
         try:
-            ss       = connect_spreadsheet()
-            accounts = get_all_accounts(ss)
-            selected = [a for a in accounts if a.get("selected")]
+            ss   = connect_spreadsheet()
+            tabs = list_campaign_tabs(ss)
             self._spreadsheet = ss
             self.after(0, lambda: self._load_items(
-                selected, f"Kết nối OK · {ss.title} · {len(selected)} tài khoản"))
+                tabs, f"Kết nối OK · {ss.title} · {len(tabs)} tab"))
         except Exception as e:
             self.after(0, lambda e=e: self._set_status(f"Lỗi: {e}", error=True))
 
-    def _load_items(self, accounts: list[dict], status_text: str):
+    def _load_items(self, tabs: list[dict], status_text: str):
         self._set_status(status_text)
         self._items = []
-        for i, acc in enumerate(accounts):
-            selected = True
+        for i, tab in enumerate(tabs):
+            selected = False  # mặc định tắt — người dùng tự chọn tab muốn chạy
             base_tag = "on" if selected else "off"
             tags = ("odd", base_tag) if i % 2 != 0 else (base_tag,)
             iid = self._tree.insert("", "end", values=(
                 "✓" if selected else "✗",
-                acc["name"],
-                acc["id"],
+                tab["acc_name"],
+                tab["preset_label"],
+                tab["acc_id"],
             ), tags=tags)
-            self._items.append({**acc, "iid": iid, "selected": selected})
+            self._items.append({**tab, "iid": iid, "selected": selected})
         self._refresh_count()
-        if self._items:
-            self._run_btn.configure(state="normal")
 
     def _update_item_ui(self, item: dict):
         idx = self._items.index(item)
@@ -512,7 +525,7 @@ class App(tk.Tk):
         tags = ("odd", base_tag) if idx % 2 != 0 else (base_tag,)
         self._tree.item(item["iid"], values=(
             "✓" if item["selected"] else "✗",
-            item["name"], item["id"],
+            item["acc_name"], item["preset_label"], item["acc_id"],
         ), tags=tags)
 
     def _toggle(self, iid: str):
@@ -546,24 +559,25 @@ class App(tk.Tk):
         total    = len(self._items)
         selected = sum(1 for i in self._items if i["selected"])
         self._count_lbl.configure(
-            text=f"{selected}/{total} được chọn" if total else "Không có tài khoản nào"
+            text=f"{selected}/{total} tab được chọn" if total
+            else "Không có tab campaign nào — hãy chạy get_campaigns trước"
         )
 
     def _run(self):
-        accounts = [i for i in self._items if i["selected"]]
-        if not accounts:
-            messagebox.showwarning("Chưa chọn", "Chưa bật tài khoản nào.")
+        tabs = [i for i in self._items if i["selected"]]
+        if not tabs:
+            messagebox.showwarning("Chưa chọn", "Chưa bật tab nào.")
             return
         clear_checkpoint()
         self._run_btn.configure(state="disabled")
         self._progress.start(12)
-        self._set_status(f"Đang chạy {len(accounts)} tài khoản...")
+        self._set_status(f"Đang chạy {len(tabs)} tab...")
         threading.Thread(target=self._run_worker,
-                         args=(list(accounts),), daemon=True).start()
+                         args=(list(tabs),), daemon=True).start()
 
-    def _run_worker(self, accounts: list[dict]):
+    def _run_worker(self, tabs: list[dict]):
         try:
-            run_for_accounts(self._spreadsheet, accounts)
+            run_for_tabs(self._spreadsheet, tabs)
             self.after(0, self._done)
         except RateLimitError as e:
             self.after(0, lambda e=e: self._rate_limited(str(e)))
@@ -574,7 +588,7 @@ class App(tk.Tk):
         self._progress.stop()
         self._run_btn.configure(state="normal")
         self._set_status("✓ Hoàn thành!")
-        messagebox.showinfo("Hoàn thành", "Đã lấy xong chi tiết cho các tài khoản được chọn.")
+        messagebox.showinfo("Hoàn thành", "Đã lấy xong chi tiết cho các tab được chọn.")
 
     def _rate_limited(self, msg: str):
         self._progress.stop()

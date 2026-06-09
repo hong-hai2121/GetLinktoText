@@ -42,3 +42,72 @@ if (divElement) {
   console.log("Không tìm thấy phần tử <div>.");
 }
 
+
+
+
+
+
+ TS ANH ĐỨC
+
+async function scrollAll() {
+  let lastH = 0;
+  while (true) {
+    window.scrollTo(0, document.body.scrollHeight);
+    await new Promise(r => setTimeout(r, 1500));
+    if (document.body.scrollHeight === lastH) break;
+    lastH = document.body.scrollHeight;
+  }
+}
+
+function parseViews(s) {
+  if (!s) return 0;
+  s = s.replace(/\s/g, '').toLowerCase();
+  const num = parseFloat(s.replace(',', '.'));
+  if (s.includes('triệu')) return Math.round(num * 1e6);
+  if (s.includes('k'))     return Math.round(num * 1e3);
+  return Math.round(num) || 0;
+}
+
+function extract() {
+  const links = document.querySelectorAll('a[href*="/reel/"]');
+  const seen = new Set();
+  const rows = [];
+  links.forEach(a => {
+    const id = a.getAttribute('href').match(/\/reel\/(\d+)/)?.[1];
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    let viewsText = '';
+    a.querySelectorAll('span').forEach(s => {
+      const t = s.innerText?.trim();
+      if (t && /[\d,.]/.test(t) && t.length < 15) viewsText = t;
+    });
+    rows.push({
+      id,
+      url: 'https://facebook.com' + a.getAttribute('href').split('?')[0],
+      views: parseViews(viewsText),
+      viewsText,
+    });
+  });
+  return rows;
+}
+
+function downloadCSV(rows, filename = 'reels.csv') {
+  const header = 'id,url,views,viewsText';
+  const body = rows.map(r =>
+    `${r.id},${r.url},${r.views},"${r.viewsText}"`
+  ).join('\n');
+  const csv = '\uFEFF' + header + '\n' + body;  // BOM để Excel hiện tiếng Việt đúng
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// === Chạy ===
+await scrollAll();
+const data = extract();
+downloadCSV(data, `reels_${new Date().toISOString().slice(0,10)}.csv`);
+console.log(`Đã tải xuống ${data.length} reels`);

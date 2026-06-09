@@ -5,9 +5,10 @@ Cách hoạt động:
     1. Đọc sheet "TKQC API" (do get_accounts.py ghi) → lọc các TKQC có cột
        "Chọn Lấy Camp" = TRUE.
     2. Với mỗi TKQC đã chọn: lấy toàn bộ campaign (/act_{id}/campaigns) + insights
-       cấp campaign (this_month theo config).
-    3. Ghi mỗi TKQC 1 tab trong Google Sheets, mỗi campaign 1 dòng (sắp xếp theo
-       spend giảm dần).
+       cấp campaign theo khoảng thời gian người dùng chọn lúc chạy.
+    3. Ghi mỗi (TKQC × khoảng thời gian) thành 1 tab riêng tên 'Tên TKQC (Kỳ)'
+       (vd 'Shop ABC (Hôm nay)'), mỗi campaign 1 dòng (sắp xếp theo spend giảm dần).
+       → Chọn kỳ khác sẽ tạo tab khác, không ghi đè tab kỳ cũ.
     4. Cột "Chọn Lấy Chi Tiết" (TRUE/FALSE) cho người dùng đánh dấu campaign muốn
        mở rộng Adset/Ad — giá trị cũ được giữ nguyên qua mỗi lần chạy.
        → Chạy get_details.py sau đó để chèn Adset/Ad cho các campaign được chọn.
@@ -130,16 +131,87 @@ except ImportError:
     DATE_PRESET = "this_month"
     TIME_RANGE: dict = {}
 
+# Các khoảng thời gian cho người dùng chọn trước khi chạy: (nhãn hiển thị, date_preset FB).
+DATE_PRESET_OPTIONS = [
+    ("Hôm nay",         "today"),
+    ("Hôm qua",         "yesterday"),
+    ("7 ngày qua",      "last_7d"),
+    ("28 ngày qua",     "last_28d"),
+    ("Tháng này",       "this_month"),
+    ("Toàn thời gian",  "maximum"),
+]
+DEFAULT_PRESET_LABEL = "Tháng này"
+
+# Khoảng thời gian được chọn lúc chạy (None → dùng DATE_PRESET trong config).
+SELECTED_PRESET: str | None = None
+
+
+def _active_preset() -> str:
+    """date_preset đang dùng: ưu tiên lựa chọn lúc chạy, fallback về config."""
+    return SELECTED_PRESET if SELECTED_PRESET is not None else DATE_PRESET
+
+
+def current_range_label() -> str:
+    """Nhãn tiếng Việt của khoảng thời gian đang dùng (cho log / tiêu đề cột)."""
+    preset = _active_preset()
+    for label, value in DATE_PRESET_OPTIONS:
+        if value == preset:
+            return label
+    return preset or "Tùy chọn"
+
 
 def _date_params() -> dict:
-    if DATE_PRESET:
-        return {"date_preset": DATE_PRESET}
+    preset = _active_preset()
+    if preset:
+        return {"date_preset": preset}
     return {"time_range": json.dumps(TIME_RANGE)}
 
 
-_INSIGHTS_FIELDS = (
-    "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,"
-    "actions,action_values,purchase_roas,cost_per_action_type"
+_INSIGHTS_FIELD_LIST = [
+    "spend",
+    "impressions",
+    "reach",
+    "frequency",
+    "clicks",
+    "ctr",
+    "cpc",
+    "cpm",
+    "actions",
+    "cost_per_action_type",
+    "action_values",
+    "purchase_roas",
+    "website_purchase_roas",
+    "video_play_actions",
+    "video_thruplay_watched_actions",
+    "video_p25_watched_actions",
+    "video_p50_watched_actions",
+    "video_p75_watched_actions",
+    "video_p95_watched_actions",
+    "video_avg_time_watched_actions",
+    "date_start",
+    "date_stop",
+]
+_INSIGHTS_FIELDS = ",".join(_INSIGHTS_FIELD_LIST)
+
+AD_REPORT_FIELDS = [
+    "ad_id",
+    "ad_name",
+    "campaign_id",
+    "campaign_name",
+    "adset_id",
+    "adset_name",
+    "creative",
+    *_INSIGHTS_FIELD_LIST,
+    "post_reactions",
+    "post_comments",
+    "post_shares",
+]
+
+# creative and post_* are assembled after the Insights call. creative comes from
+# /ads, while post_* is derived from the action list Meta already returns.
+AD_INSIGHTS_FIELDS = ",".join(
+    field for field in AD_REPORT_FIELDS
+    if field not in {"creative", "post_reactions", "post_comments", "post_shares"}
 )
 
 
@@ -175,9 +247,38 @@ def get_or_create_worksheet(spreadsheet, title: str):
     return spreadsheet.add_worksheet(title=safe, rows=2000, cols=26)
 
 
+def account_tab_title(acc_name: str, preset_label: str | None = None) -> str:
+    """Tên tab cho 1 TKQC theo khoảng thời gian: 'Tên TKQC (Kỳ)'.
+    Mỗi kỳ (Hôm nay / Hôm qua / Toàn thời gian…) là 1 tab riêng, không ghi đè lẫn nhau."""
+    label = preset_label or current_range_label()
+    return sanitize_sheet_name(f"{acc_name} ({label})")
+
+
+def parse_tab_title(title: str) -> tuple[str, str | None]:
+    """Tách 'Tên TKQC (Kỳ)' → (tên_TKQC, date_preset).
+    Trả (title, None) nếu hậu tố trong ngoặc không khớp khoảng thời gian hợp lệ
+    (vd 'TKQC API' hay tab khác → bỏ qua)."""
+    import re
+    m = re.match(r"^(.*) \((.+)\)$", title)
+    if not m:
+        return title, None
+    acc_name, label = m.group(1), m.group(2)
+    for lbl, value in DATE_PRESET_OPTIONS:
+        if lbl == label:
+            return acc_name, value
+    return title, None
+
+
+def build_headers() -> list[str]:
+    """HEADERS với cột Spend (F) đổi tên theo khoảng thời gian đang chọn."""
+    headers = HEADERS.copy()
+    headers[5] = f"Spend ({current_range_label()})"  # F – Spend Tháng Này → kỳ đã chọn
+    return headers
+
+
 def write_to_sheet(worksheet, rows: list[list]):
     worksheet.clear()
-    worksheet.update(values=[HEADERS], range_name="A1")
+    worksheet.update(values=[build_headers()], range_name="A1")
     if not rows:
         return
     worksheet.update(values=rows, range_name="A2", value_input_option="RAW")
@@ -222,11 +323,38 @@ def fetch_insights_campaign_level(account_id: str) -> list[dict]:
     params = {
         "level": "campaign",
         **_date_params(),
-        "fields": f"campaign_id,{_INSIGHTS_FIELDS}",
+        "fields": f"campaign_id,campaign_name,{_INSIGHTS_FIELDS}",
         "access_token": ACCESS_TOKEN,
         "limit": 500,
     }
     return graph_paginate(url, params, label="act_{id}/insights")
+
+
+def fetch_insights_ad_level_report(account_id: str) -> list[dict]:
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/insights"
+    params = {
+        "level": "ad",
+        **_date_params(),
+        "fields": AD_INSIGHTS_FIELDS,
+        "access_token": ACCESS_TOKEN,
+        "limit": 500,
+    }
+    return graph_paginate(url, params, label="act_{id}/insights?level=ad")
+
+
+def fetch_ad_creatives(account_id: str) -> dict[str, dict]:
+    url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/ads"
+    params = {
+        "fields": "id,creative",
+        "access_token": ACCESS_TOKEN,
+        "limit": 500,
+    }
+    rows = graph_paginate(url, params, label="act_{id}/ads")
+    return {
+        row["id"]: row.get("creative", {})
+        for row in rows
+        if row.get("id")
+    }
 
 
 # ── Insights metrics ───────────────────────────────────────────────────────────
@@ -249,6 +377,28 @@ def _sum_actions(action_list: list, types: list) -> float:
             total += safe_float(item.get("value"))
             matched.add(atype)
     return total
+
+
+def _format_action_count(value: float):
+    return int(value) if value else ""
+
+
+def build_ad_report_rows(ad_insights: list[dict], creative_by_ad_id: dict[str, dict]) -> list[dict]:
+    rows = []
+    for insight in ad_insights:
+        ad_id = insight.get("ad_id", "")
+        actions = insight.get("actions") or []
+        computed = {
+            "creative": creative_by_ad_id.get(ad_id, {}),
+            "post_reactions": _format_action_count(_sum_actions(actions, ["post_reaction"])),
+            "post_comments": _format_action_count(_sum_actions(actions, ["comment", "post_comment"])),
+            "post_shares": _format_action_count(_sum_actions(actions, ["post"])),
+        }
+        rows.append({
+            field: computed[field] if field in computed else insight.get(field, "")
+            for field in AD_REPORT_FIELDS
+        })
+    return rows
 
 
 def _get_primary_result(insight: dict) -> tuple[float, float]:
@@ -438,6 +588,34 @@ def get_all_accounts(spreadsheet) -> list[dict]:
     return accounts
 
 
+def list_campaign_tabs(spreadsheet) -> list[dict]:
+    """Quét các tab dạng 'Tên TKQC (Kỳ)' do get_campaigns tạo.
+    Trả [{title, acc_id, acc_name, preset, preset_label}] — chỉ tab khớp 1 TKQC
+    trong sheet TKQC API và 1 khoảng thời gian hợp lệ (bỏ TKQC API, snapshot...).
+    Dùng chung bởi get_details.py và tong_hop.py."""
+    accounts = get_all_accounts(spreadsheet)
+    acc_by_name     = {sanitize_sheet_name(a["name"]).strip(): a for a in accounts}
+    label_by_preset = {value: label for label, value in DATE_PRESET_OPTIONS}
+
+    tabs = []
+    for ws in spreadsheet.worksheets():
+        acc_name, preset = parse_tab_title(ws.title)
+        if preset is None:
+            continue
+        acc = acc_by_name.get(acc_name.strip())
+        if acc is None:
+            continue  # tên trong tab không khớp TKQC nào → bỏ qua
+        tabs.append({
+            "title":        ws.title,
+            "acc_id":       acc["id"],
+            "acc_name":     acc["name"],
+            "preset":       preset,
+            "preset_label": label_by_preset.get(preset, preset),
+        })
+    tabs.sort(key=lambda t: (t["acc_name"], t["preset_label"]))
+    return tabs
+
+
 def read_detail_selections(worksheet) -> dict[str, bool]:
     """Đọc cột 'Chọn Lấy Chi Tiết' trong tab tài khoản → {campaign_id: bool}.
     Chỉ xét dòng có Cấp = 'Campaign'."""
@@ -469,16 +647,22 @@ def read_detail_selections(worksheet) -> dict[str, bool]:
 
 
 def build_rows_for_account(worksheet, acc_id: str, now_str: str,
-                           auto_by_spend: bool = False) -> list[list]:
+                           auto_by_spend: bool = False,
+                           raw_out: dict | None = None) -> list[list]:
     """Lấy toàn bộ campaign + insights của 1 TKQC, trả về list dòng (spend giảm dần).
-    Giữ nguyên cột 'Chọn Lấy Chi Tiết' cũ trong tab để không mất lựa chọn."""
+    Giữ nguyên cột 'Chọn Lấy Chi Tiết' cũ trong tab để không mất lựa chọn.
+    Nếu truyền raw_out, ghi dữ liệu thô (campaigns + insights) vào đó để xuất JSON."""
     detail_selections = read_detail_selections(worksheet)
     camps = fetch_campaigns(acc_id)
+    if raw_out is not None:
+        raw_out["campaigns"] = camps
     camp_meta = {
         c["id"]: {"name": c.get("name", ""), "status": c.get("status", "")}
         for c in camps if "id" in c
     }
     ins = fetch_insights_campaign_level(acc_id)
+    if raw_out is not None:
+        raw_out["campaign_insights"] = ins
     insights = {r["campaign_id"]: r for r in ins if "campaign_id" in r}
 
     rows = []
@@ -493,7 +677,24 @@ def build_rows_for_account(worksheet, acc_id: str, now_str: str,
     return [r for _, r in rows]
 
 
+# ── JSON output (dữ liệu thô để kiểm tra / chỉnh logic) ─────────────────────────
+
+JSON_FILE = BASE_DIR / "get_campaigns.json"
+
+
+def save_json(dump: dict, api_info: dict | None = None):
+    """Ghi dữ liệu thô đã lấy (campaigns + insights cấp campaign) theo từng tab ra
+    file để đối chiếu khi số trên Sheet trông lạ."""
+    payload: dict = {}
+    if api_info:
+        payload["_api"] = api_info
+    payload.update(dump)
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
 def run(log):
+    log(f"⏰ Khoảng thời gian: {current_range_label()}  (date_preset={_active_preset()})")
     log(f"Kết nối Google Sheets ({SPREADSHEET_ID})...")
     try:
         ss = connect_spreadsheet()
@@ -512,22 +713,37 @@ def run(log):
     log(f"  → {len(accounts)} TKQC được chọn.")
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    for i, acc in enumerate(accounts, 1):
-        acc_id, acc_name = acc["id"], acc["name"]
-        if i > 1:
-            log(f"  ⏱ Nghỉ {ACCOUNT_DELAY}s trước TKQC tiếp theo...")
-            time.sleep(ACCOUNT_DELAY)
-        log(f"[{i}/{len(accounts)}] {acc_name}: lấy campaign + insights...")
-        ws = get_or_create_worksheet(ss, acc_name)  # lấy tab trước để đọc 'Chọn Lấy Chi Tiết' cũ
-        try:
-            rows = build_rows_for_account(ws, acc_id, now_str)
-        except RateLimitError:
-            raise  # rate limit → dừng hẳn, để handler ngoài lưu/log
-        except RuntimeError as e:
-            log(f"    ⚠ Bỏ qua (lỗi: {e})")
-            continue
-        write_to_sheet(ws, rows)
-        log(f"    → {len(rows)} campaign → tab '{sanitize_sheet_name(acc_name)}'")
+    dump: dict[str, dict] = {}   # {tab_title: {acc_id, acc_name, campaigns, campaign_insights}}
+    try:
+        for i, acc in enumerate(accounts, 1):
+            acc_id, acc_name = acc["id"], acc["name"]
+            if i > 1:
+                log(f"  ⏱ Nghỉ {ACCOUNT_DELAY}s trước TKQC tiếp theo...")
+                time.sleep(ACCOUNT_DELAY)
+            log(f"[{i}/{len(accounts)}] {acc_name}: lấy campaign + insights...")
+            title = account_tab_title(acc_name)  # tab riêng theo kỳ: 'Tên TKQC (Kỳ)'
+            ws = get_or_create_worksheet(ss, title)  # lấy tab trước để đọc 'Chọn Lấy Chi Tiết' cũ
+            raw = {"acc_id": acc_id, "acc_name": acc_name}
+            dump[title] = raw  # đăng ký trước để rate-limit vẫn giữ phần đã lấy
+            try:
+                rows = build_rows_for_account(ws, acc_id, now_str, raw_out=raw)
+            except RateLimitError:
+                raise  # rate limit → dừng hẳn, để handler ngoài lưu/log
+            except RuntimeError as e:
+                log(f"    ⚠ Bỏ qua (lỗi: {e})")
+                continue
+            write_to_sheet(ws, rows)
+            log(f"    → {len(rows)} campaign → tab '{title}'")
+    finally:
+        base = f"https://graph.facebook.com/{FB_API_VERSION}"
+        save_json(dump, {
+            "campaigns":         f"GET {base}/act_{{id}}/campaigns  (fields=id,name,status)",
+            "insights_campaign": f"GET {base}/act_{{id}}/insights  (level=campaign)",
+            "date":              _date_params(),
+            "preset":            _active_preset(),
+            "note":              "Mỗi tab: acc_id, acc_name, campaigns[], campaign_insights[]",
+        })
+        log(f"  JSON thô → {JSON_FILE}")
 
     api_summary()
     log("\n✓ Hoàn thành!")
@@ -555,6 +771,27 @@ class ProgressApp(tk.Tk):
                  font=("Segoe UI", 10, "bold"), anchor="w", justify="left",
                  wraplength=600).pack(fill="x", padx=14, pady=(12, 4))
 
+        # ── Chọn khoảng thời gian insights trước khi chạy ──────────────────────
+        opts = tk.Frame(self, bg=self.BG)
+        opts.pack(fill="x", padx=14, pady=(4, 6))
+        tk.Label(opts, text="Khoảng thời gian:", bg=self.BG, fg=self.FG,
+                 font=("Segoe UI", 9)).pack(side="left")
+        s0 = ttk.Style(self)
+        s0.theme_use("clam")
+        s0.configure("D.TCombobox", fieldbackground="#1e293b", background="#1e293b",
+                     foreground=self.FG, arrowcolor=self.FG, borderwidth=0)
+        self._preset_var = tk.StringVar(value=DEFAULT_PRESET_LABEL)
+        self._preset_cb = ttk.Combobox(
+            opts, textvariable=self._preset_var, state="readonly",
+            values=[label for label, _ in DATE_PRESET_OPTIONS],
+            style="D.TCombobox", width=18)
+        self._preset_cb.pack(side="left", padx=(8, 10))
+        self._start_btn = tk.Button(
+            opts, text="Bắt đầu", command=self._start, relief="flat",
+            bg=self.ACCENT, fg="#ffffff", activebackground="#2563eb",
+            font=("Segoe UI", 9, "bold"), padx=18, pady=4)
+        self._start_btn.pack(side="left")
+
         self._log = scrolledtext.ScrolledText(
             self, bg="#1e293b", fg=self.FG, font=("Consolas", 9),
             relief="flat", borderwidth=0, insertbackground=self.FG)
@@ -576,6 +813,17 @@ class ProgressApp(tk.Tk):
                                     font=("Segoe UI", 9, "bold"), padx=16, pady=4)
         self._close_btn.pack(side="right", padx=(10, 0))
 
+        # Chưa chạy ngay — chờ người dùng chọn khoảng thời gian rồi bấm "Bắt đầu".
+
+    def _start(self):
+        """Áp khoảng thời gian đã chọn rồi khởi động worker."""
+        global SELECTED_PRESET
+        label = self._preset_var.get()
+        SELECTED_PRESET = next(
+            (value for lbl, value in DATE_PRESET_OPTIONS if lbl == label), DATE_PRESET
+        )
+        self._preset_cb.configure(state="disabled")
+        self._start_btn.configure(state="disabled")
         self._progress.start(12)
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -606,9 +854,26 @@ class ProgressApp(tk.Tk):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+def _choose_preset_console() -> None:
+    """Hỏi khoảng thời gian qua console (khi không có tkinter)."""
+    global SELECTED_PRESET
+    print("\nChọn khoảng thời gian insights:")
+    for i, (label, _) in enumerate(DATE_PRESET_OPTIONS, 1):
+        mark = "  (mặc định)" if label == DEFAULT_PRESET_LABEL else ""
+        print(f"  {i}. {label}{mark}")
+    choice = input("Nhập số (Enter = mặc định): ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(DATE_PRESET_OPTIONS):
+        SELECTED_PRESET = DATE_PRESET_OPTIONS[int(choice) - 1][1]
+    else:
+        SELECTED_PRESET = next(
+            (v for lbl, v in DATE_PRESET_OPTIONS if lbl == DEFAULT_PRESET_LABEL), DATE_PRESET
+        )
+
+
 if __name__ == "__main__":
     if tk is None:
         # Không có tkinter → chạy console.
+        _choose_preset_console()
         run(lambda m: print(m))
     else:
         ProgressApp().mainloop()
