@@ -33,9 +33,9 @@ import get_campaigns  # để set get_campaigns.SELECTED_PRESET (khoảng thời
 from get_campaigns import (
     # Constants & config
     BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
-    _date_params, HEADERS, COL_CAMP_ID, current_range_label,
+    _date_params, HEADERS, COL_CAMP_ID, current_range_label, DATE_PRESET_OPTIONS,
     # Google Sheets
-    col_to_letter, connect_spreadsheet,
+    col_to_letter, connect_spreadsheet, number_format_requests,
     read_detail_selections, get_or_create_worksheet, list_campaign_tabs,
     # Facebook API
     paginate, fetch_insights_campaign_level,
@@ -47,6 +47,10 @@ from get_campaigns import (
 COLOR_CAMPAIGN = {"red": 0.81, "green": 0.89, "blue": 0.97}  # xanh dương nhạt
 COLOR_ADSET    = {"red": 1.0,  "green": 0.95, "blue": 0.80}  # vàng kem nhạt
 COLOR_AD       = {"red": 0.93, "green": 0.91, "blue": 0.97}  # tím nhạt
+
+# Chữ mặc định: màu đen, không in đậm. insert_rows kế thừa định dạng dòng phía
+# trên nên phải ép lại textFormat, nếu không dòng Adset/Ad có thể bị đậm/đổi màu.
+TEXT_DEFAULT = {"bold": False, "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}}
 
 # ── Checkpoint ────────────────────────────────────────────────────────────────
 # Cấu trúc: {acc_name: {"done": [camp_id, ...]}}
@@ -195,16 +199,20 @@ def _write_one_campaign(worksheet, camp_id: str, adsets: list,
     last_col = col_to_letter(len(HEADERS))
     formats = [{
         "range":  f"A{camp_row}:{last_col}{camp_row}",
-        "format": {"backgroundColor": COLOR_CAMPAIGN},
+        "format": {"backgroundColor": COLOR_CAMPAIGN, "textFormat": TEXT_DEFAULT},
     }]
     for k, row in enumerate(new_rows):
         sheet_row = camp_row + 1 + k
         color = COLOR_ADSET if row[1] == "Adset" else COLOR_AD  # cột B = Cấp
         formats.append({
             "range":  f"A{sheet_row}:{last_col}{sheet_row}",
-            "format": {"backgroundColor": color},
+            "format": {"backgroundColor": color, "textFormat": TEXT_DEFAULT},
         })
     worksheet.batch_format(formats)
+
+    # Áp lại kiểu dữ liệu cột — dòng Adset/Ad vừa chèn cũng đúng Number/Currency/…
+    worksheet.spreadsheet.batch_update(
+        {"requests": number_format_requests(worksheet.id)})
 
     return len(new_rows)
 
@@ -366,6 +374,8 @@ class App(tk.Tk):
 
         self._spreadsheet = None
         self._items: list[dict] = []
+        self._sort_col: str | None = None   # cột đang sắp xếp (None = thứ tự gốc)
+        self._sort_reverse = False
 
         self._apply_styles()
         self._build_ui()
@@ -395,9 +405,10 @@ class App(tk.Tk):
         s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"),
                     background=self.BORDER, foreground=self.MUTED,
                     relief="flat", padding=(8, 6))
+        # Dòng đang chọn: nền xanh NHẠT, không ép chữ trắng → giữ màu ✓ xanh / ✗ đỏ đọc rõ.
         s.map("Treeview",
-              background=[("selected", self.ACCENT)],
-              foreground=[("selected", "#ffffff")])
+              background=[("selected", "#dbeafe")],
+              foreground=[("selected", self.TEXT)])
         s.configure("TProgressbar", background=self.ACCENT,
                     troughcolor=self.BORDER, borderwidth=0, thickness=6)
 
@@ -434,9 +445,12 @@ class App(tk.Tk):
         self._tree = ttk.Treeview(card, columns=cols, show="headings",
                                   selectmode="browse")
         self._tree.heading("chon",     text="Chọn",          anchor="center")
-        self._tree.heading("acc_name", text="Tên Tài Khoản",  anchor="w")
-        self._tree.heading("ky",       text="Kỳ",             anchor="w")
-        self._tree.heading("acc_id",   text="ID Tài Khoản",   anchor="w")
+        self._tree.heading("acc_name", text="Tên Tài Khoản",  anchor="w",
+                           command=lambda: self._sort_by("acc_name"))
+        self._tree.heading("ky",       text="Kỳ",             anchor="w",
+                           command=lambda: self._sort_by("ky"))
+        self._tree.heading("acc_id",   text="ID Tài Khoản",   anchor="w",
+                           command=lambda: self._sort_by("acc_id"))
         self._tree.column("chon",     width=56,  stretch=False, anchor="center", minwidth=50)
         self._tree.column("acc_name", width=240, stretch=True,  minwidth=140)
         self._tree.column("ky",       width=120, stretch=False, minwidth=90)
@@ -501,6 +515,35 @@ class App(tk.Tk):
             ), tags=tags)
             self._items.append({**tab, "iid": iid, "selected": selected})
         self._refresh_count()
+
+    # ── Sắp xếp theo cột (bấm tiêu đề) ──────────────────────────────────────────
+    _HEADING_TEXT = {"acc_name": "Tên Tài Khoản", "ky": "Kỳ", "acc_id": "ID Tài Khoản"}
+
+    def _sort_by(self, col: str):
+        """Sắp xếp danh sách tab theo cột; bấm lại cùng cột để đảo chiều.
+        Kỳ sắp theo thứ tự logic trong DATE_PRESET_OPTIONS, không phải bảng chữ cái."""
+        self._sort_reverse = (self._sort_col == col) and not self._sort_reverse
+        self._sort_col = col
+
+        order = {value: i for i, (_label, value) in enumerate(DATE_PRESET_OPTIONS)}
+        if col == "ky":
+            key = lambda it: (order.get(it["preset"], 99), it["acc_name"].lower())
+        elif col == "acc_id":
+            key = lambda it: (it["acc_id"], it["acc_name"].lower())
+        else:  # acc_name
+            key = lambda it: (it["acc_name"].lower(), order.get(it["preset"], 99))
+
+        self._items.sort(key=key, reverse=self._sort_reverse)
+        for pos, item in enumerate(self._items):
+            self._tree.move(item["iid"], "", pos)
+            self._update_item_ui(item)  # cập nhật vạch sọc theo vị trí mới
+        self._update_headings()
+
+    def _update_headings(self):
+        """Gắn mũi tên ▲/▼ vào tiêu đề cột đang sắp xếp."""
+        for c, base in self._HEADING_TEXT.items():
+            arrow = (" ▼" if self._sort_reverse else " ▲") if c == self._sort_col else ""
+            self._tree.heading(c, text=base + arrow)
 
     def _update_item_ui(self, item: dict):
         idx = self._items.index(item)

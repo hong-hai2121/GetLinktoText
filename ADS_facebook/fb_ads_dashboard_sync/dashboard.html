@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FB Ads Dashboard — Web View</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #243044;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-2: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --chip: #334155;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+  }
+  header.topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px;
+    background: linear-gradient(90deg, #111827, #1e293b);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30;
+  }
+  header.topbar h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header.topbar .sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  button, select, input {
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; outline: none;
+  }
+  button { cursor: pointer; transition: background .15s, border-color .15s; }
+  button:hover { background: #2d3b53; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #2563eb; }
+  input::placeholder { color: var(--muted); }
+
+  nav.tabs { display: flex; gap: 6px; padding: 12px 20px 0; flex-wrap: wrap; }
+  nav.tabs button {
+    border-radius: 9px 9px 0 0; border-bottom: none; background: var(--panel);
+    color: var(--muted); padding: 9px 16px;
+  }
+  nav.tabs button.active { background: var(--accent); color: #fff; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .toolbar label { color: var(--muted); font-size: 12px; }
+
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; padding: 16px 20px 4px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px; min-width: 150px; flex: 1;
+  }
+  .card .k { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .card .v { font-size: 22px; font-weight: 700; }
+  .card.msg .v { color: var(--accent-2); }
+  .card.spend .v { color: var(--warn); }
+
+  .table-wrap { padding: 12px 20px 40px; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  thead th {
+    position: sticky; top: 0; background: var(--panel-2); z-index: 5;
+    text-align: left; padding: 9px 10px; white-space: nowrap;
+    border-bottom: 2px solid var(--border); cursor: pointer; user-select: none;
+  }
+  thead th:hover { color: #fff; }
+  thead th .arrow { color: var(--accent); margin-left: 4px; }
+  tbody td {
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis;
+  }
+  tbody tr:hover { background: rgba(59,130,246,.08); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.json { color: var(--muted); cursor: pointer; max-width: 220px; }
+  td.json:hover { color: var(--accent); }
+  .status-active { color: var(--accent-2); }
+  .status-paused { color: var(--warn); }
+  .status-other  { color: var(--muted); }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    background: var(--chip); font-size: 11px;
+  }
+
+  .state {
+    padding: 60px 20px; text-align: center; color: var(--muted);
+  }
+  .state.error { color: var(--danger); }
+  .state a { color: var(--accent); }
+  .spin {
+    width: 26px; height: 26px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    margin: 0 auto 14px; animation: r .8s linear infinite;
+  }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; max-width: 640px; width: 90vw; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog pre { white-space: pre-wrap; word-break: break-word; font-size: 12px;
+    background: var(--bg); padding: 12px; border-radius: 8px; max-height: 60vh; overflow: auto; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>📊 FB Ads Dashboard</h1>
+  <span class="sub" id="sheetInfo">—</span>
+  <span class="spacer"></span>
+  <span class="sub" id="updatedAt"></span>
+  <button class="primary" id="refreshBtn">⟳ Tải lại</button>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<div class="toolbar">
+  <input id="search" type="search" placeholder="🔍 Tìm trong bảng…" style="min-width:220px" />
+  <label>Kỳ:</label>
+  <select id="periodFilter">
+    <option value="all">Tất cả</option>
+    <option value="today">Hôm nay</option>
+    <option value="yesterday">Hôm qua</option>
+    <option value="last7">7 ngày gần nhất</option>
+    <option value="thismonth">Tháng này</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="sub" id="rowCount"></span>
+</div>
+
+<div class="cards" id="cards"></div>
+<div class="table-wrap" id="tableWrap">
+  <div class="state"><div class="spin"></div>Đang tải dữ liệu…</div>
+</div>
+
+<dialog id="jsonDialog">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <strong id="jsonTitle">JSON</strong>
+    <button onclick="document.getElementById('jsonDialog').close()">Đóng ✕</button>
+  </div>
+  <pre id="jsonBody"></pre>
+</dialog>
+
+<script>
+// ── Cấu hình ──────────────────────────────────────────────────────────────────
+// ID Google Sheet (database tạm do main.py ghi vào). Sheet phải bật
+// "Bất kỳ ai có link đều xem được" để đọc qua gviz từ trình duyệt.
+const SHEET_ID = "1aBWyX1f3yjMVbbJ7HxDbvS3ZvjBL9JsXc3Ycm_gTwAc";
+
+const TABS = [
+  { name: "dashboard_daily",     label: "Dashboard ngày",  dateCol: "date" },
+  { name: "dashboard_lifetime",  label: "Lifetime",        dateCol: null },
+  { name: "raw_campaign_daily",  label: "Campaign",        dateCol: "date_start" },
+  { name: "raw_adset_daily",     label: "Adset",           dateCol: "date_start" },
+  { name: "raw_ad_daily",        label: "Ad",              dateCol: "date_start" },
+  { name: "sync_log",            label: "Sync log",        dateCol: null },
+];
+
+// Định dạng cột theo tên (khớp schema.py).
+const CURRENCY_COLS = new Set(["spend","cpc","cpm","cost_per_message","daily_budget",
+  "lifetime_budget","cost_per_order","revenue","total_spend","avg_cpc","avg_cpm",
+  "avg_cost_per_message","total_revenue","avg_cost_per_order"]);
+const PERCENT_COLS = new Set(["ctr","avg_ctr"]);
+const INT_COLS = new Set(["impressions","reach","clicks","inline_link_clicks","messages",
+  "total_impressions","total_reach","total_clicks","total_messages","total_orders","orders",
+  "video_play_actions","video_thruplay_watched_actions","video_p25_watched_actions",
+  "video_p50_watched_actions","video_p75_watched_actions","video_p95_watched_actions",
+  "video_avg_time_watched_actions","post_reactions","post_comments","post_shares",
+  "rows_fetched","rows_inserted","rows_updated"]);
+const JSON_COLS = new Set(["actions_json","cost_per_action_type_json"]);
+const STATUS_COLS = new Set(["campaign_status","campaign_effective_status","adset_status",
+  "adset_effective_status","ad_status","ad_effective_status","status"]);
+
+const vnNum = new Intl.NumberFormat("vi-VN");
+const vnCur = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+
+// ── Trạng thái ────────────────────────────────────────────────────────────────
+let activeTab = TABS[0];
+let currentData = { cols: [], rows: [] };   // dữ liệu tab đang xem
+let sortState = { col: null, dir: 1 };
+
+// ── gviz fetch ────────────────────────────────────────────────────────────────
+async function fetchSheet(sheetName) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
+    + `?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  // Phản hồi gviz bọc trong: google.visualization.Query.setResponse({...});
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < 0) throw new Error("Phản hồi gviz không hợp lệ");
+  const json = JSON.parse(text.slice(start, end + 1));
+  if (json.status === "error") {
+    const msg = (json.errors || []).map(e => e.detailed_message || e.message).join("; ");
+    throw new Error(msg || "Không đọc được sheet");
+  }
+  const cols = (json.table.cols || []).map(c => (c.label || c.id || "").trim());
+  const rows = (json.table.rows || []).map(r =>
+    (r.c || []).map(cell => {
+      if (!cell) return "";
+      // ưu tiên giá trị thô v; nếu null dùng f (đã định dạng)
+      return cell.v !== null && cell.v !== undefined ? cell.v : (cell.f ?? "");
+    })
+  );
+  return { cols, rows };
+}
+
+// ── Lọc theo kỳ ───────────────────────────────────────────────────────────────
+function dateRangeFor(period) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const iso = d => d.toISOString().slice(0,10);
+  if (period === "today")     return [iso(today), iso(today)];
+  if (period === "yesterday") { const y = new Date(today); y.setDate(y.getDate()-1); return [iso(y), iso(y)]; }
+  if (period === "last7")     { const s = new Date(today); s.setDate(s.getDate()-6); return [iso(s), iso(today)]; }
+  if (period === "thismonth") { const s = new Date(today.getFullYear(), today.getMonth(), 1); return [iso(s), iso(today)]; }
+  return null;
+}
+
+function applyFilters() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const period = document.getElementById("periodFilter").value;
+  const { cols, rows } = currentData;
+  const dateIdx = activeTab.dateCol ? cols.indexOf(activeTab.dateCol) : -1;
+  const range = dateIdx >= 0 ? dateRangeFor(period) : null;
+
+  let filtered = rows.filter(r => {
+    if (range) {
+      const d = String(r[dateIdx] ?? "").slice(0,10);
+      if (d < range[0] || d > range[1]) return false;
+    }
+    if (q) return r.some(c => String(c).toLowerCase().includes(q));
+    return true;
+  });
+
+  if (sortState.col !== null) {
+    const i = sortState.col;
+    filtered = filtered.slice().sort((a, b) => {
+      const av = a[i], bv = b[i];
+      const an = parseFloat(String(av).replace(/[^\d.-]/g,"")), bn = parseFloat(String(bv).replace(/[^\d.-]/g,""));
+      const bothNum = !isNaN(an) && !isNaN(bn) && String(av).match(/\d/) && String(bv).match(/\d/);
+      if (bothNum) return (an - bn) * sortState.dir;
+      return String(av).localeCompare(String(bv)) * sortState.dir;
+    });
+  }
+  return filtered;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function fmtCell(col, val) {
+  const s = String(val ?? "");
+  if (s === "") return { html: "", cls: "" };
+  if (JSON_COLS.has(col)) return { html: "{…}", cls: "json", raw: s };
+  if (STATUS_COLS.has(col)) {
+    const up = s.toUpperCase();
+    const cls = up.includes("ACTIVE") ? "status-active" : up.includes("PAUSE") ? "status-paused" : "status-other";
+    return { html: `<span class="${cls}">${esc(s)}</span>`, cls: "" };
+  }
+  const n = parseFloat(s.replace(/[^\d.-]/g,""));
+  if (!isNaN(n) && /\d/.test(s)) {
+    if (PERCENT_COLS.has(col)) return { html: n.toFixed(2) + "%", cls: "num" };
+    if (CURRENCY_COLS.has(col)) return { html: vnCur.format(Math.round(n)) + " ₫", cls: "num" };
+    if (INT_COLS.has(col)) return { html: vnNum.format(n), cls: "num" };
+  }
+  return { html: esc(s), cls: "" };
+}
+function esc(s) { return String(s).replace(/[&<>]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])); }
+
+function renderCards(cols, rows) {
+  const wrap = document.getElementById("cards");
+  if (activeTab.name === "sync_log") { wrap.innerHTML = ""; return; }
+  const idx = name => cols.indexOf(name);
+  const sum = name => { const i = idx(name); if (i<0) return null;
+    return rows.reduce((t,r)=>t + (parseFloat(String(r[i]).replace(/[^\d.-]/g,""))||0), 0); };
+  const spend = sum("spend") ?? sum("total_spend");
+  const msgs  = sum("messages") ?? sum("total_messages");
+  const impr  = sum("impressions") ?? sum("total_impressions");
+  const clicks= sum("clicks") ?? sum("total_clicks");
+  const cards = [
+    { k: "Số dòng", v: vnNum.format(rows.length) },
+    { k: "Chi tiêu", v: spend!=null ? vnCur.format(Math.round(spend))+" ₫" : "—", cls:"spend" },
+    { k: "Tin nhắn", v: msgs!=null ? vnNum.format(msgs) : "—", cls:"msg" },
+    { k: "Chi phí / tin nhắn", v: (spend&&msgs) ? vnCur.format(Math.round(spend/msgs))+" ₫" : "—" },
+    { k: "Hiển thị", v: impr!=null ? vnNum.format(impr) : "—" },
+    { k: "Nhấp chuột", v: clicks!=null ? vnNum.format(clicks) : "—" },
+  ];
+  wrap.innerHTML = cards.map(c =>
+    `<div class="card ${c.cls||""}"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
+}
+
+function renderTable() {
+  const { cols } = currentData;
+  const rows = applyFilters();
+  document.getElementById("rowCount").textContent = `${rows.length} dòng`;
+  renderCards(cols, rows);
+
+  if (!cols.length) {
+    document.getElementById("tableWrap").innerHTML =
+      `<div class="state">Sheet trống hoặc chưa có dữ liệu. Hãy chạy <code>python main.py</code> trước.</div>`;
+    return;
+  }
+  const head = "<tr>" + cols.map((c,i) => {
+    const arrow = sortState.col===i ? `<span class="arrow">${sortState.dir>0?"▲":"▼"}</span>` : "";
+    return `<th data-i="${i}">${esc(c)}${arrow}</th>`;
+  }).join("") + "</tr>";
+
+  const body = rows.map(r => "<tr>" + cols.map((c,i) => {
+    const f = fmtCell(c, r[i]);
+    const attr = f.raw ? ` data-json="${esc(f.raw)}" data-col="${esc(c)}"` : "";
+    return `<td class="${f.cls}"${attr} title="${esc(String(r[i]??""))}">${f.html}</td>`;
+  }).join("") + "</tr>").join("");
+
+  document.getElementById("tableWrap").innerHTML =
+    `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+
+  // sort khi click header
+  document.querySelectorAll("thead th").forEach(th => th.onclick = () => {
+    const i = +th.dataset.i;
+    if (sortState.col === i) sortState.dir *= -1; else { sortState.col = i; sortState.dir = 1; }
+    renderTable();
+  });
+  // xem JSON đầy đủ
+  document.querySelectorAll("td.json").forEach(td => td.onclick = () => {
+    const raw = td.dataset.json; if (!raw) return;
+    document.getElementById("jsonTitle").textContent = td.dataset.col;
+    try { document.getElementById("jsonBody").textContent = JSON.stringify(JSON.parse(raw), null, 2); }
+    catch { document.getElementById("jsonBody").textContent = raw; }
+    document.getElementById("jsonDialog").showModal();
+  });
+}
+
+// ── Tab + load ────────────────────────────────────────────────────────────────
+function buildTabs() {
+  document.getElementById("tabs").innerHTML = TABS.map(t =>
+    `<button data-name="${t.name}" class="${t===activeTab?"active":""}">${t.label}</button>`).join("");
+  document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+    activeTab = TABS.find(t => t.name === b.dataset.name);
+    sortState = { col: null, dir: 1 };
+    buildTabs(); loadActive();
+  });
+  // ẩn bộ lọc kỳ nếu tab không có cột ngày
+  document.getElementById("periodFilter").style.display = activeTab.dateCol ? "" : "none";
+}
+
+async function loadActive() {
+  document.getElementById("tableWrap").innerHTML =
+    `<div class="state"><div class="spin"></div>Đang tải “${activeTab.label}”…</div>`;
+  document.getElementById("cards").innerHTML = "";
+  try {
+    currentData = await fetchSheet(activeTab.name);
+    document.getElementById("updatedAt").textContent =
+      "Tải lúc " + new Date().toLocaleTimeString("vi-VN");
+    renderTable();
+  } catch (e) {
+    document.getElementById("tableWrap").innerHTML =
+      `<div class="state error">⚠ Không tải được sheet “${activeTab.name}”.<br>${esc(e.message)}<br><br>
+       Kiểm tra: (1) đã chạy <code>main.py</code> để tạo sheet chưa, (2) Sheet đã bật
+       “Bất kỳ ai có link đều xem được” chưa.</div>`;
+  }
+}
+
+// ── Khởi động ─────────────────────────────────────────────────────────────────
+document.getElementById("sheetInfo").innerHTML =
+  `<a href="https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit" target="_blank" style="color:var(--muted)">Sheet ↗</a>`;
+document.getElementById("search").addEventListener("input", renderTable);
+document.getElementById("periodFilter").addEventListener("change", renderTable);
+document.getElementById("refreshBtn").addEventListener("click", loadActive);
+buildTabs();
+loadActive();
+</script>
+</body>
+</html>

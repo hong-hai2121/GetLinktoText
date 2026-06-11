@@ -22,7 +22,7 @@ import json
 import time
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 # Console Windows có thể là cp1252 → ép UTF-8 để log tiếng Việt không crash.
 try:
@@ -105,6 +105,9 @@ COL_SPEND   = "Số Tiền Đã Chi Tiêu"  # build_headers() gắn thêm (Kỳ)
 
 COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # Chọn Lấy Chi Tiết = TRUE → xanh nhạt
 COLOR_DEFAULT  = {"red": 1.0,  "green": 1.0,  "blue": 1.0}
+
+# Chữ mặc định: màu đen, không in đậm — ép lại để tránh kế thừa định dạng cũ.
+TEXT_DEFAULT = {"bold": False, "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}}
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -268,6 +271,9 @@ def build_headers() -> list[str]:
 
 def write_to_sheet(worksheet, rows: list[list]):
     worksheet.clear()
+    # Đặt kiểu dữ liệu cột TRƯỚC khi ghi để cột ID (Plain Text) không làm tròn ID 17 số.
+    worksheet.spreadsheet.batch_update(
+        {"requests": number_format_requests(worksheet.id)})
     worksheet.update(values=[build_headers()], range_name="A1")
     if not rows:
         return
@@ -280,7 +286,8 @@ def write_to_sheet(worksheet, rows: list[list]):
         is_selected = row[0] == "TRUE"  # cột A = Chọn Lấy Chi Tiết
         formats.append({
             "range":  f"A{sheet_row}:{last_col}{sheet_row}",
-            "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT},
+            "format": {"backgroundColor": COLOR_SELECTED if is_selected else COLOR_DEFAULT,
+                       "textFormat": TEXT_DEFAULT},
         })
     worksheet.batch_format(formats)
 
@@ -481,19 +488,44 @@ def aggregate_metrics(metrics_list: list[dict]) -> dict:
 
 
 def _num(v, decimals=0):
-    """Số > 0 → làm tròn; 0/None/không parse được → ô trống."""
+    """Số > 0 → SỐ THẬT đã làm tròn; 0/None/không parse được → ô trống.
+    Ghi RAW vào Sheet là số thật để type Number/Currency/Decimal của cột hiển thị đúng
+    (định dạng do number_format_requests đặt cho cả cột)."""
     f = safe_float(v)
     return round(f, decimals) if f > 0 else ""
 
 
+def _frac(v):
+    """Tỉ lệ % (giá trị đã nhân 100 sẵn, vd CTR=1.23) → PHÂN SỐ 0.0123 cho ô kiểu
+    Percent (Sheets tự nhân 100 khi hiển thị → '1,23%'). 0/None → ô trống."""
+    f = safe_float(v)
+    return round(f / 100, 6) if f > 0 else ""
+
+
 def _budget(v):
-    """daily_budget (FB trả chuỗi theo đơn vị nhỏ nhất của tiền tệ) → số nguyên."""
+    """daily_budget (FB trả chuỗi theo đơn vị nhỏ nhất của tiền tệ) → số nguyên thật."""
     if v in (None, "", 0, "0"):
         return ""
     try:
         return int(float(v))
     except (ValueError, TypeError):
         return v
+
+
+# Mốc serial của Google Sheets/Excel: 1899-12-30 = 0.
+_SHEETS_EPOCH = date(1899, 12, 30)
+
+
+def _date_serial(v):
+    """Ngày FB 'YYYY-MM-DD' → SỐ serial ngày của Sheets (để ô là kiểu Date thật,
+    hiển thị dd/mm/yyyy theo number format). Rỗng/không parse được → giữ nguyên."""
+    if not v:
+        return ""
+    try:
+        d = datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return v
+    return (d - _SHEETS_EPOCH).days
 
 
 def format_actions(items) -> str:
@@ -627,17 +659,76 @@ COLUMNS: list[tuple[str, bool, object]] = [
     ("Người Tiếp Cận",                          True,  lambda c: _num(c["m"]["reach"])),
     ("Tần Suất",                                True,  lambda c: _num(c["m"]["freq"], 2)),
     ("Số Lần Nhấp",                             True,  lambda c: _num(c["m"]["clicks"])),
-    ("CTR (%)",                                 True,  lambda c: _num(c["m"]["ctr"], 2)),
+    ("CTR (%)",                                 True,  lambda c: _frac(c["m"]["ctr"])),
     ("CPC",                                     True,  lambda c: _num(c["m"]["cpc"], 2)),
     ("CPM",                                     True,  lambda c: _num(c["m"]["cpm"], 2)),
     ("Hành Động",                               True,  lambda c: c["m"]["actions_str"]),
     ("Chi Phí / Hành Động",                     True,  lambda c: c["m"]["cpa_str"]),
     ("Mục Tiêu",                                False, _g_objective),
-    ("Ngày Bắt Đầu",                            True,  lambda c: c["m"]["date_start"]),
-    ("Ngày Kết Thúc",                           True,  lambda c: c["m"]["date_stop"]),
+    ("Ngày Bắt Đầu",                            True,  lambda c: _date_serial(c["m"]["date_start"])),
+    ("Ngày Kết Thúc",                           True,  lambda c: _date_serial(c["m"]["date_stop"])),
 ]
 
 HEADERS = [h for h, _metric, _get in COLUMNS]
+
+
+# ── Kiểu dữ liệu (numberFormat) cho từng cột ────────────────────────────────────
+# Áp THEO CỘT (cả cột từ dòng 2) nên kỳ mới / dòng Adset-Ad chèn thêm đều tự đúng
+# kiểu, không phải chỉnh tay. Mỗi mục: (type Sheets, pattern). Khớp theo TÊN cột
+# trong COLUMNS → suy ra vị trí, nên đổi thứ tự cột vẫn đúng.
+FMT_TEXT     = ("TEXT",     None)        # Plain Text — ID 17 số không bị làm tròn
+FMT_NUMBER   = ("NUMBER",   "#,##0")     # số nguyên, phân tách hàng nghìn
+FMT_DECIMAL  = ("NUMBER",   "#,##0.00")  # số thập phân (Tần Suất)
+FMT_CURRENCY = ("CURRENCY", '#,##0" ₫"') # tiền VND (đổi ' ₫' nếu TKQC dùng tiền khác)
+FMT_PERCENT  = ("PERCENT",  "0.00%")     # CTR — ô chứa phân số, Sheets nhân 100 khi hiển thị
+FMT_DATE     = ("DATE",     "dd/mm/yyyy") # ngày tháng năm — ô chứa số serial ngày
+
+_COL_FORMAT_BY_HEADER = {
+    "Cấp":                                       FMT_TEXT,
+    COL_CAMP_ID:                                 FMT_TEXT,
+    "Tên Chiến Dịch":                            FMT_TEXT,
+    "Trạng Thái":                                FMT_TEXT,
+    "Tình Trạng Phân Phối":                      FMT_TEXT,
+    "Lượt Bắt Đầu Cuộc Trò Chuyện Qua Tin Nhắn": FMT_NUMBER,
+    "Chi Phí / Lượt Bắt Đầu Cuộc Trò Chuyện":    FMT_CURRENCY,
+    "Đơn Hàng Đã Tạo":                           FMT_NUMBER,
+    "Chi Phí / Đơn Hàng":                        FMT_CURRENCY,
+    "Kết Quả":                                   FMT_NUMBER,
+    "Chi Phí / Kết Quả":                         FMT_CURRENCY,
+    "Ngân Sách Hằng Ngày":                       FMT_CURRENCY,
+    COL_SPEND:                                   FMT_CURRENCY,
+    "Lượt Hiển Thị":                             FMT_NUMBER,
+    "Người Tiếp Cận":                            FMT_NUMBER,
+    "Tần Suất":                                  FMT_DECIMAL,
+    "Số Lần Nhấp":                               FMT_NUMBER,
+    "CTR (%)":                                   FMT_PERCENT,
+    "CPC":                                       FMT_CURRENCY,
+    "CPM":                                       FMT_CURRENCY,
+    "Ngày Bắt Đầu":                              FMT_DATE,
+    "Ngày Kết Thúc":                             FMT_DATE,
+}
+# Danh sách khớp vị trí COLUMNS (None = cột để mặc định, không áp kiểu).
+COLUMN_FORMATS = [_COL_FORMAT_BY_HEADER.get(h) for h, _m, _g in COLUMNS]
+
+
+def number_format_requests(sheet_id: int, start_row: int = 1) -> list[dict]:
+    """repeatCell requests đặt numberFormat (kiểu dữ liệu) cho từng cột theo
+    COLUMN_FORMATS. start_row 0-based, half-open (mặc định 1 = bỏ hàng header, áp cả
+    cột bên dưới). Dùng với spreadsheet.batch_update({'requests': [...]})."""
+    reqs = []
+    for idx, fmt in enumerate(COLUMN_FORMATS):
+        if not fmt:
+            continue
+        typ, pattern = fmt
+        number_format = {"type": typ}
+        if pattern:
+            number_format["pattern"] = pattern
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sheet_id, "startColumnIndex": idx,
+                      "endColumnIndex": idx + 1, "startRowIndex": start_row},
+            "cell": {"userEnteredFormat": {"numberFormat": number_format}},
+            "fields": "userEnteredFormat.numberFormat"}})
+    return reqs
 
 
 def _build_row(level: str, camp_id: str, entity: dict, insight: dict,
@@ -806,7 +897,8 @@ def build_rows_for_account(worksheet, acc_id: str,
                            auto_by_spend: bool = False,
                            raw_out: dict | None = None) -> list[list]:
     """Lấy toàn bộ campaign + insights của 1 TKQC, trả về list dòng (spend giảm dần).
-    Giữ nguyên cột 'Chọn Lấy Chi Tiết' cũ trong tab để không mất lựa chọn.
+    Giữ nguyên cột 'Chọn Lấy Chi Tiết' cũ trong tab để không mất lựa chọn; campaign
+    MỚI (chưa có trong tab) mặc định TRUE.
     Nếu truyền raw_out, ghi dữ liệu thô (campaigns + insights) vào đó để xuất JSON."""
     detail_selections = read_detail_selections(worksheet)
     camps = fetch_campaigns(acc_id)
@@ -825,7 +917,7 @@ def build_rows_for_account(worksheet, acc_id: str,
         insight = insights.get(cid, {})
         spend = safe_float(insight.get("spend"))
         rows.append((spend, _campaign_row(
-            meta, insight, detail_selections.get(cid, False), auto_by_spend)))
+            meta, insight, detail_selections.get(cid, True), auto_by_spend)))
     rows.sort(key=lambda t: t[0], reverse=True)
     return [r for _, r in rows]
 
@@ -976,6 +1068,7 @@ class ProgressApp(tk.Tk):
         )
         self._preset_cb.configure(state="disabled")
         self._start_btn.configure(state="disabled")
+        self._close_btn.configure(state="disabled")  # khóa Đóng khi đang chạy
         self._progress.start(12)
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -1002,6 +1095,10 @@ class ProgressApp(tk.Tk):
     def _finish(self):
         self._progress.stop()
         self._close_btn.configure(state="normal")
+        # Mở lại lựa chọn để chọn kỳ khác và chạy tiếp ngay trong cửa sổ này.
+        self._preset_cb.configure(state="readonly")
+        self._start_btn.configure(state="normal", text="Chạy tiếp")
+        self._append("\n" + "─" * 50 + "\n")  # ngăn cách giữa các lần chạy
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
