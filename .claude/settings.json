@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
       "PowerShell(d:\\\\Python\\\\GetLinktoText\\\\pancake_to_meinvoice\\\\venv\\\\Scripts\\\\pip.exe install openpyxl pandas python-dateutil)",
@@ -42,7 +45,24 @@
       "Bash(python -m py_compile get_campaigns.py)",
       "Bash(python -m py_compile get_details.py tong_hop.py get_campaigns.py)",
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
-      "Bash(python -m py_compile get_campaigns.py get_details.py tong_hop.py)"
+      "Bash(python -m py_compile get_campaigns.py get_details.py tong_hop.py)",
+      "Bash(cp -r D:Pythonharnessskillsharness 'C:\\\\Users\\\\PC\\\\.claude\\\\skills\\\\harness')",
+      "Bash(Test-Path 'C:\\\\Users\\\\PC\\\\.claude\\\\skills\\\\harness\\\\SKILL.md')",
+      "PowerShell(Copy-Item -Recurse -Force \"D:\\\\Python\\\\harness\\\\skills\\\\harness\" \"$HOME\\\\.claude\\\\skills\\\\harness\"; Test-Path \"$HOME\\\\.claude\\\\skills\\\\harness\\\\SKILL.md\")",
+      "PowerShell(\"=== agents ===\")",
+      "PowerShell(\"=== skills ===\")",
+      "PowerShell(\"=== commands ===\")",
+      "PowerShell(\"=== CLAUDE.md ===\")",
+      "PowerShell(\"=== top-level py ===\")",
+      "PowerShell(\"=== fb_ads_accounts ===\")",
+      "PowerShell(\"=== fb_ads_tsAnhDuc \\(file dang m?\\) ===\")",
+      "PowerShell(\"=== ADS_facebook subfolders ===\")",
+      "Edit(/.claude/skills/fb-pipeline-edit/**)",
+      "Edit(/.claude/skills/fb-pipeline-verify/**)",
+      "Edit(/.claude/skills/fb-graph-gspread-ref/**)",
+      "Edit(/.claude/skills/fb-ads-pipeline/**)",
+      "Bash(python .claude/skills/fb-pipeline-verify/scripts/verify_pipeline.py ADS_facebook/fb_ads_tsAnhDuc)",
+      "Bash(echo \"=== exit: $? ===\")"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"
