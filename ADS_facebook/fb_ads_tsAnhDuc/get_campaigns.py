@@ -50,7 +50,7 @@ SPREADSHEET_ID = "1aBWyX1f3yjMVbbJ7HxDbvS3ZvjBL9JsXc3Ycm_gTwAc"
 TKQC_SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
 
-ACCOUNT_DELAY = 3  # giây nghỉ giữa mỗi TKQC — giảm tần suất gọi API (chống rate limit)
+ACCOUNT_DELAY = 60  # giây nghỉ giữa mỗi TKQC — giảm tần suất gọi API (chống rate limit)
 
 SERVICE_ACCOUNT_EMAIL = "ads-392@hai-ads-check.iam.gserviceaccount.com"
 
@@ -167,16 +167,7 @@ _INSIGHTS_FIELD_LIST = [
     "cpm",
     "actions",
     "cost_per_action_type",
-    "action_values",
-    "purchase_roas",
-    "website_purchase_roas",
-    "video_play_actions",
     "video_thruplay_watched_actions",
-    "video_p25_watched_actions",
-    "video_p50_watched_actions",
-    "video_p75_watched_actions",
-    "video_p95_watched_actions",
-    "video_avg_time_watched_actions",
     "date_start",
     "date_stop",
 ]

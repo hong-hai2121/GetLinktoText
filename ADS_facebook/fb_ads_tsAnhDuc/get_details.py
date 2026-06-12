@@ -20,7 +20,7 @@ import threading
 from datetime import datetime
 
 CAMPAIGN_DELAY = 5  # giây nghỉ giữa mỗi campaign — giảm tần suất gọi API
-ACCOUNT_DELAY  = 3  # giây nghỉ giữa mỗi TKQC — giảm tần suất gọi API
+ACCOUNT_DELAY  = 60  # giây nghỉ giữa mỗi TKQC — giảm tần suất gọi API
 
 try:
     import tkinter as tk

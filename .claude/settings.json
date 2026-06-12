@@ -62,7 +62,9 @@
       "Edit(/.claude/skills/fb-graph-gspread-ref/**)",
       "Edit(/.claude/skills/fb-ads-pipeline/**)",
       "Bash(python .claude/skills/fb-pipeline-verify/scripts/verify_pipeline.py ADS_facebook/fb_ads_tsAnhDuc)",
-      "Bash(echo \"=== exit: $? ===\")"
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(python .claude/skills/fb-pipeline-verify/scripts/verify_pipeline.py)",
+      "Bash(python -m py_compile ADS_facebook/fb_ads_tsAnhDuc/fb_api.py ADS_facebook/fb_ads_tsAnhDuc/get_campaigns.py ADS_facebook/fb_ads_tsAnhDuc/get_details.py)"
     ],
     "additionalDirectories": [
       "D:\\Python\\GetLinktoText\\Misatothue"

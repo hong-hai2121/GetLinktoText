@@ -3,7 +3,10 @@ Bộ đếm & log số lần gọi Facebook Graph API — dùng chung cho
 main.py, get_campaigns.py, get_details.py.
 
 - Mỗi lần gọi API in ra terminal: số thứ tự + endpoint.
-- Tự retry khi gặp rate limit (code 4 / 17 / 32 / 613) với backoff.
+- Gặp LỖI BẤT KỲ (rate limit, lỗi mạng, lỗi Meta...) → dừng ngay,
+  báo lỗi lập tức, KHÔNG tự thử lại.
+- Rate limit (code 4 / 17 / 32 / 613 hoặc HTTP 429) → RateLimitError
+  để script ngoài lưu checkpoint rồi dừng.
 - Khi lỗi, in các header usage để biết loại quota nào bị chạm.
 - Cuối mỗi script gọi api_summary() để in bảng tổng kết theo endpoint.
 """
@@ -15,7 +18,8 @@ from collections import OrderedDict
 import requests
 
 RATE_LIMIT_CODES = (4, 17, 32, 613)
-CALL_DELAY = 1.0  # giây nghỉ sau mỗi lần gọi API — tăng lên nếu vẫn bị limit
+CALL_DELAY = 3.0  # giây nghỉ sau mỗi lần gọi API — tăng lên nếu vẫn bị limit
+REQUEST_TIMEOUT = 60
 
 
 class RateLimitError(RuntimeError):
@@ -41,8 +45,9 @@ def _endpoint_label(url: str) -> str:
 
 
 def graph_get(url: str, params: dict, label: str | None = None) -> dict:
-    """GET tới Graph API: đếm + log mỗi lần gọi, tự retry khi rate limit.
-    Trả về data JSON đã parse (đã raise nếu lỗi không thể retry)."""
+    """GET tới Graph API: đếm + log mỗi lần gọi.
+    Gặp lỗi bất kỳ → raise ngay lập tức, KHÔNG tự thử lại.
+    Rate limit (code 4/17/32/613 hoặc HTTP 429) → RateLimitError."""
     global _total_calls
     endpoint = label or _endpoint_label(url)
 
@@ -51,7 +56,12 @@ def graph_get(url: str, params: dict, label: str | None = None) -> dict:
     print(f"  [API #{_total_calls}] GET {endpoint}"
           f"  (lần {_api_calls[endpoint]} cho endpoint này)")
 
-    resp = requests.get(url, params=params)
+    try:
+        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"    Lỗi mạng: {e} → DỪNG NGAY.")
+        raise RuntimeError(f"Lỗi mạng khi gọi {endpoint}: {e}") from e
+
     try:
         data = resp.json()
     except ValueError:
@@ -59,13 +69,20 @@ def graph_get(url: str, params: dict, label: str | None = None) -> dict:
 
     if "error" in data:
         err = data["error"]
+        print(f"    Facebook error: HTTP {resp.status_code}: {err.get('message')}")
+        print(
+            "      "
+            f"type={err.get('type')}, code={err.get('code')}, "
+            f"subcode={err.get('error_subcode')}, fbtrace_id={err.get('fbtrace_id')}"
+        )
         print("    --- Facebook usage headers ---")
         for h in ("X-App-Usage", "X-Business-Use-Case-Usage", "X-Ad-Account-Usage"):
             if h in resp.headers:
                 print(f"      {h}: {resp.headers[h]}")
-        if err.get("code") in RATE_LIMIT_CODES:
+        if err.get("code") in RATE_LIMIT_CODES or resp.status_code == 429:
             raise RateLimitError(
-                f"Rate limit (code={err.get('code')}): {err.get('message')}"
+                f"Rate limit (HTTP {resp.status_code}, code={err.get('code')}): "
+                f"{err.get('message')}"
             )
         raise RuntimeError(
             f"Facebook API lỗi (HTTP {resp.status_code}): {err.get('message')} "
@@ -73,7 +90,16 @@ def graph_get(url: str, params: dict, label: str | None = None) -> dict:
             f"subcode={err.get('error_subcode')}]"
         )
 
-    resp.raise_for_status()
+    if resp.status_code == 429:
+        print(f"    HTTP 429 (Too Many Requests) → DỪNG NGAY.")
+        raise RateLimitError(f"Rate limit (HTTP 429) khi gọi {endpoint}")
+
+    if not resp.ok:
+        print(f"    HTTP {resp.status_code} → DỪNG NGAY.")
+        raise RuntimeError(
+            f"Facebook API lỗi HTTP {resp.status_code} khi gọi {endpoint}"
+        )
+
     if CALL_DELAY > 0:
         time.sleep(CALL_DELAY)
     return data

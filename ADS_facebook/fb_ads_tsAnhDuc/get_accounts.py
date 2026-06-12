@@ -10,14 +10,23 @@ service_account.json cũng tự dùng của thư mục này (BASE_DIR).
 Chạy:  python get_accounts.py
 """
 
+import argparse
 import gspread
 import json
+import sys
 import threading
 import tkinter as tk
+import traceback
 from tkinter import ttk, messagebox
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 from pathlib import Path
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 from config import ACCESS_TOKEN
 from fb_api import graph_paginate, api_summary
@@ -131,10 +140,47 @@ def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict
 
 
 def fetch_ad_accounts(access_token: str) -> list[dict]:
-    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business,funding_source_details"
     url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
-    params = {"fields": fields, "access_token": access_token, "limit": 500}
-    return graph_paginate(url, params, label="me/adaccounts")
+    base_fields = [
+        "id",
+        "name",
+        "account_status",
+        "currency",
+        "timezone_name",
+        "amount_spent",
+        "balance",
+    ]
+    attempts = [
+        ("đầy đủ", base_fields + ["business", "funding_source_details"]),
+        ("không lấy phương thức thanh toán", base_fields + ["business"]),
+        ("cơ bản", base_fields),
+    ]
+
+    last_error = None
+    for note, fields in attempts:
+        params = {
+            "fields": ",".join(fields),
+            "access_token": access_token,
+            "limit": 500,
+        }
+        try:
+            if note != "đầy đủ":
+                print(f"  → Thử lại với bộ field {note}...")
+            return graph_paginate(url, params, label="me/adaccounts")
+        except RuntimeError as e:
+            last_error = e
+            if "Requires business_management permission" not in str(e):
+                raise
+            missing = set(["business", "funding_source_details"]) & set(fields)
+            if missing:
+                print(
+                    "  ⚠ Token thiếu quyền business_management cho field: "
+                    + ", ".join(sorted(missing))
+                )
+                continue
+            raise
+
+    raise last_error or RuntimeError("Không lấy được danh sách tài khoản quảng cáo.")
 
 
 def format_money(amount_raw, currency: str) -> str:
@@ -390,6 +436,8 @@ class App(tk.Tk):
             main(cuoi_thang=cuoi_thang)
             self.after(0, self._done)
         except Exception as e:
+            print(f"\nERROR: {e}", file=sys.stderr)
+            traceback.print_exc()
             self.after(0, lambda e=e: self._error(str(e)))
 
     def _done(self):
@@ -405,5 +453,21 @@ class App(tk.Tk):
         messagebox.showerror("Lỗi", msg)
 
 
+def _run_from_cli():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--console", action="store_true", help="Run directly without opening the GUI.")
+    parser.add_argument("--cuoi-thang", action="store_true", help="Create the month-end snapshot sheet.")
+    args = parser.parse_args()
+
+    if args.console:
+        main(cuoi_thang=args.cuoi_thang)
+        return
+
+    app = App()
+    if args.cuoi_thang:
+        app._cuoi_thang.set(True)
+    app.mainloop()
+
+
 if __name__ == "__main__":
-    App().mainloop()
+    _run_from_cli()
