@@ -10,7 +10,10 @@
       "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_pages import fetch_managed_pages; from config import ACCESS_TOKEN; p = fetch_managed_pages\\(ACCESS_TOKEN\\); print\\('TONG PAGE:', len\\(p\\)\\); [print\\(' -', x.get\\('id'\\), x.get\\('name'\\), '|', x.get\\('category'\\)\\) for x in p[:15]]\")",
       "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -c \"import sys; sys.path.insert\\(0, r'$d'\\); from get_page_campaigns import connect_spreadsheet; ss = connect_spreadsheet\\(\\); print\\('SHEET OK:', ss.title\\); print\\('Tabs:', [w.title for w in ss.worksheets\\(\\)]\\)\")",
       "PowerShell($d = \"D:\\\\Python\\\\GetLinktoText\\\\ADS_facebook\\\\fb_ads_pages\"; python -m py_compile \"$d\\\\get_pages.py\" \"$d\\\\get_page_campaigns.py\"; if \\($?\\) { \"OK - cu phap hop le sau khi sua\" })",
-      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)"
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "PowerShell(python -m py_compile \"D:\\\\Python\\\\GetLinktoText\\\\MisaThueSuafile\\\\lap_day_ma_van_don.py\")",
+      "PowerShell(if \\($?\\) { \"OK - compile s?ch\" })",
+      "PowerShell(if \\($?\\) { \"OK - compile sach\" })"
     ]
   }
 }

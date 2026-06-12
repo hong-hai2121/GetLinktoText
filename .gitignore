@@ -83,6 +83,9 @@ pancake_to_meinvoice/*
 Misatothue/*
 !Misatothue/*.py
 
+# MisaThueSuafile: bỏ qua toàn bộ, không đưa lên git
+MisaThueSuafile/
+
 # Ignore output and backup directories
 output_videos/
 local_videos/
