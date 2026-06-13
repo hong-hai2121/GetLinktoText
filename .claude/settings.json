@@ -64,10 +64,17 @@
       "Bash(python .claude/skills/fb-pipeline-verify/scripts/verify_pipeline.py ADS_facebook/fb_ads_tsAnhDuc)",
       "Bash(echo \"=== exit: $? ===\")",
       "Bash(python .claude/skills/fb-pipeline-verify/scripts/verify_pipeline.py)",
-      "Bash(python -m py_compile ADS_facebook/fb_ads_tsAnhDuc/fb_api.py ADS_facebook/fb_ads_tsAnhDuc/get_campaigns.py ADS_facebook/fb_ads_tsAnhDuc/get_details.py)"
+      "Bash(python -m py_compile ADS_facebook/fb_ads_tsAnhDuc/fb_api.py ADS_facebook/fb_ads_tsAnhDuc/get_campaigns.py ADS_facebook/fb_ads_tsAnhDuc/get_details.py)",
+      "Bash(cd \"d:/Python/GetLinktoText/ADS_facebook/fb_ads_tsAnhDuc\" && echo \"=== get_details.py helpers ===\" && grep -n \"^def list_campaign_tabs\\\\|^def run_for_tabs\\\\|^def connect_spreadsheet\\\\|^def clear_checkpoint\\\\|return.*acc_name\\\\|\\\\\"title\\\\\"\\\\|'title'\\\\|\\\\\"preset\\\\\"\\\\|preset_label\" get_details.py | head -30 && echo \"\" && echo \"=== list_campaign_tabs body ===\" && sed -n '/^def list_campaign_tabs/,/^def /p' get_details.py)",
+      "Bash(python -m py_compile hub.py get_campaigns.py get_details.py tong_hop.py)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python get_campaigns.py --list-presets)",
+      "Bash(python get_details.py --help)",
+      "Bash(python tong_hop.py --help)"
     ],
     "additionalDirectories": [
-      "D:\\Python\\GetLinktoText\\Misatothue"
+      "D:\\Python\\GetLinktoText\\Misatothue",
+      "D:\\Python\\GetLinktoText\\ADS_facebook\\fb_ads_tsAnhDuc"
     ]
   }
 }

@@ -636,7 +636,50 @@ class App(tk.Tk):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+def _list_tabs_console():
+    """In JSON danh sách tab campaign (cho hub.py dựng checklist)."""
+    ss = connect_spreadsheet()
+    print(json.dumps(list_campaign_tabs(ss), ensure_ascii=False))
+
+
+def _run_console(titles: list[str]):
+    """Chạy lấy chi tiết cho các tab có title nằm trong `titles`, in ra stdout."""
+    ss = connect_spreadsheet()
+    want = set(titles)
+    tabs = [t for t in list_campaign_tabs(ss) if t["title"] in want]
+    if not tabs:
+        print("Không tìm thấy tab nào khớp lựa chọn. Dừng.")
+        return
+    clear_checkpoint()
+    print(f"Bắt đầu lấy chi tiết cho {len(tabs)} tab...")
+    try:
+        run_for_tabs(ss, tabs)
+        print("\n✓ Hoàn thành!")
+    except RateLimitError as e:
+        print(f"\n⚠ Rate limit: {e}")
+    except Exception as e:
+        print(f"\n✗ Lỗi: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    if tk is None:
-        sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
-    App().mainloop()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Phase 2 — lấy Adset/Ad/Creative cho các tab được chọn.")
+    parser.add_argument("--console", action="store_true",
+                        help="Chạy thẳng theo --tabs, in ra stdout, không mở GUI.")
+    parser.add_argument("--list-tabs", action="store_true",
+                        help="In JSON danh sách tab campaign rồi thoát (dùng bởi hub.py).")
+    parser.add_argument("--tabs", nargs="*", default=[],
+                        help="Title các tab cần lấy chi tiết (mỗi tab 1 phần tử).")
+    args = parser.parse_args()
+
+    if args.list_tabs:
+        _list_tabs_console()
+    elif args.console:
+        _run_console(args.tabs)
+    else:
+        if tk is None:
+            sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
+        App().mainloop()

@@ -29,7 +29,7 @@ except Exception:
     pass
 
 from config import ACCESS_TOKEN
-from fb_api import graph_paginate, api_summary
+from fb_api import graph_paginate, api_summary, RateLimitError
 
 BASE_DIR = Path(__file__).parent
 
@@ -139,6 +139,16 @@ def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict
     return selections, prev_balances, stored_prev_balances, last_updates
 
 
+def _is_permission_error(err: Exception) -> bool:
+    """Có phải lỗi thiếu quyền (để biết nên lùi field tùy chọn)?
+    Bắt rộng: thông điệp Meta cho permission thường chứa 'permission'/'requires'
+    hoặc code 3 / 10 / 200 (#3 không đủ capability, #10 / #200 thiếu permission)."""
+    s = str(err).lower()
+    if "permission" in s or "requires" in s or "capability" in s:
+        return True
+    return any(tok in s for tok in ("code=3,", "code=3]", "code=10", "code=200"))
+
+
 def fetch_ad_accounts(access_token: str) -> list[dict]:
     url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
     base_fields = [
@@ -150,6 +160,9 @@ def fetch_ad_accounts(access_token: str) -> list[dict]:
         "amount_spent",
         "balance",
     ]
+    # Các field tùy chọn cần quyền cao hơn ads_read (business_management /
+    # ads_management). Token chỉ có ads_read sẽ lùi dần để vẫn lấy được phần cơ bản.
+    OPTIONAL_FIELDS = {"business", "funding_source_details"}
     attempts = [
         ("đầy đủ", base_fields + ["business", "funding_source_details"]),
         ("không lấy phương thức thanh toán", base_fields + ["business"]),
@@ -167,15 +180,17 @@ def fetch_ad_accounts(access_token: str) -> list[dict]:
             if note != "đầy đủ":
                 print(f"  → Thử lại với bộ field {note}...")
             return graph_paginate(url, params, label="me/adaccounts")
+        except RateLimitError:
+            raise  # rate limit → KHÔNG lùi field, dừng ngay để giữ checkpoint/quota
         except RuntimeError as e:
             last_error = e
-            if "Requires business_management permission" not in str(e):
-                raise
-            missing = set(["business", "funding_source_details"]) & set(fields)
-            if missing:
+            optional = OPTIONAL_FIELDS & set(fields)
+            # Chỉ lùi khi đúng là lỗi thiếu quyền VÀ còn field tùy chọn để bỏ.
+            if optional and _is_permission_error(e):
                 print(
-                    "  ⚠ Token thiếu quyền business_management cho field: "
-                    + ", ".join(sorted(missing))
+                    "  ⚠ Token thiếu quyền cho field: "
+                    + ", ".join(sorted(optional))
+                    + " → thử bộ field gọn hơn (các cột này sẽ để trống)."
                 )
                 continue
             raise

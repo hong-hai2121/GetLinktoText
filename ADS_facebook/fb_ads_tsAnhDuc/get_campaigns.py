@@ -1094,26 +1094,36 @@ class ProgressApp(tk.Tk):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def _choose_preset_console() -> None:
-    """Hỏi khoảng thời gian qua console (khi không có tkinter)."""
-    global SELECTED_PRESET
-    print("\nChọn khoảng thời gian insights:")
-    for i, (label, _) in enumerate(DATE_PRESET_OPTIONS, 1):
-        mark = "  (mặc định)" if label == DEFAULT_PRESET_LABEL else ""
-        print(f"  {i}. {label}{mark}")
-    choice = input("Nhập số (Enter = mặc định): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(DATE_PRESET_OPTIONS):
-        SELECTED_PRESET = DATE_PRESET_OPTIONS[int(choice) - 1][1]
-    else:
-        SELECTED_PRESET = next(
-            (v for lbl, v in DATE_PRESET_OPTIONS if lbl == DEFAULT_PRESET_LABEL), DATE_PRESET
-        )
+def _resolve_preset(value: str | None) -> str:
+    """Map giá trị --preset (date_preset hoặc nhãn tiếng Việt) về date_preset hợp lệ.
+    None / rỗng → kỳ mặc định. Cho phép truyền date_preset tùy ý không nằm trong list."""
+    if not value:
+        return next((v for l, v in DATE_PRESET_OPTIONS if l == DEFAULT_PRESET_LABEL), DATE_PRESET)
+    for label, v in DATE_PRESET_OPTIONS:
+        if value in (v, label):
+            return v
+    return value
 
 
 if __name__ == "__main__":
-    if tk is None:
-        # Không có tkinter → chạy console.
-        _choose_preset_console()
-        run(lambda m: print(m))
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Phase 1 — lấy campaign + metrics cho TKQC được chọn.")
+    parser.add_argument("--console", action="store_true",
+                        help="Chạy thẳng, in ra stdout, không mở GUI (dùng bởi hub.py).")
+    parser.add_argument("--preset", default=None,
+                        help="Kỳ insights: date_preset (this_month...) hoặc nhãn ('Tháng này').")
+    parser.add_argument("--list-presets", action="store_true",
+                        help="In JSON các kỳ hợp lệ rồi thoát (dùng bởi hub.py).")
+    args = parser.parse_args()
+
+    if args.list_presets:
+        print(json.dumps([{"label": l, "value": v} for l, v in DATE_PRESET_OPTIONS],
+                         ensure_ascii=False))
+    elif args.console or tk is None:
+        # SELECTED_PRESET là global module-level; gán ở đây để _active_preset() dùng.
+        SELECTED_PRESET = _resolve_preset(args.preset)
+        run(lambda m: print(m, flush=True))
     else:
         ProgressApp().mainloop()

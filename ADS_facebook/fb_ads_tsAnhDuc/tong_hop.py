@@ -14,13 +14,14 @@ Chạy:  python tong_hop.py
 """
 
 import sys
+import json
 import threading
 
 try:
     import tkinter as tk
     from tkinter import ttk, messagebox
 except ImportError:
-    sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
+    tk = None
 
 from get_campaigns import (
     DATE_PRESET_OPTIONS, HEADERS, col_to_letter, connect_spreadsheet,
@@ -417,5 +418,52 @@ class App(tk.Tk):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+def _list_periods_console():
+    """In JSON các Kỳ (group) tìm thấy (cho hub.py dựng checklist)."""
+    ss = connect_spreadsheet()
+    groups = group_tabs_by_preset(list_campaign_tabs(ss))
+    print(json.dumps([{
+        "preset":       g["preset"],
+        "preset_label": g["preset_label"],
+        "output_title": g["output_title"],
+        "num_tabs":     len(g["titles"]),
+    } for g in groups], ensure_ascii=False))
+
+
+def _run_console(presets: list[str]):
+    """Gộp các Kỳ có preset nằm trong `presets`, in tiến trình ra stdout."""
+    ss = connect_spreadsheet()
+    want = set(presets)
+    groups = [g for g in group_tabs_by_preset(list_campaign_tabs(ss)) if g["preset"] in want]
+    if not groups:
+        print("Không tìm thấy Kỳ nào khớp lựa chọn. Dừng.")
+        return
+    for g in groups:
+        print(f"\nĐang gộp '{g['preset_label']}' ({len(g['titles'])} tab) → '{g['output_title']}'...")
+        r = build_combined_sheet(ss, g["titles"], output_title=g["output_title"], log=print)
+        print(f"  → {r['tabs']} tab, {r['rows']} dòng "
+              f"({'tạo mới' if r.get('created') else 'ghi đè'}).")
+    print("\n✓ Hoàn thành!")
+
+
 if __name__ == "__main__":
-    App().mainloop()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Tổng Hợp — gộp các tab campaign cùng Kỳ vào 1 sheet tổng.")
+    parser.add_argument("--console", action="store_true",
+                        help="Gộp thẳng theo --periods, in ra stdout, không mở GUI.")
+    parser.add_argument("--list-periods", action="store_true",
+                        help="In JSON các Kỳ tìm thấy rồi thoát (dùng bởi hub.py).")
+    parser.add_argument("--periods", nargs="*", default=[],
+                        help="date_preset các Kỳ cần gộp (mỗi kỳ 1 phần tử).")
+    args = parser.parse_args()
+
+    if args.list_periods:
+        _list_periods_console()
+    elif args.console:
+        _run_console(args.periods)
+    else:
+        if tk is None:
+            sys.exit("Cần tkinter để chạy giao diện (có sẵn trong Python chuẩn trên Windows).")
+        App().mainloop()
