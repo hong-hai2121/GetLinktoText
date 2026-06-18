@@ -14,7 +14,7 @@ PROCESSED_LINKS_FILE = _env(
 OUTPUT_WORD_FILE = _env("OUTPUT_WORD_FILE", os.path.join(BASE_DIR, "final_result.docx"))
 WHISPER_MODEL_PATH = _env("WHISPER_MODEL_PATH", os.path.join(BASE_DIR, "whisper_cache"))
 OUTPUT_VIDEO_DIR = _env("OUTPUT_VIDEO_DIR", os.path.join(BASE_DIR, "output_videos"))
-MODEL_NAME = _env("MODEL_NAME", "medium")
+MODEL_NAME = _env("MODEL_NAME", "large-v3-turbo")
 GECKODRIVER_PATH = _env(
     "GECKODRIVER_PATH", r"D:\\Python\\GetLinktoText\\geckodriver.exe"
 )
