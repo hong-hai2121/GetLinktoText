@@ -30,6 +30,11 @@ class GetTextApp:
         self.is_running = False
         self.worker_thread = None
 
+        # State cho tab "Nội dung Word" (giữ màu khi hiển thị/copy)
+        self._result_paragraphs = []
+        self._result_color_tags = set()
+        self._result_bold_font = None
+
         self.build_ui()
         self.load_links()
         self.service = GetTextService(logger=self.log)
@@ -204,9 +209,29 @@ class GetTextApp:
         self.nb.add(tab_links, text="  Danh sách link  ")
         self.nb.add(tab_result, text="  Nội dung Word  ")
 
-        for tab in (tab_log, tab_links, tab_result):
+        for tab in (tab_log, tab_links):
             tab.grid_rowconfigure(0, weight=1)
             tab.grid_columnconfigure(0, weight=1)
+
+        # Tab "Nội dung Word": thanh công cụ (row 0) + nội dung (row 1)
+        tab_result.grid_rowconfigure(0, weight=0)
+        tab_result.grid_rowconfigure(1, weight=1)
+        tab_result.grid_columnconfigure(0, weight=1)
+
+        result_toolbar = ttk.Frame(tab_result, padding=(0, 0, 0, 6))
+        result_toolbar.grid(row=0, column=0, sticky="ew")
+        self.copy_result_btn = ttk.Button(
+            result_toolbar,
+            text="📋 Copy (giữ màu)",
+            command=self.copy_result_with_color,
+            width=22,
+        )
+        self.copy_result_btn.pack(side="left")
+        ttk.Label(
+            result_toolbar,
+            text="Dán vào Word/WordPad để giữ màu & định dạng giống file docx.",
+            foreground="gray",
+        ).pack(side="left", padx=(8, 0))
 
         self.log_text = scrolledtext.ScrolledText(tab_log, wrap=tk.WORD)
         self.links_text = scrolledtext.ScrolledText(tab_links, wrap=tk.WORD)
@@ -214,7 +239,7 @@ class GetTextApp:
 
         self.log_text.grid(row=0, column=0, sticky="nsew")
         self.links_text.grid(row=0, column=0, sticky="nsew")
-        self.result_text.grid(row=0, column=0, sticky="nsew")
+        self.result_text.grid(row=1, column=0, sticky="nsew")
 
         self.nb.select(tab_log)
         self.nb.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -269,21 +294,84 @@ class GetTextApp:
             self.log(f"❌ Lỗi khi lưu link: {e}")
             messagebox.showerror("Lỗi", f"Không thể lưu file: {e}")
 
+    def _ensure_result_fonts(self):
+        if self._result_bold_font is not None:
+            return
+        import tkinter.font as tkfont
+
+        try:
+            base = tkfont.Font(font=self.result_text["font"])
+        except Exception:
+            base = tkfont.nametofont("TkTextFont")
+        self._result_bold_font = tkfont.Font(
+            family=base.actual("family"),
+            size=base.actual("size"),
+            weight="bold",
+        )
+        self.result_text.tag_configure("rt_bold", font=self._result_bold_font)
+
+    def _result_color_tag(self, rgb):
+        tag = "rt_color_%02X%02X%02X" % rgb
+        if tag not in self._result_color_tags:
+            self.result_text.tag_configure(tag, foreground="#%02X%02X%02X" % rgb)
+            self._result_color_tags.add(tag)
+        return tag
+
     def load_result_docx(self):
+        from src import rich_docx
+
         candidates = [config.OUTPUT_WORD_FILE]
+        self.result_text.config(state="normal")
         self.result_text.delete(1.0, tk.END)
-        docx_path, lines = io.read_docx_lines_from_candidates(candidates)
+
+        docx_path, paragraphs = rich_docx.read_docx_paragraphs_from_candidates(candidates)
+        self._result_paragraphs = paragraphs or []
+
         if not docx_path:
             self.log("⚠️ Không tìm thấy file Word kết quả (final_result.docx).")
             self.result_text.insert(1.0, "(Chưa có final_result.docx)")
             return
         try:
-            content = "\n".join(lines)
-            self.result_text.insert(1.0, content if content else "(File Word rỗng)")
-            self.log(f"✅ Đã tải nội dung Word: {docx_path} ({len(lines)} dòng)")
+            self._ensure_result_fonts()
+            if not paragraphs:
+                self.result_text.insert(1.0, "(File Word rỗng)")
+            else:
+                for para in paragraphs:
+                    for run in para:
+                        tags = []
+                        rgb = run.get("rgb")
+                        if rgb:
+                            tags.append(self._result_color_tag(rgb))
+                        if run.get("bold"):
+                            tags.append("rt_bold")
+                        self.result_text.insert(tk.END, run.get("text", ""), tuple(tags))
+                    self.result_text.insert(tk.END, "\n")
+            self.log(f"✅ Đã tải nội dung Word: {docx_path} ({len(paragraphs)} đoạn)")
         except Exception as e:
             self.log(f"❌ Lỗi khi đọc Word: {e}")
-            self.result_text.insert(1.0, f"(Lỗi đọc Word: {e})")
+            self.result_text.insert(tk.END, f"(Lỗi đọc Word: {e})")
+
+    def copy_result_with_color(self):
+        from src import rich_docx
+
+        paragraphs = self._result_paragraphs
+        if not paragraphs:
+            self.log("⚠️ Chưa có nội dung Word để copy. Hãy mở tab 'Nội dung Word' trước.")
+            return
+
+        plain = rich_docx.paragraphs_to_plain(paragraphs)
+        try:
+            rtf = rich_docx.paragraphs_to_rtf(paragraphs)
+            rich_docx.copy_rich_to_clipboard(rtf, plain)
+            self.log("📋 Đã copy nội dung Word (giữ màu) vào clipboard. Dán vào Word để giữ định dạng.")
+        except Exception as e:
+            # Fallback: copy plain text bằng Tkinter nếu thiếu pywin32 hoặc lỗi clipboard
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(plain)
+                self.log(f"⚠️ Không copy được định dạng màu ({e}). Đã copy dạng văn bản thường.")
+            except Exception as e2:
+                self.log(f"❌ Lỗi khi copy: {e2}")
 
     # ── Title mode ─────────────────────────────────────────────────────────
     def on_title_toggle(self):
