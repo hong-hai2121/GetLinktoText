@@ -134,11 +134,75 @@ def paragraphs_to_rtf(paragraphs):
     return header + "".join(body) + "}"
 
 
-def copy_rich_to_clipboard(rtf_text, plain_text):
-    """Đẩy cả RTF (cho Word) lẫn plain text lên clipboard. Cần pywin32."""
+def _html_escape(text):
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def paragraphs_to_html(paragraphs):
+    """Dựng HTML inline-style từ các đoạn đã đọc (cho Google Docs / trình duyệt)."""
+    parts = []
+    for para in paragraphs:
+        if not para:
+            parts.append("<p>&nbsp;</p>")
+            continue
+        spans = []
+        for run in para:
+            styles = []
+            rgb = run.get("rgb")
+            if rgb:
+                styles.append("color:#%02X%02X%02X" % rgb)
+            if run.get("bold"):
+                styles.append("font-weight:bold")
+            size = run.get("size_pt")
+            if size:
+                styles.append(f"font-size:{int(round(size))}pt")
+
+            text = _html_escape(run.get("text", "")).replace("\n", "<br>")
+            if styles:
+                spans.append(f'<span style="{";".join(styles)}">{text}</span>')
+            else:
+                spans.append(text)
+        parts.append("<p style=\"margin:0\">" + "".join(spans) + "</p>")
+    return "".join(parts)
+
+
+def _wrap_cf_html(html_fragment):
+    """Bọc fragment HTML theo chuẩn CF_HTML (header có offset byte) cho clipboard Windows."""
+    header = (
+        "Version:0.9\r\n"
+        "StartHTML:{:010d}\r\n"
+        "EndHTML:{:010d}\r\n"
+        "StartFragment:{:010d}\r\n"
+        "EndFragment:{:010d}\r\n"
+    )
+    pre = "<html><body>\r\n<!--StartFragment-->"
+    post = "<!--EndFragment-->\r\n</body></html>"
+
+    # Độ dài header cố định (các offset đều dùng :010d nên format giả vẫn đúng độ dài)
+    header_len = len(header.format(0, 0, 0, 0).encode("utf-8"))
+    start_html = header_len
+    start_fragment = start_html + len(pre.encode("utf-8"))
+    end_fragment = start_fragment + len(html_fragment.encode("utf-8"))
+    end_html = end_fragment + len(post.encode("utf-8"))
+
+    return (
+        header.format(start_html, end_html, start_fragment, end_fragment)
+        + pre
+        + html_fragment
+        + post
+    )
+
+
+def copy_rich_to_clipboard(rtf_text, plain_text, html_text=None):
+    """Đẩy RTF (Word), HTML (Google Docs/trình duyệt) và plain text lên clipboard. Cần pywin32."""
     import win32clipboard
 
     cf_rtf = win32clipboard.RegisterClipboardFormat("Rich Text Format")
+    cf_html = win32clipboard.RegisterClipboardFormat("HTML Format")
     win32clipboard.OpenClipboard()
     try:
         win32clipboard.EmptyClipboard()
@@ -146,5 +210,9 @@ def copy_rich_to_clipboard(rtf_text, plain_text):
             win32clipboard.CF_UNICODETEXT, plain_text
         )
         win32clipboard.SetClipboardData(cf_rtf, rtf_text.encode("latin-1", "replace"))
+        if html_text:
+            win32clipboard.SetClipboardData(
+                cf_html, _wrap_cf_html(html_text).encode("utf-8")
+            )
     finally:
         win32clipboard.CloseClipboard()

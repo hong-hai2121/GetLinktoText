@@ -229,7 +229,7 @@ class GetTextApp:
         self.copy_result_btn.pack(side="left")
         ttk.Label(
             result_toolbar,
-            text="Dán vào Word/WordPad để giữ màu & định dạng giống file docx.",
+            text="Dán vào Word/WordPad hoặc Google Docs để giữ màu & định dạng giống file docx.",
             foreground="gray",
         ).pack(side="left", padx=(8, 0))
 
@@ -362,8 +362,9 @@ class GetTextApp:
         plain = rich_docx.paragraphs_to_plain(paragraphs)
         try:
             rtf = rich_docx.paragraphs_to_rtf(paragraphs)
-            rich_docx.copy_rich_to_clipboard(rtf, plain)
-            self.log("📋 Đã copy nội dung Word (giữ màu) vào clipboard. Dán vào Word để giữ định dạng.")
+            html = rich_docx.paragraphs_to_html(paragraphs)
+            rich_docx.copy_rich_to_clipboard(rtf, plain, html)
+            self.log("📋 Đã copy nội dung Word (giữ màu) vào clipboard. Dán vào Word hoặc Google Docs để giữ định dạng.")
         except Exception as e:
             # Fallback: copy plain text bằng Tkinter nếu thiếu pywin32 hoặc lỗi clipboard
             try:
