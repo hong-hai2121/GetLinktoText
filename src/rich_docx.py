@@ -62,6 +62,27 @@ def paragraphs_to_plain(paragraphs):
     return "\n".join(lines)
 
 
+def paragraphs_to_docx(paragraphs, path):
+    """Ghi các đoạn (giữ màu/đậm/cỡ chữ) ra file .docx mới và trả về đường dẫn."""
+    from docx.shared import Pt, RGBColor
+
+    doc = Document()
+    for para in paragraphs:
+        p = doc.add_paragraph()
+        for run in para:
+            r = p.add_run(run.get("text", ""))
+            rgb = run.get("rgb")
+            if rgb:
+                r.font.color.rgb = RGBColor(*rgb)
+            if run.get("bold"):
+                r.bold = True
+            size = run.get("size_pt")
+            if size:
+                r.font.size = Pt(size)
+    doc.save(path)
+    return path
+
+
 def _rtf_escape(text):
     out = []
     for ch in text:

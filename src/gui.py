@@ -227,9 +227,24 @@ class GetTextApp:
             width=22,
         )
         self.copy_result_btn.pack(side="left")
+        self.download_docx_btn = ttk.Button(
+            result_toolbar,
+            text="⬇ Tải .docx (giữ màu)",
+            command=self.download_result_docx,
+            width=20,
+        )
+        self.download_docx_btn.pack(side="left", padx=(8, 0))
+        self.download_txt_btn = ttk.Button(
+            result_toolbar,
+            text="⬇ Tải file .txt",
+            command=self.download_result_txt,
+            width=18,
+        )
+        self.download_txt_btn.pack(side="left", padx=(8, 0))
         ttk.Label(
             result_toolbar,
-            text="Dán vào Word/WordPad hoặc Google Docs để giữ màu & định dạng giống file docx.",
+            text="Dán vào Word/WordPad hoặc Google Docs để giữ màu & định dạng giống file docx. "
+            "Nút 'Tải file .txt' lưu nội dung vào thư mục Downloads.",
             foreground="gray",
         ).pack(side="left", padx=(8, 0))
 
@@ -373,6 +388,61 @@ class GetTextApp:
                 self.log(f"⚠️ Không copy được định dạng màu ({e}). Đã copy dạng văn bản thường.")
             except Exception as e2:
                 self.log(f"❌ Lỗi khi copy: {e2}")
+
+    def _make_download_path(self, ext):
+        """Tạo đường dẫn file tải xuống trong Downloads với timestamp và đuôi ext."""
+        downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        try:
+            os.makedirs(downloads_dir, exist_ok=True)
+        except Exception:
+            downloads_dir = os.path.expanduser("~")
+
+        import datetime
+
+        base = os.path.splitext(os.path.basename(config.OUTPUT_WORD_FILE))[0] or "final_result"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        return os.path.join(downloads_dir, f"{base}_{timestamp}.{ext}")
+
+    def download_result_docx(self):
+        """Lưu nội dung tab 'Nội dung Word' thành file .docx giữ màu trong thư mục Downloads."""
+        from src import rich_docx
+
+        paragraphs = self._result_paragraphs
+        if not paragraphs:
+            self.log("⚠️ Chưa có nội dung để tải. Hãy mở tab 'Nội dung Word' trước.")
+            return
+
+        file_path = self._make_download_path("docx")
+        try:
+            rich_docx.paragraphs_to_docx(paragraphs, file_path)
+            self.log(f"⬇️ Đã tải nội dung (giữ màu) ra file: {file_path}")
+            self.update_status("Đã tải file .docx vào Downloads", "green")
+        except Exception as e:
+            self.log(f"❌ Lỗi khi tải file .docx: {e}")
+            messagebox.showerror("Lỗi", f"Không thể lưu file .docx: {e}")
+
+    def download_result_txt(self):
+        """Lưu nội dung tab 'Nội dung Word' thành file .txt trong thư mục Downloads."""
+        from src import rich_docx
+
+        if self._result_paragraphs:
+            content = rich_docx.paragraphs_to_plain(self._result_paragraphs)
+        else:
+            content = self.result_text.get("1.0", tk.END)
+
+        if not content.strip():
+            self.log("⚠️ Chưa có nội dung để tải. Hãy mở tab 'Nội dung Word' trước.")
+            return
+
+        file_path = self._make_download_path("txt")
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content.rstrip() + "\n")
+            self.log(f"⬇️ Đã tải nội dung ra file: {file_path}")
+            self.update_status("Đã tải file .txt vào Downloads", "green")
+        except Exception as e:
+            self.log(f"❌ Lỗi khi tải file .txt: {e}")
+            messagebox.showerror("Lỗi", f"Không thể lưu file .txt: {e}")
 
     # ── Title mode ─────────────────────────────────────────────────────────
     def on_title_toggle(self):
