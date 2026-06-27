@@ -245,19 +245,21 @@ class GetTextService:
             self.log(f"🎥 Video đã sẵn sàng: {video_path}")
         else:
             self.log(f"❌ Lỗi! Video chưa được sẵn sàng tại {video_path}")
-            return None, None
+            return None, None, None
 
         if not transcribe.extract_audio(video_path, audio_path):
-            return None, None
+            return None, None, None
 
         if os.path.exists(audio_path):
             self.log(f"🎵 Âm thanh đã lưu tại: {audio_path}")
         else:
             self.log(f"❌ Lỗi! Âm thanh chưa được lưu vào {audio_path}")
-            return None, None
+            return None, None, None
+
+        # Lấy thời lượng audio một lần để vừa kiểm tra video dài, vừa ghi vào Word
+        duration_seconds = transcribe.get_audio_duration(audio_path)
 
         if config.SKIP_LONG_VIDEOS:
-            duration_seconds = transcribe.get_audio_duration(audio_path)
             if duration_seconds is None:
                 self.log("⚠️ Khong lay duoc thoi luong audio, tiep tuc xu ly.")
             elif duration_seconds > config.LONG_VIDEO_THRESHOLD_SECONDS:
@@ -265,7 +267,7 @@ class GetTextService:
                 self.log(
                     f"⏭️ Bo qua video {video_number}: thoi luong {duration_seconds / 60:.1f} phut > {max_minutes} phut."
                 )
-                return None, None
+                return None, None, duration_seconds
 
         transcript = transcribe.transcribe_whisper(
             audio_path,
@@ -284,7 +286,24 @@ class GetTextService:
             f.write(formatted_transcript)
 
         self.log(f"💾 Đã lưu transcript vào: {transcript_path}")
-        return transcript, transcript_path
+        return transcript, transcript_path, duration_seconds
+
+    @staticmethod
+    def _format_duration_label(duration_seconds: float | None) -> str:
+        """Trả về ' (video dài X phút Y giây)' từ thời lượng audio (giây); '' nếu không có."""
+        if not duration_seconds or duration_seconds <= 0:
+            return ""
+        total = int(round(duration_seconds))
+        if total <= 0:
+            return ""
+        minutes, seconds = divmod(total, 60)
+        if minutes and seconds:
+            text = f"{minutes} phút {seconds} giây"
+        elif minutes:
+            text = f"{minutes} phút"
+        else:
+            text = f"{seconds} giây"
+        return f" (video dài {text})"
 
     def export_word(
         self,
@@ -295,6 +314,7 @@ class GetTextService:
         transcript: str | None,
         refined_text: str | None,
         title_suggestion: str | None = None,
+        audio_duration: float | None = None,
     ):
         para = doc.add_paragraph()
         run = para.add_run(f"{video_number}. {link}")
@@ -304,15 +324,16 @@ class GetTextService:
         if title_suggestion:
             doc.add_paragraph(f"Tiêu đề gợi ý: {title_suggestion}")
 
+        duration_label = self._format_duration_label(audio_duration)
         if transcript:
             if refined_text:
-                doc.add_paragraph(f"Nội dung:\n{refined_text}")
+                doc.add_paragraph(f"Nội dung{duration_label}:\n{refined_text}")
             elif config.SKIP_GPT_PROCESSING or not config.USE_TITLE_MODE or (
                 config.USE_TITLE_MODE and config.TITLE_MODE_SUBMODE == "content_only"
             ):
-                doc.add_paragraph(f"Nội dung:\n{transcript}")
+                doc.add_paragraph(f"Nội dung{duration_label}:\n{transcript}")
         else:
-            doc.add_paragraph("Nội dung: (Video quá dài để lấy nội dung)")
+            doc.add_paragraph(f"Nội dung{duration_label}: (Video quá dài để lấy nội dung)")
 
         doc.add_paragraph("=" * 40)
 
@@ -343,7 +364,7 @@ class GetTextService:
             return None
         title, video_path, audio_path, is_local_file = download_result
 
-        transcript, transcript_path = self.transcribe_audio(video_path, audio_path, video_number)
+        transcript, transcript_path, audio_duration = self.transcribe_audio(video_path, audio_path, video_number)
 
         try:
             if os.path.exists(audio_path):
@@ -384,7 +405,7 @@ class GetTextService:
             refined_text = "Đây là video quá dài để lấy nội dung."
             title_suggestion = None
 
-        self.export_word(doc, video_number, link, title, transcript, refined_text, title_suggestion)
+        self.export_word(doc, video_number, link, title, transcript, refined_text, title_suggestion, audio_duration)
         return transcript_path
 
     def process_videos(self):
