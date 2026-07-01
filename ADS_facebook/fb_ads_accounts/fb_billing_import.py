@@ -29,7 +29,7 @@ except ImportError:
 # ── Cấu hình ───────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent
-SHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
+from config import SPREADSHEET_ID as SHEET_ID
 SCOPES   = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",

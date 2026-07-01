@@ -7,14 +7,13 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config import ACCESS_TOKEN
-from fb_api import graph_paginate, api_summary
+from config import ACCESS_TOKEN, SPREADSHEET_ID
+from fb_api import graph_paginate, api_summary, set_call_delay
 
 BASE_DIR = Path(__file__).parent
-
-SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
 SHEET_NAME = "TKQC API"
 FB_API_VERSION = "v20.0"
+CALL_DELAY_SECONDS = 2.0  # giãn cách gọi Graph API (tránh rate limit)
 
 # Màu nền hàng theo cột "Chọn Lấy Camp"
 COLOR_SELECTED = {"red": 0.85, "green": 0.93, "blue": 0.83}  # TRUE → xanh nhạt
@@ -66,12 +65,14 @@ def connect_sheet(credentials_file: str = "service_account.json"):
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-    available = [ws.title for ws in spreadsheet.worksheets()]
-    if SHEET_NAME not in available:
-        print(f"Không tìm thấy sheet '{SHEET_NAME}'. Các sheet hiện có: {available}")
-        raise gspread.exceptions.WorksheetNotFound(SHEET_NAME)
-
-    return spreadsheet.worksheet(SHEET_NAME)
+    try:
+        return spreadsheet.worksheet(SHEET_NAME)
+    except gspread.exceptions.WorksheetNotFound:
+        # Link Sheet mới mỗi tháng → chưa có tab "TKQC API" thì tự tạo.
+        print(f"Chưa có sheet '{SHEET_NAME}' — tự tạo mới.")
+        return spreadsheet.add_worksheet(
+            title=SHEET_NAME, rows=1000, cols=len(HEADERS)
+        )
 
 
 def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict[str, str], dict[str, str]]:
@@ -117,7 +118,9 @@ def read_existing_data(worksheet) -> tuple[dict[str, bool], dict[str, str], dict
 
 
 def fetch_ad_accounts(access_token: str) -> list[dict]:
-    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,business,funding_source_details"
+    # Không lấy field 'business' vì cần quyền business_management (token không có).
+    # Cột 'ID Business' / 'Tên Business' sẽ để trống.
+    fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,funding_source_details"
     url = f"https://graph.facebook.com/{FB_API_VERSION}/me/adaccounts"
     params = {"fields": fields, "access_token": access_token, "limit": 500}
     return graph_paginate(url, params, label="me/adaccounts")
@@ -290,6 +293,7 @@ def main(cuoi_thang: bool = False):
     print(f"  → {selected_count} tài khoản đang được chọn.")
 
     print("Lấy danh sách tài khoản quảng cáo từ Facebook Graph API...")
+    set_call_delay(CALL_DELAY_SECONDS)
     accounts = fetch_ad_accounts(ACCESS_TOKEN)
     print(f"Tìm thấy {len(accounts)} tài khoản quảng cáo.")
 

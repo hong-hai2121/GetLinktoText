@@ -8,6 +8,7 @@ main.py, get_campaigns.py, get_details.py.
 - Cuối mỗi script gọi api_summary() để in bảng tổng kết theo endpoint.
 """
 
+import os
 import re
 import time
 from collections import OrderedDict
@@ -15,7 +16,20 @@ from collections import OrderedDict
 import requests
 
 RATE_LIMIT_CODES = (4, 17, 32, 613)
-CALL_DELAY = 1.0  # giây nghỉ sau mỗi lần gọi API — tăng lên nếu vẫn bị limit
+
+# Khoảng nghỉ (giây) sau MỖI lần gọi Graph API — giãn cách để tránh rate limit.
+# Chỉnh runtime bằng set_call_delay(), hoặc đặt biến môi trường FB_API_CALL_DELAY.
+CALL_DELAY = float(os.environ.get("FB_API_CALL_DELAY", "1.0"))
+
+
+def set_call_delay(seconds: float) -> None:
+    """Đặt lại khoảng nghỉ (giây) sau mỗi lần gọi API để giãn cách, tránh rate limit."""
+    global CALL_DELAY
+    try:
+        CALL_DELAY = max(0.0, float(seconds))
+    except (TypeError, ValueError):
+        return
+    print(f"  ⏱ Giãn cách gọi API: {CALL_DELAY:g}s sau mỗi request.")
 
 
 class RateLimitError(RuntimeError):

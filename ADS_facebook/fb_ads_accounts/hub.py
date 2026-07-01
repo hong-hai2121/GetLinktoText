@@ -62,22 +62,25 @@ CODE_BG  = "#f1f5f9"  # Nền code block (slate-100)
 
 
 def write_config(date_preset: str, time_range: dict | None):
-    """Ghi config.py để get_campaigns.py / get_details.py đọc, giữ nguyên ACCESS_TOKEN."""
-    token = ""
+    """Cập nhật DATE_PRESET / TIME_RANGE trong config.py để get_campaigns.py /
+    get_details.py đọc. GIỮ NGUYÊN mọi dòng khác (ACCESS_TOKEN, SPREADSHEET_ID, ...)."""
     config_path = BASE_DIR / "config.py"
     try:
-        for line in config_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("ACCESS_TOKEN"):
-                token = line + "\n"
-                break
+        lines = config_path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
-        pass
+        lines = []
+
+    # Giữ lại tất cả trừ 2 dòng sẽ được ghi lại
+    kept = [ln for ln in lines
+            if not ln.lstrip().startswith(("DATE_PRESET", "TIME_RANGE"))]
 
     if date_preset:
-        date_part = f'DATE_PRESET = "{date_preset}"\nTIME_RANGE: dict = {{}}\n'
+        date_part = [f'DATE_PRESET = "{date_preset}"', "TIME_RANGE: dict = {}"]
     else:
-        date_part = f'DATE_PRESET = ""\nTIME_RANGE: dict = {json.dumps(time_range)}\n'
-    config_path.write_text(token + date_part, encoding="utf-8")
+        date_part = ['DATE_PRESET = ""', f"TIME_RANGE: dict = {json.dumps(time_range)}"]
+
+    out = "\n".join(kept + date_part).rstrip("\n") + "\n"
+    config_path.write_text(out, encoding="utf-8")
 
 
 # ── Khai báo các trang (tool) ──────────────────────────────────────────────────
@@ -95,6 +98,8 @@ NAV = [
     ]),
     ("THANH TOÁN & TỔNG HỢP", [
         ("billing", "💳  Import Billing", "fb_billing_import.py"),
+        ("billing_pdf", "🧾  Import Billing (PDF)", "fb_billing_pdf_import.py"),
+        ("invoice_csv", "📄  Import Invoice CSV", "fb_invoice_summary_import.py"),
         ("tonghop", "Σ   Tổng Hợp sheet", "TongHop.py"),
     ]),
     ("KIỂM TRA", [
@@ -130,6 +135,18 @@ FUNC_INFO = [
      "một tab bất kỳ. Upsert theo \"ID giao dịch\": trùng → cập nhật, mới → thêm dòng. "
      "Chỉ giữ dòng \"Đã thanh toán\". Cột mới trong CSV tự được thêm; cột ID giữ định dạng "
      "TEXT để không mất số 0 đầu. Có preview trước khi import."),
+    ("billing_pdf", "🧾  Import Billing (PDF)", "fb_billing_pdf_import.py",
+     "Chọn HÀNG LOẠT hóa đơn PDF (biên lai Meta) từ máy, tự bóc tách và ghi vào tab "
+     "\"... Chi tiết\" với đúng 19 cột như bản CSV/XLS. Mỗi PDF = 1 giao dịch → nhiều dòng "
+     "theo từng chiến dịch. Tự dò tab theo \"ID tài khoản\"; chưa có thì tạo tab mới theo "
+     "quy tắc \"<Tên> (<ID>) Chi tiết\". Dedup theo \"ID giao dịch\" ở cấp giao dịch "
+     "(import lại thay toàn bộ dòng của giao dịch đó). Cần thư viện pdfplumber."),
+    ("invoice_csv", "📄  Import Invoice CSV", "fb_invoice_summary_import.py",
+     "Chọn HÀNG LOẠT file 'Invoice_Summary.csv' (Báo cáo lập hóa đơn Meta) từ máy, ghi vào "
+     "tab TỔNG HỢP của tài khoản với 7 cột (ID giao dịch, Ngày thanh toán, Số tiền, Phương "
+     "thức TT, Số tham chiếu thẻ, Trạng thái, ID hóa đơn VAT). Tên tab suy ra bằng cách tra "
+     "\"ID tài khoản\" trong file vào sheet \"TKQC API\" để lấy Tên Tài Khoản → \"<Tên> (<ID>)\". "
+     "Dedup theo \"ID giao dịch\"; cột thiếu dữ liệu để trống."),
     ("tonghop", "Σ   Tổng Hợp sheet", "TongHop.py",
      "Tạo sheet \"Tổng Hợp T{tháng}\": cột A = các nhãn (Ngân sách được duyệt, Số tiền nợ, "
      "Spend thực tế, Đơn, Doanh Số, Tỷ lệ CP, Dự quỹ - hoàn ứng...), cột B trở đi = từng "
@@ -492,6 +509,32 @@ class Hub(tk.Tk):
         self._primary_btn(
             self.content, "▶  Mở công cụ Import Billing",
             lambda: self._launch_gui("fb_billing_import.py")
+        ).pack(anchor="w")
+
+    def _page_billing_pdf(self):
+        self._set_header("Import lịch sử thanh toán (PDF)",
+                         "Chọn hàng loạt hóa đơn PDF (biên lai Meta) → ghi vào tab \"... Chi tiết\" giống bản CSV/XLS.")
+        card = self._card()
+        self._desc(card, "Mở công cụ Import Billing PDF: chọn nhiều file PDF → tự bóc tách theo "
+                         "từng chiến dịch → tự dò tab theo ID tài khoản (chưa có thì tạo mới) → Import. "
+                         "Dedup theo \"ID giao dịch\" ở cấp giao dịch. Cần thư viện pdfplumber "
+                         "(pip install pdfplumber).")
+        self._primary_btn(
+            self.content, "▶  Mở công cụ Import Billing (PDF)",
+            lambda: self._launch_gui("fb_billing_pdf_import.py")
+        ).pack(anchor="w")
+
+    def _page_invoice_csv(self):
+        self._set_header("Import Báo cáo lập hóa đơn (Invoice CSV)",
+                         "Chọn hàng loạt file Invoice_Summary.csv → ghi vào tab tổng hợp \"<Tên> (<ID>)\" (7 cột).")
+        card = self._card()
+        self._desc(card, "Mở công cụ Import Invoice CSV: chọn nhiều file CSV → tự đọc \"ID tài khoản\" "
+                         "→ tra sheet \"TKQC API\" lấy Tên Tài Khoản để suy ra/ tìm tab → Import. "
+                         "Mỗi giao dịch 1 dòng, dedup theo \"ID giao dịch\". Nếu ID chưa có trong "
+                         "TKQC API, hãy chạy \"Cập nhật TKQC\" trước hoặc gán tab thủ công.")
+        self._primary_btn(
+            self.content, "▶  Mở công cụ Import Invoice CSV",
+            lambda: self._launch_gui("fb_invoice_summary_import.py")
         ).pack(anchor="w")
 
     def _page_tonghop(self):

@@ -13,6 +13,7 @@ import time
 import threading
 from datetime import datetime
 
+CALL_DELAY_SECONDS = 2.0  # giây nghỉ sau MỖI lần gọi Graph API (giãn cách tránh rate limit)
 CAMPAIGN_DELAY = 5  # giây nghỉ giữa mỗi campaign — giảm tần suất gọi API
 
 try:
@@ -21,7 +22,7 @@ try:
 except ImportError:
     tk = None
 
-from fb_api import api_summary, RateLimitError
+from fb_api import api_summary, RateLimitError, set_call_delay
 from get_campaigns import (
     # Constants & config
     BASE_DIR, FB_API_VERSION, ACCESS_TOKEN, STATUS_MAP, _INSIGHTS_FIELDS,
@@ -403,6 +404,8 @@ def run_for_accounts(spreadsheet, accounts: list[dict], fetch_creative: bool = T
     month_label = datetime.now().strftime("%m/%Y")
     checkpoint  = load_checkpoint()
     dump_insights_ad: dict[str, list] = {}
+
+    set_call_delay(CALL_DELAY_SECONDS)
 
     rate_limited = False
     try:

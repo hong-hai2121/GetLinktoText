@@ -11,6 +11,7 @@ Cột "Chọn Lấy Chi Tiết" được giữ nguyên giá trị cũ để khô
 
 import re
 import sys
+import time
 import threading
 import gspread
 import json
@@ -24,14 +25,17 @@ try:
 except ImportError:
     tk = None
 
-from config import ACCESS_TOKEN
-from fb_api import graph_paginate, api_summary, RateLimitError
+from config import ACCESS_TOKEN, SPREADSHEET_ID
+from fb_api import graph_paginate, api_summary, RateLimitError, set_call_delay
 
 BASE_DIR = Path(__file__).parent
 
-SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
 AD_ACCOUNTS_SHEET = "TKQC API"
 FB_API_VERSION = "v20.0"
+
+# ── Giãn cách gọi API (tránh rate limit) ──────────────────────────────────────
+CALL_DELAY_SECONDS    = 2.0  # nghỉ sau MỖI lần gọi Graph API
+ACCOUNT_DELAY_SECONDS = 3.0  # nghỉ THÊM giữa các tài khoản
 
 ZERO_DECIMAL_CURRENCIES = {
     "VND", "JPY", "KRW", "BIF", "CLP", "GNF", "ISK", "KMF",
@@ -547,11 +551,16 @@ def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = Fa
     dump_campaigns:     dict[str, list] = {}
     dump_insights_camp: dict[str, list] = {}
 
+    set_call_delay(CALL_DELAY_SECONDS)
+
     rate_limited = False
     try:
-        for acc in accounts:
+        for idx, acc in enumerate(accounts):
             acc_id   = acc["id"]
             acc_name = acc["name"]
+            if idx > 0:
+                print(f"  ⏱ Nghỉ {ACCOUNT_DELAY_SECONDS:g}s trước tài khoản tiếp theo...")
+                time.sleep(ACCOUNT_DELAY_SECONDS)
             print(f"\n[{acc_name}] Xử lý tháng {month_label}...")
 
             ws = get_or_create_worksheet(spreadsheet, acc_name)

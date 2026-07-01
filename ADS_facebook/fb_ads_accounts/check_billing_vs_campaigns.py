@@ -21,7 +21,7 @@ except ImportError:
     tk = None  # Cho phép chạy chế độ CLI khi không có tkinter
 
 BASE_DIR       = Path(__file__).parent
-SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
+from config import SPREADSHEET_ID
 
 DETAIL_SHEET   = "Bs Hội 6 (799251702964605) Chi tiết"
 CAMPAIGN_SHEET = "Bs Hội 6"

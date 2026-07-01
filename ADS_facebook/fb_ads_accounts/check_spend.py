@@ -26,7 +26,7 @@ except ImportError:
 
 BASE_DIR = Path(__file__).parent
 
-SPREADSHEET_ID = "1zZ7H9lj_s4Dm1hTeMvrQtKLFeiOBb5rWu8h7QJ458PM"
+from config import SPREADSHEET_ID
 DEFAULT_SHEET  = "Bs Hội 6"
 
 TOLERANCE = 1.0  # sai lệch tối đa chấp nhận được (do làm tròn)
