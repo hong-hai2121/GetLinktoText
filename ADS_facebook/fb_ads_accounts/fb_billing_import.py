@@ -7,8 +7,10 @@ import csv
 import re
 import sys
 import threading
+import time
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 try:
@@ -18,6 +20,7 @@ except ImportError:
     _OPENPYXL_OK = False
 
 import gspread
+from gspread.exceptions import APIError
 from google.oauth2.service_account import Credentials
 
 try:
@@ -38,7 +41,8 @@ SCOPES   = [
 ID_COL           = "ID giao dịch"
 STATUS_COL       = "Trạng thái"
 STATUS_ALLOW     = "Đã thanh toán"
-KNOWN_MONEY_COLS = ["Số tiền", "Thuế", "Tổng tiền giao dịch"]
+DATE_COL         = "Ngày thanh toán"   # cột ngày để lọc theo tháng
+KNOWN_MONEY_COLS = ["Số tiền", "Thuế", "Tổng tiền giao dịch", "Số tiền phân bổ"]
 TEXT_ID_COLS     = [
     "ID giao dịch",
     "Tài khoản quảng cáo",
@@ -67,6 +71,20 @@ def parse_vnd(text: str):
         return float(s.strip()) if s.strip() else None
     except ValueError:
         return None
+
+
+def _money_cell(raw):
+    """Làm sạch 1 ô tiền để ghi lên Sheet thành SỐ thật.
+
+    Bỏ dấu nháy `'`, ký hiệu `₫` và dấu phân tách nghìn (qua parse_vnd).
+    - Parse được  → trả int (số nguyên) / float → Sheet lưu dạng SỐ, cộng & SUM được.
+    - Không parse được → trả chuỗi đã bỏ dấu `'` ở đầu (ít nhất không còn nháy thừa).
+    """
+    s = "" if raw is None else str(raw)
+    val = parse_vnd(s)
+    if val is None:
+        return s.lstrip("'").strip()
+    return int(val) if float(val).is_integer() else val
 
 
 def read_csv(path: Path):
@@ -253,6 +271,92 @@ def filter_by_status(csv_headers: list, csv_rows: list) -> tuple:
     return kept, skipped
 
 
+# Ánh xạ tên tháng tiếng Anh → số (phòng khi FB hiển thị locale tiếng Anh)
+_EN_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _extract_month_key(text: str):
+    """Bóc (năm, tháng) từ chuỗi ngày của FB → dùng để so sánh tháng.
+
+    Hỗ trợ nhiều định dạng thực tế:
+      '1 tháng 6, 2026' · '1 thg 6 2026' · '2026-06-01' · '01/06/2026' · 'Jun 1, 2026'
+    Nếu không thấy năm thì trả (None, tháng) — vẫn so được theo tháng.
+    Trả None nếu không đọc được tháng.
+    """
+    if not text:
+        return None
+    s = str(text).strip()
+
+    # ISO: 2026-06-01
+    m = re.search(r"\b(\d{4})[-/](\d{1,2})[-/]\d{1,2}\b", s)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+
+    # DD/MM/YYYY: 01/06/2026
+    m = re.search(r"\b(\d{1,2})[/](\d{1,2})[/](\d{4})\b", s)
+    if m:
+        return (int(m.group(3)), int(m.group(2)))
+
+    # Tiếng Việt: 'tháng 6' / 'thg 6' (+ năm 20xx nếu có)
+    mv = re.search(r"th(?:án)?g\.?\s*(\d{1,2})", s, re.IGNORECASE)
+    if mv:
+        my = re.search(r"\b(20\d{2})\b", s)
+        return (int(my.group(1)) if my else None, int(mv.group(1)))
+
+    # Tên tháng tiếng Anh: 'Jun 1, 2026' / 'June 1 2026'
+    me = re.search(r"\b([A-Za-z]{3,})\b", s)
+    if me and me.group(1)[:3].lower() in _EN_MONTHS:
+        my = re.search(r"\b(20\d{2})\b", s)
+        return (int(my.group(1)) if my else None, _EN_MONTHS[me.group(1)[:3].lower()])
+
+    return None
+
+
+def _month_label(key) -> str:
+    y, m = key
+    return f"tháng {m}/{y}" if y else f"tháng {m}"
+
+
+def _find_col(headers: list, name: str):
+    """Tìm cột theo tên chuẩn hóa (bỏ ký tự đặc biệt) — trả tên cột thực tế hoặc None."""
+    target = _normalize(name)
+    return next((h for h in headers if _normalize(h) == target), None)
+
+
+def filter_by_month(csv_headers: list, csv_rows: list, target=None) -> tuple:
+    """Chỉ giữ dòng thuộc THÁNG mục tiêu; loại dòng thuộc tháng khác.
+
+    - target=None → tự lấy tháng chiếm ĐA SỐ trong file làm mục tiêu (đúng cho mọi tháng).
+    - Dòng không đọc được ngày → GIỮ (không dám loại nhầm), đếm vào `unparsed`.
+    Trả (kept, dropped, target, unparsed) với dropped = list[(row, key)].
+    """
+    col = _find_col(csv_headers, DATE_COL)
+    if not col:
+        return csv_rows, [], None, 0
+
+    keys   = [_extract_month_key(r.get(col, "")) for r in csv_rows]
+    parsed = [k for k in keys if k]
+    if not parsed:
+        return csv_rows, [], None, len(csv_rows)
+
+    if target is None:
+        target = Counter(parsed).most_common(1)[0][0]
+
+    kept, dropped, unparsed = [], [], 0
+    for row, key in zip(csv_rows, keys):
+        if key is None:
+            kept.append(row)
+            unparsed += 1
+        elif key == target:
+            kept.append(row)
+        else:
+            dropped.append((row, key))
+    return kept, dropped, target, unparsed
+
+
 def analyze_structure(csv_headers: list, sheet_headers: list) -> dict:
     """So sánh cột CSV với cột sheet, trả về dict phân tích."""
     # Lọc bỏ: tên rỗng + cột numeric tự sinh
@@ -365,12 +469,25 @@ def upsert(worksheet, csv_headers: list, csv_rows: list, replace: bool = False) 
             sheet_body.append(row_vals)
             added += 1
 
+    # Làm sạch cột tiền: bỏ dấu ' / ₫, đổi text → SỐ để cộng/SUM được trên Sheet.
+    # Áp cho MỌI dòng (cũ + mới) để cả cột đồng nhất kiểu số.
+    money_norm = {_normalize(c) for c in KNOWN_MONEY_COLS}
+    money_idx  = [i for i, h in enumerate(sheet_hdr) if _normalize(h) in money_norm]
+    if money_idx:
+        for row in sheet_body:
+            for i in money_idx:
+                if i < len(row):
+                    row[i] = _money_cell(row[i])
+
     worksheet.clear()
     all_data = [sheet_hdr] + sheet_body
     BATCH = 1000
     for start in range(0, len(all_data), BATCH):
-        worksheet.update(f"A{start + 1}", all_data[start:start + BATCH],
-                         value_input_option="RAW")
+        worksheet.update(
+            values=all_data[start:start + BATCH],
+            range_name=f"A{start + 1}",
+            value_input_option="RAW",
+        )
 
     _format_text_columns(worksheet, sheet_hdr)
     return {"tab": worksheet.title, "total": len(csv_rows),
@@ -608,6 +725,13 @@ class App(tk.Tk):
             style="Accent.TButton", command=self._run_import_all, state="disabled",
         )
         self._import_btn.pack(side="left")
+
+        # Nút chạy lại: nhớ các file lỗi lần trước, import lại chỉ những file đó
+        self._retry_btn = ttk.Button(
+            bot, text="↻ Chạy lại file lỗi",
+            command=self._run_retry_failed, state="disabled",
+        )
+        self._retry_btn.pack(side="left", padx=(10, 0))
 
         # Checkbox: thay thế toàn bộ dữ liệu cũ trong tab trước khi import
         self._replace_var = tk.BooleanVar(value=False)
@@ -861,6 +985,10 @@ class App(tk.Tk):
         ok = any(i["ws"] and i["status"] in ("ready", "mismatch", "new_tab")
                  for i in self._queue)
         self._import_btn.configure(state="normal" if ok else "disabled")
+        # Bật nút "Chạy lại" khi có file đã đọc xong + đã gán tab nhưng import lỗi
+        has_failed = any(i["status"] == "error" and i["ws"] and i["headers"]
+                         for i in self._queue)
+        self._retry_btn.configure(state="normal" if has_failed else "disabled")
 
     def _on_queue_select(self, *_):
         sel = self._q_tree.selection()
@@ -893,6 +1021,15 @@ class App(tk.Tk):
                 lines.append(("ok",  f"✓  Cột '{ID_COL}' — sẽ dedup theo ID\n"))
             else:
                 lines.append(("err", f"✗  Cột '{ID_COL}' KHÔNG CÓ — sẽ append tất cả\n"))
+            # Lọc theo tháng: cảnh báo dòng thuộc tháng khác (sẽ bị loại khi import)
+            _, dropped, target, _un = filter_by_month(item["headers"], filtered)
+            if target:
+                lines.append(("dim", f"Tháng : {_month_label(target)} (tự nhận theo đa số)\n"))
+            if dropped:
+                cnt = Counter(_month_label(k) for _, k in dropped)
+                detail = ", ".join(f"{lb} ({c})" for lb, c in cnt.items())
+                lines.append(("warn",
+                    f"⚠  {len(dropped)} dòng thuộc THÁNG KHÁC sẽ bị loại: {detail}\n"))
             # Kết quả so cột với sheet
             a = item["analysis"]
             if item["status"] == "checking":
@@ -953,10 +1090,35 @@ class App(tk.Tk):
                 return
 
         self._import_btn.configure(state="disabled")
+        self._retry_btn.configure(state="disabled")
         self._progress.start(12)
         self._result_lbl.configure(text="Đang import...")
         threading.Thread(target=self._import_all_worker,
                          args=(importable, replace), daemon=True).start()
+
+    def _run_retry_failed(self):
+        """Chạy lại chỉ những file đã import lỗi lần trước (vẫn còn trong hàng đợi)."""
+        failed = [i for i in self._queue
+                  if i["status"] == "error" and i["ws"] and i["headers"]]
+        if not failed:
+            return
+
+        replace = self._replace_var.get()
+        lines = [f"Chạy lại {len(failed)} file bị lỗi lần trước:"]
+        lines += [f"  • {i['path'].name}" for i in failed[:15]]
+        if len(failed) > 15:
+            lines.append(f"  … và {len(failed) - 15} file nữa")
+        if replace:
+            lines.append("\n⚠ Chế độ THAY THẾ đang bật: dữ liệu cũ trong tab sẽ bị xóa.")
+        if not messagebox.askyesno("Chạy lại file lỗi", "\n".join(lines)):
+            return
+
+        self._import_btn.configure(state="disabled")
+        self._retry_btn.configure(state="disabled")
+        self._progress.start(12)
+        self._result_lbl.configure(text=f"Đang chạy lại {len(failed)} file lỗi...")
+        threading.Thread(target=self._import_all_worker,
+                         args=(failed, replace), daemon=True).start()
 
     def _confirm_mismatch(self, importable: list, mismatched: list, no_tab: list,
                           replace: bool = False) -> bool:
@@ -1038,15 +1200,42 @@ class App(tk.Tk):
         self.wait_window(dlg)
         return dlg.result
 
+    @staticmethod
+    def _upsert_with_retry(ws, headers, rows, replace, max_retry=4):
+        """Gọi upsert, tự thử lại khi gặp lỗi TẠM THỜI của Google API.
+
+        Quota vượt ngưỡng (429) hay lỗi máy chủ (5xx) thường là nguyên nhân
+        khi import nhiều file liền nhau. Chờ tăng dần (5→10→20→40→60s) rồi thử lại.
+        """
+        delay = 5
+        for attempt in range(max_retry + 1):
+            try:
+                return upsert(ws, headers, rows, replace=replace)
+            except APIError as e:
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                if code in (429, 500, 502, 503) and attempt < max_retry:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+                    continue
+                raise
+
     def _import_all_worker(self, items: list, replace: bool = False):
         total_added = total_updated = errors = 0
+        dropped_report: list = []   # [(file_name, target_key, dropped_list)]
         for item in items:
             item["status"] = "importing"
             self.after(0, lambda i=item: self._refresh_tree_row(i))
             try:
                 filtered, _ = filter_by_status(item["headers"], item["rows"])
-                stats = upsert(item["ws"], item["headers"], filtered, replace=replace)
+                # Loại các dòng KHÔNG thuộc tháng mục tiêu (tự nhận theo đa số)
+                filtered, dropped, target, _un = filter_by_month(
+                    item["headers"], filtered)
+                if dropped:
+                    dropped_report.append((item["path"].name, target, dropped))
+                stats = self._upsert_with_retry(
+                    item["ws"], item["headers"], filtered, replace)
                 item["status"] = "done"
+                item["error"]  = ""                                # xóa lỗi cũ nếu chạy lại thành công
                 self._sheet_hdr_cache.pop(item["ws"].title, None)  # cột sheet đã đổi
                 total_added   += stats["added"]
                 total_updated += stats["updated"]
@@ -1056,17 +1245,37 @@ class App(tk.Tk):
                 errors        += 1
             self.after(0, lambda i=item: self._refresh_tree_row(i))
         self.after(0, lambda: self._import_all_done(
-            total_added, total_updated, errors, len(items)))
+            total_added, total_updated, errors, len(items), dropped_report))
 
-    def _import_all_done(self, added: int, updated: int, errors: int, total: int):
+    def _import_all_done(self, added: int, updated: int, errors: int, total: int,
+                         dropped_report: list = None):
         self._progress.stop()
         self._refresh_import_btn()
+        dropped_report = dropped_report or []
+        n_dropped = sum(len(d) for _, _, d in dropped_report)
+
         if errors:
-            self._result_lbl.configure(
-                text=f"✓ {total - errors}/{total} file  ✗ {errors} lỗi")
+            base = f"✓ {total - errors}/{total} file  ✗ {errors} lỗi"
         else:
-            self._result_lbl.configure(
-                text=f"✓  {total} file  +{added} mới  ↺ {updated} cập nhật")
+            base = f"✓  {total} file  +{added} mới  ↺ {updated} cập nhật"
+        if n_dropped:
+            base += f"  ·  bỏ {n_dropped} dòng sai tháng"
+        self._result_lbl.configure(text=base)
+
+        if dropped_report:
+            self._show_dropped_month_report(dropped_report, n_dropped)
+
+    def _show_dropped_month_report(self, dropped_report: list, n_dropped: int):
+        """Popup thông báo các dòng đã bị loại vì thuộc tháng khác tháng import."""
+        lines = [f"Đã loại {n_dropped} dòng KHÔNG thuộc tháng import "
+                 f"(tháng lấy theo đa số của mỗi file):", ""]
+        for fname, target, dropped in dropped_report:
+            lines.append(f"📄 {fname}  →  giữ {_month_label(target)}")
+            cnt = Counter(_month_label(k) for _, k in dropped)
+            for lb, c in cnt.items():
+                lines.append(f"     • bỏ {c} dòng {lb}")
+            lines.append("")
+        messagebox.showwarning("Đã loại dòng sai tháng", "\n".join(lines).strip())
 
     # ── Text info helpers ─────────────────────────────────────────────────────
 

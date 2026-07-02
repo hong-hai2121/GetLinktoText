@@ -53,7 +53,7 @@ TIEN_NGAY_DAU_LABEL = "Tiền Ngày đầu nạp"
 DON_LABEL = "Đơn"
 DOANH_SO_LABEL = "Doanh Số"
 TY_LE_CP_LABEL = "Tỷ lệ CP"
-CAMP_DELETED_LABEL = "Có camp bị xóa không"
+CAMP_DELETED_LABEL = "có camp xóa không"
 
 # Regex dùng trong công thức Google Sheets để bỏ nhóm ngoặc cuối (ID TK)
 _STRIP_LAST_ID = '"\\s*\\([^()]*\\)\\s*$"'
@@ -71,7 +71,7 @@ ROW_LABELS = [
     "Lệch",
     "Ngày đầu thanh toán",
     "Tiền Ngày đầu nạp",
-    "Có camp bị xóa không",
+    CAMP_DELETED_LABEL,
     "Lần 1 tuần 3 T5",
     "Lần 1 tuần 4 T5",
     "Lần 1 tuần 5 T5",
@@ -320,13 +320,11 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
         return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
 
     def _camp_deleted_row() -> list:
-        # Lấy tên tab campaign = header cột (bỏ " (ID)") rồi soát cột Trạng thái (E):
-        # nếu có "Đã lưu trữ" hoặc "Đã xóa" → "có", ngược lại → "không".
         def make(cl):
-            rng = _indirect(cl, "E2:E")
             return (
-                f'=LET(rng;{rng};'
-                f'IF(COUNTIF(rng;"Đã lưu trữ")+COUNTIF(rng;"Đã xóa")>0;"có";"không"))'
+                f'=LET(tenTab;REGEXREPLACE({cl}$1;"\\s\\([^()]*\\)$";"");'
+                f'trangThai;INDIRECT("\'"&tenTab&"\'!E:E");'
+                f'IF(COUNTIF(trangThai;"*Đã lưu trữ*")+COUNTIF(trangThai;"*Đã xóa*")>0;"Có";"Không"))'
             )
         return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
 

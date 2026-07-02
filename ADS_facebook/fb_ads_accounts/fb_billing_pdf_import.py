@@ -226,8 +226,11 @@ def upsert_transactions(worksheet, rows: list[dict], replace: bool = False) -> d
     all_data = [sheet_hdr] + body
     BATCH = 1000
     for start in range(0, len(all_data), BATCH):
-        worksheet.update(f"A{start + 1}", all_data[start:start + BATCH],
-                         value_input_option="RAW")
+        worksheet.update(
+            values=all_data[start:start + BATCH],
+            range_name=f"A{start + 1}",
+            value_input_option="RAW",
+        )
     _format_text_columns(worksheet, sheet_hdr)
     return {"tab": worksheet.title, "added": len(rows),
             "removed": removed, "transactions": len(incoming_ids)}
