@@ -413,11 +413,8 @@ class App(tk.Tk):
         super().__init__()
         self.title("FB Billing Import → Google Sheet")
         
-        w, h = 1200, 720
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(960, 600)
+        from ui_kit import size_window
+        size_window(self, min_w=1040, min_h=600)
         self.configure(bg=self.BG)
 
         self._spreadsheet = None

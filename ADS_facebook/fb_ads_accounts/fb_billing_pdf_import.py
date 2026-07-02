@@ -254,11 +254,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("FB Billing PDF Import → Google Sheet")
-        w, h = 1200, 720
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(960, 600)
+        from ui_kit import size_window
+        size_window(self, min_w=1040, min_h=600)
         self.configure(bg=self.BG)
 
         self._spreadsheet = None
@@ -610,19 +607,30 @@ class App(tk.Tk):
 
     def _import_worker(self, items: list, replace: bool):
         added = removed = errors = 0
+        created: dict = {}   # title → ws (tab đã tạo/dùng trong lần chạy này)
+        wiped: set = set()   # title đã bị "Thay thế" — chỉ xóa 1 lần/tab
         for item in items:
             item["status"] = "importing"
             self.after(0, lambda i=item: self._refresh_tree_row(i))
             try:
-                if item["ws"] is None:                    # tạo tab mới theo quy tắc cũ
+                # Nhiều PDF cùng 1 tab: tạo tab 1 lần rồi dùng lại cho các file sau
+                ws = item["ws"]
+                if ws is None:                            # tạo tab mới theo quy tắc cũ
                     title = suggest_tab_name(item["meta"])
-                    ws = self._spreadsheet.add_worksheet(
-                        title=title, rows=max(len(item["rows"]) + 10, 100),
-                        cols=len(DETAIL_HEADERS))
+                    ws = created.get(title) or next(
+                        (w for w in self._worksheets if w.title == title), None)
+                    if ws is None:
+                        ws = self._spreadsheet.add_worksheet(
+                            title=title, rows=max(len(item["rows"]) + 10, 100),
+                            cols=len(DETAIL_HEADERS))
+                        self._worksheets.append(ws)
+                        self.after(0, lambda t=title: self._tab_list.insert("end", t))
                     item["ws"] = ws
-                    self._worksheets.append(ws)
-                    self.after(0, lambda t=title: self._tab_list.insert("end", t))
-                stats = upsert_transactions(item["ws"], item["rows"], replace=replace)
+                created[ws.title] = ws
+                # "Thay thế" chỉ xóa lần đầu chạm tab; PDF cùng tab sau đó chỉ thêm mới
+                eff_replace = replace and ws.title not in wiped
+                stats = upsert_transactions(ws, item["rows"], replace=eff_replace)
+                wiped.add(ws.title)
                 added += stats["added"]
                 removed += stats["removed"]
                 item["status"] = "done"

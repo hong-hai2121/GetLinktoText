@@ -7,8 +7,10 @@ GUI cho phép xem + xóa bớt tab trước khi chạy.
 Chạy: python consolidate.py
 """
 
+import re
 import sys
 import threading
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -27,7 +29,16 @@ from get_campaigns import (
 )
 
 BASE_DIR = Path(__file__).parent
-OUTPUT_SHEET_TITLE = f"Tổng Hợp T{datetime.now().month}"
+
+
+def _fallback_title() -> str:
+    """Dự phòng khi không dò được tháng từ dữ liệu: lấy THÁNG TRƯỚC
+    (dữ liệu thường được nhập sau khi tháng đã đóng sổ)."""
+    m = datetime.now().month - 1 or 12
+    return f"Tổng Hợp T{m}"
+
+
+OUTPUT_SHEET_TITLE = _fallback_title()
 
 # Hàng "1.1 Ngân sách được duyệt": mỗi cột tài khoản = tổng cột "số tiền"
 # (cột C, từ C2 trở xuống) của trang tính có tên = tên tab ở hàng 1 cột đó.
@@ -42,6 +53,7 @@ TIEN_NGAY_DAU_LABEL = "Tiền Ngày đầu nạp"
 DON_LABEL = "Đơn"
 DOANH_SO_LABEL = "Doanh Số"
 TY_LE_CP_LABEL = "Tỷ lệ CP"
+CAMP_DELETED_LABEL = "Có camp bị xóa không"
 
 # Regex dùng trong công thức Google Sheets để bỏ nhóm ngoặc cuối (ID TK)
 _STRIP_LAST_ID = '"\\s*\\([^()]*\\)\\s*$"'
@@ -59,7 +71,7 @@ ROW_LABELS = [
     "Lệch",
     "Ngày đầu thanh toán",
     "Tiền Ngày đầu nạp",
-    "Lần 1 tuần 2 T5",
+    "Có camp bị xóa không",
     "Lần 1 tuần 3 T5",
     "Lần 1 tuần 4 T5",
     "Lần 1 tuần 5 T5",
@@ -148,6 +160,42 @@ def col_letter(n: int) -> str:
         n, rem = divmod(n - 1, 26)
         result = chr(65 + rem) + result
     return result
+
+
+def _parse_month_year(s: str):
+    """'30/6/2026' → (2026, 6). Trả None nếu không phải ngày d/m/y hợp lệ."""
+    m = re.match(r"\s*(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})", s or "")
+    if not m:
+        return None
+    _day, month, year = int(m[1]), int(m[2]), int(m[3])
+    if year < 100:
+        year += 2000
+    return (year, month) if 1 <= month <= 12 else None
+
+
+def detect_output_title(spreadsheet, tab_titles: list[str]) -> str:
+    """Đặt tên sheet tổng hợp theo THÁNG của dữ liệu, không theo tháng hiện tại.
+
+    Đọc cột 'Ngày thanh toán' (B) của các tab nguồn rồi lấy tháng xuất hiện
+    nhiều nhất. Chỉ tốn 1 lệnh đọc gộp cho tất cả tab. Không dò được → tháng trước.
+    """
+    if not tab_titles:
+        return _fallback_title()
+    ranges = ["'" + t.replace("'", "''") + "'!B2:B" for t in tab_titles]
+    try:
+        batch = spreadsheet.values_batch_get(ranges)
+    except Exception:
+        return _fallback_title()
+    counter: Counter = Counter()
+    for vr in batch.get("valueRanges", []):
+        for row in vr.get("values", []):
+            ym = _parse_month_year(row[0]) if row else None
+            if ym:
+                counter[ym] += 1
+    if not counter:
+        return _fallback_title()
+    (_year, month), _ = counter.most_common(1)[0]
+    return f"Tổng Hợp T{month}"
 
 
 def build_summary_sheet(spreadsheet, tab_titles: list[str],
@@ -240,36 +288,45 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
                 for i in range(len(tab_titles))]
 
     def _ngay_dau_row() -> list:
+        # Ngày thanh toán ở cột B dạng d/m/yyyy (vd "30/6/2026"): bóc ngày/tháng/năm
+        # rồi lấy ngày sớm nhất. Trống/không hợp lệ → "Không có ngày hợp lệ".
         def make(cl):
-            sq  = "'"
-            ind = lambda rng: f'INDIRECT("{sq}"&{cl}$1&"{sq}!{rng}")'
             return (
-                f'=LET('
+                f'=LET(data;INDIRECT("\'"&{cl}$1&"\'!B2:B");'
                 f'ngay;ARRAYFORMULA(IFERROR(DATE('
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};",\\s*(\\d{{4}})"));'
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};"Tháng\\s*(\\d+)"));'
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};"^{sq}?(\\d+)")));'
-                f'""));'
-                f'TEXT(MIN(FILTER(ngay;ngay<>""));"dd/mm/yyyy")'
-                f')'
+                f'VALUE(REGEXEXTRACT(data;"\\d+/\\d+/(\\d{{4}})"));'
+                f'VALUE(REGEXEXTRACT(data;"\\d+/(\\d+)/\\d{{4}}"));'
+                f'VALUE(REGEXEXTRACT(data;"^(\\d+)/")));""));'
+                f'IFNA(TEXT(MIN(FILTER(ngay;ngay<>""));"dd/mm/yyyy");"Không có ngày hợp lệ"))'
             )
         return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
 
     def _tien_ngay_dau_row() -> list:
+        # Tổng "Số tiền" (cột C) của các dòng có ngày = ngày sớm nhất. Bọc TO_TEXT
+        # để chắc bóc được ngày kể cả khi ô là kiểu ngày; không có ngày hợp lệ → 0.
         def make(cl):
-            sq  = "'"
-            ind = lambda rng: f'INDIRECT("{sq}"&{cl}$1&"{sq}!{rng}")'
             return (
-                f'=LET('
+                f'=LET(data;INDIRECT("\'"&{cl}$1&"\'!B2:B");'
                 f'ngay;ARRAYFORMULA(IFERROR(DATE('
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};",\\s*(\\d{{4}})"));'
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};"Tháng\\s*(\\d+)"));'
-                f'VALUE(REGEXEXTRACT({ind("B2:B")};"^{sq}?(\\d+)")));'
-                f'""));'
-                f'tien;ARRAYFORMULA(IFERROR(VALUE(REGEXREPLACE(TO_TEXT({ind("C2:C")});"[^\\d]";""));0));'
-                f'ngaymin;MIN(FILTER(ngay;ngay<>""));'
-                f'SUM(FILTER(tien;ngay=ngaymin))'
+                f'VALUE(REGEXEXTRACT(TO_TEXT(data);"\\d+/\\d+/(\\d{{4}})"));'
+                f'VALUE(REGEXEXTRACT(TO_TEXT(data);"\\d+/(\\d+)/\\d{{4}}"));'
+                f'VALUE(REGEXEXTRACT(TO_TEXT(data);"^(\\d+)/")));""));'
+                f'tien;ARRAYFORMULA(IFERROR(VALUE(REGEXREPLACE('
+                f'TO_TEXT(INDIRECT("\'"&{cl}$1&"\'!C2:C"));"[^\\d]";""));0));'
+                f'ngaymin;IFERROR(MIN(FILTER(ngay;ngay<>""));"");'
+                f'IF(ngaymin="";0;SUM(FILTER(tien;ngay=ngaymin)))'
                 f')'
+            )
+        return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
+
+    def _camp_deleted_row() -> list:
+        # Lấy tên tab campaign = header cột (bỏ " (ID)") rồi soát cột Trạng thái (E):
+        # nếu có "Đã lưu trữ" hoặc "Đã xóa" → "có", ngược lại → "không".
+        def make(cl):
+            rng = _indirect(cl, "E2:E")
+            return (
+                f'=LET(rng;{rng};'
+                f'IF(COUNTIF(rng;"Đã lưu trữ")+COUNTIF(rng;"Đã xóa")>0;"có";"không"))'
             )
         return [make(col_letter(i + 2)) for i in range(len(tab_titles))]
 
@@ -295,6 +352,8 @@ def build_summary_sheet(spreadsheet, tab_titles: list[str],
             data_rows.append([label] + _doanh_so_row())
         elif label == TY_LE_CP_LABEL:
             data_rows.append([label] + _ty_le_cp_row())
+        elif label == CAMP_DELETED_LABEL:
+            data_rows.append([label] + _camp_deleted_row())
         else:
             data_rows.append([label] + [""] * len(tab_titles))
 
@@ -384,15 +443,13 @@ class App(tk.Tk):
         super().__init__()
         self.title("Tổng Hợp – Chọn Tab Sheet")
         
-        w, h = 680, 520
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(520, 380)
+        from ui_kit import size_window
+        size_window(self, min_w=820, min_h=500)
         self.configure(bg=self.BG)
         self.resizable(True, True)
 
         self._spreadsheet = None
+        self._output_title = OUTPUT_SHEET_TITLE   # dò lại theo tháng dữ liệu khi kết nối
         # [{"iid": str, "tab_title": str, "acc_name": str, "acc_id": str, "found": bool}]
         self._items: list[dict] = []
 
@@ -545,9 +602,13 @@ class App(tk.Tk):
                     "found":     title is not None,
                 })
 
+            found_titles = [it["tab_title"] for it in items if it["found"]]
+            output_title = detect_output_title(ss, found_titles)
+
             self._spreadsheet = ss
+            self._output_title = output_title
             self.after(0, lambda: self._load_items(items,
-                f"Kết nối OK · {ss.title} · {len(sel)} tài khoản"))
+                f"Kết nối OK · {ss.title} · {len(sel)} tài khoản · sheet đích: {output_title}"))
         except Exception as e:
             self.after(0, lambda e=e: self._set_status(f"Lỗi: {e}", error=True))
 
@@ -644,7 +705,7 @@ class App(tk.Tk):
             messagebox.showwarning("Không có tab", "Không còn tab hợp lệ nào để tổng hợp.")
             return
 
-        msg = (f"Sẽ tạo sheet '{OUTPUT_SHEET_TITLE}' với {len(tab_titles)} tab:\n\n"
+        msg = (f"Sẽ tạo sheet '{self._output_title}' với {len(tab_titles)} tab:\n\n"
                + "\n".join(f"  • {t}" for t in tab_titles))
         if not messagebox.askyesno("Xác nhận", msg):
             return
@@ -658,7 +719,8 @@ class App(tk.Tk):
 
     def _run_worker(self, tab_titles: list[str]):
         try:
-            result = build_summary_sheet(self._spreadsheet, tab_titles)
+            result = build_summary_sheet(self._spreadsheet, tab_titles,
+                                         self._output_title)
             self.after(0, lambda: self._done(result))
         except Exception as e:
             self.after(0, lambda e=e: self._error(str(e)))

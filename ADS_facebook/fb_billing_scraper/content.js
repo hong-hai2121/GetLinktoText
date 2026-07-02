@@ -64,6 +64,18 @@
 
   function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  // ── Nghỉ ngẫu nhiên giữa các lần click ──────────────────────────────────────
+  // Không click liên tục: mỗi lần chuyển sang giao dịch / trang tiếp theo sẽ
+  // nghỉ một khoảng NGẪU NHIÊN trong [min, max] ms để giống thao tác của người
+  // thật, tránh Facebook chặn vì hành vi đều đặn như bot.
+  const REST = {
+    detailMin: 2500,  detailMax: 6000,  // giữa mỗi giao dịch khi cào CHI TIẾT
+    listMoreMin: 2500, listMoreMax: 6000, // giữa mỗi lần bấm "Xem thêm" khi cào DANH SÁCH
+  };
+
+  function randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
+  function randomDelay(min, max) { return delay(randInt(min, max)); }
+
   function sendProgress(message, current, total) {
     chrome.runtime.sendMessage({ type: 'PROGRESS', message, current, total, phase: state.phase }).catch(() => {});
   }
@@ -754,7 +766,10 @@
         obs.observe(document.body, { childList: true, subtree: true });
       });
 
-      await delay(3000);
+      // Nghỉ ngẫu nhiên trước lần "Xem thêm" tiếp theo (không bấm liên tục)
+      const restMs = randInt(REST.listMoreMin, REST.listMoreMax);
+      sendProgress(`Đã cào ${state.scrapedList.length} giao dịch — nghỉ ${(restMs / 1000).toFixed(1)}s...`, state.scrapedList.length, 0);
+      await delay(restMs);
     }
 
     state.running = false;
@@ -1068,7 +1083,13 @@
         } catch (_) {}
       }
 
-      await delay(600);
+      // Nghỉ ngẫu nhiên trước khi mở giao dịch tiếp theo (không click liên tục).
+      // Bỏ qua nghỉ ở giao dịch cuối cùng.
+      if (state.running && i < state.total - 1) {
+        const restMs = randInt(REST.detailMin, REST.detailMax);
+        sendProgress(`Nghỉ ${(restMs / 1000).toFixed(1)}s trước giao dịch tiếp theo... (${i + 1}/${state.total})`, i + 1, state.total);
+        await delay(restMs);
+      }
     }
 
     state.running = false;

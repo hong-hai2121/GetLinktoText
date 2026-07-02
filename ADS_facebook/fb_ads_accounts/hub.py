@@ -27,6 +27,8 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
+from ui_kit import size_window
+
 BASE_DIR = Path(__file__).parent
 
 # ── Khoảng thời gian (preset Facebook) ─────────────────────────────────────────
@@ -168,16 +170,13 @@ class Hub(tk.Tk):
         super().__init__()
         self.title("FB Ads Suite — Trung Tâm Điều Khiển")
         
-        w, h = 1040, 720
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(880, 600)
+        size_window(self, min_w=1100, min_h=620)
         self.configure(bg=BG)
 
         self._running = False
         self._nav_btns: dict[str, tuple] = {}
         self._active = None
+        self._wraps: list = []          # nhãn cần tự canh lại wraplength theo bề ngang
 
         # State khoảng thời gian (dùng chung Phase 1 & 2)
         today = date.today()
@@ -257,33 +256,40 @@ class Hub(tk.Tk):
         # Main column
         main = tk.Frame(self, bg=BG)
         main.grid(row=0, column=1, sticky="nsew")
-        main.rowconfigure(2, weight=1)   # content
-        main.rowconfigure(3, weight=1)   # console
+        main.rowconfigure(2, weight=1)   # body (nội dung + console)
         main.columnconfigure(0, weight=1)
 
         # Header
         hdr = tk.Frame(main, bg=BG)
-        hdr.grid(row=0, column=0, sticky="ew", padx=32, pady=(28, 4))
+        hdr.grid(row=0, column=0, sticky="ew", padx=40, pady=(30, 4))
         self.title_lbl = tk.Label(hdr, text="", bg=BG, fg=TEXT,
-                                   font=("Segoe UI", 18, "bold"))
+                                   font=("Segoe UI", 20, "bold"))
         self.title_lbl.pack(side="left")
         self.status_lbl = tk.Label(hdr, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
-        self.status_lbl.pack(side="right", pady=(6, 0))
+        self.status_lbl.pack(side="right", pady=(8, 0))
         self.subtitle_lbl = tk.Label(main, text="", bg=BG, fg=MUTED,
                                      font=("Segoe UI", 10), anchor="w", justify="left")
-        self.subtitle_lbl.grid(row=1, column=0, sticky="ew", padx=32, pady=(0, 16))
+        self.subtitle_lbl.grid(row=1, column=0, sticky="ew", padx=40, pady=(0, 18))
+
+        # Body: nội dung (trái) + console (phải) — tận dụng bề ngang màn hình 21:9
+        body = tk.Frame(main, bg=BG)
+        body.grid(row=2, column=0, sticky="nsew", padx=40, pady=(0, 28))
+        body.rowconfigure(0, weight=1)
+        body.columnconfigure(0, weight=3, uniform="col")   # nội dung
+        body.columnconfigure(1, weight=2, uniform="col")   # console
 
         # Content (rebuilt per page)
-        self.content = tk.Frame(main, bg=BG)
-        self.content.grid(row=2, column=0, sticky="nsew", padx=32, pady=(0, 8))
+        self.content = tk.Frame(body, bg=BG)
+        self.content.grid(row=0, column=0, sticky="nsew", padx=(0, 22))
+        self.content.bind("<Configure>", self._reflow)
 
-        # Console
-        cwrap = tk.Frame(main, bg=BG)
-        cwrap.grid(row=3, column=0, sticky="nsew", padx=32, pady=(0, 24))
+        # Console (bên phải)
+        cwrap = tk.Frame(body, bg=BG)
+        cwrap.grid(row=0, column=1, sticky="nsew")
         cwrap.rowconfigure(1, weight=1)
         cwrap.columnconfigure(0, weight=1)
         chdr = tk.Frame(cwrap, bg=BG)
-        chdr.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        chdr.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         tk.Label(chdr, text="OUTPUT", bg=BG, fg=MUTED,
                  font=("Segoe UI", 9, "bold")).pack(side="left")
         tk.Button(chdr, text="Xoá", bg=BG, fg=MUTED, relief="flat", bd=0,
@@ -293,7 +299,7 @@ class Hub(tk.Tk):
         self.console = scrolledtext.ScrolledText(
             cwrap, bg=CODE_BG, fg=TEXT, insertbackground=TEXT,
             font=("Cascadia Code", 9), relief="flat", bd=0, wrap="word", state="disabled",
-            highlightbackground=BORDER, highlightthickness=1, height=10)
+            highlightbackground=BORDER, highlightthickness=1)
         self.console.grid(row=1, column=0, sticky="nsew")
         self.console.tag_config("ok",    foreground=GREEN)
         self.console.tag_config("err",   foreground=RED)
@@ -309,6 +315,18 @@ class Hub(tk.Tk):
         r.configure(bg=bg_color)
         lbl.configure(bg=bg_color)
         ind.configure(bg=bg_color)
+
+    def _reflow(self, event=None):
+        """Canh lại wraplength các nhãn mô tả theo bề ngang khung nội dung hiện tại."""
+        width = self.content.winfo_width()
+        if width <= 1:
+            return
+        wrap = max(width - 72, 240)
+        for lbl in self._wraps:
+            try:
+                lbl.configure(wraplength=wrap)
+            except tk.TclError:
+                pass
 
     # ── Điều hướng ────────────────────────────────────────────────────────────
     def _show(self, key: str):
@@ -327,10 +345,12 @@ class Hub(tk.Tk):
 
         for w in self.content.winfo_children():
             w.destroy()
+        self._wraps = []          # nhãn của trang cũ đã bị huỷ
 
         builder = getattr(self, f"_page_{key}", None)
         if builder:
             builder()
+        self._reflow()
 
     # ── Widget helpers ────────────────────────────────────────────────────────
     def _set_header(self, title: str, subtitle: str = ""):
@@ -354,9 +374,10 @@ class Hub(tk.Tk):
         return ttk.Entry(parent, textvariable=var, width=width, style="Modern.TEntry")
 
     def _desc(self, parent, text):
-        tk.Label(parent, text=text, bg=SURFACE, fg=TEXT, font=("Segoe UI", 10),
-                 justify="left", anchor="w", wraplength=660).pack(
-                 anchor="w", padx=20, pady=(16, 12))
+        lbl = tk.Label(parent, text=text, bg=SURFACE, fg=TEXT, font=("Segoe UI", 10),
+                       justify="left", anchor="w", wraplength=640)
+        lbl.pack(anchor="w", padx=20, pady=(16, 12))
+        self._wraps.append(lbl)
 
     def _date_bar(self, parent):
         """Thanh chọn khoảng thời gian dùng cho Phase 1 & 2."""
@@ -444,6 +465,7 @@ class Hub(tk.Tk):
                          font=("Segoe UI", 9), justify="left", anchor="w",
                          wraplength=620)
             d.pack(fill="x", padx=20, pady=(0, 16))
+            self._wraps.append(d)
 
             # Bấm bất kỳ đâu trong thẻ → mở tab
             for w in (card, top, t, s, d):

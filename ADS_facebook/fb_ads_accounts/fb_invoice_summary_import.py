@@ -18,6 +18,7 @@ import csv
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 
 try:
@@ -52,22 +53,52 @@ def _digits(s: str) -> str:
     return re.sub(r"[^\d]", "", s or "")
 
 
+def _col_index(header: list, *needles, default=None):
+    """Vị trí cột đầu tiên có tiêu đề chứa 1 trong các từ khóa (bỏ qua hoa/thường)."""
+    low = [_norm(h).lower() for h in header]
+    for i, h in enumerate(low):
+        if any(n in h for n in needles):
+            return i
+    return default
+
+
 def parse_invoice_csv(path: Path) -> tuple[dict, list[dict]]:
-    """Bóc 1 file Invoice Summary → (meta, rows) — mỗi giao dịch 1 dòng (7 cột)."""
+    """Bóc 1 file Invoice Summary → (meta, rows) — mỗi giao dịch 1 dòng (7 cột).
+
+    Meta xuất 2 kiểu bố cục cột: bản 4 cột (Ngày,ID giao dịch,Số tiền,Tiền tệ) và
+    bản 5 cột có thêm 'Phương thức thanh toán' chèn giữa. Vì thế PHẢI dò cột theo
+    TÊN tiêu đề, không đọc cứng index — nếu không sẽ nhầm cột thẻ thành số tiền.
+    """
     raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
     lines = raw.splitlines()
 
     macc = re.search(r"Tài kho[ảa]n:?\s*(\d{6,})", raw)
     account_id = macc.group(1) if macc else ""
 
-    mpm = re.search(r"Phương thức thanh toán:?\s*(.+)", raw)
-    payment_method = _norm(mpm.group(1)) if mpm else ""
+    # Dòng "Phương thức thanh toán:" ở đầu file (bản 4 cột) — BẮT BUỘC có dấu ':'
+    # để không khớp nhầm vào cột cùng tên trong dòng tiêu đề của bản 5 cột.
+    mpm = re.search(r"Phương thức thanh toán:\s*(.+)", raw)
+    file_pm = _norm(mpm.group(1)) if mpm else ""
 
     # Dòng tiêu đề bảng: có "ID giao" (vd "Ngày,ID giao dịch,Số tiền,Tiền tệ")
     start = next((i for i, l in enumerate(lines) if "ID giao" in l), None)
 
+    # Dò index cột theo tên (mặc định = bố cục 4 cột nếu không đọc được header)
+    i_date, i_txid, i_amount, i_pm = 0, 1, 2, None
+    if start is not None:
+        try:
+            header = next(csv.reader([lines[start]]))
+            i_date   = _col_index(header, "ngày", default=0)
+            i_txid   = _col_index(header, "id giao", default=1)
+            i_amount = _col_index(header, "số tiền", default=2)
+            i_pm     = _col_index(header, "phương thức")
+        except StopIteration:
+            pass
+
+    def cell(parts, idx):
+        return parts[idx].strip() if idx is not None and idx < len(parts) else ""
+
     rows: list[dict] = []
-    total_printed = ""
     if start is not None:
         for l in lines[start + 1:]:
             try:
@@ -76,26 +107,25 @@ def parse_invoice_csv(path: Path) -> tuple[dict, list[dict]]:
                 continue
             if len(parts) < 3:
                 continue
-            # Dòng tổng: "...,Tổng số tiền đã lập hóa đơn,49.844.857,VND"
+            # Bỏ dòng tổng (1 file có thể chứa nhiều bảng, mỗi bảng 1 dòng tổng)
             if "Tổng số tiền" in l:
-                total_printed = _digits(parts[2]) if len(parts) >= 3 else ""
                 continue
-            txid = parts[1].strip() if len(parts) > 1 else ""
+            txid = cell(parts, i_txid)
             if not re.match(r"\d+-\d+", txid):
                 continue
-            date   = parts[0].strip()
-            amount = _digits(parts[2]) if len(parts) > 2 else ""
             rows.append({
                 "ID giao dịch": txid,
-                "Ngày thanh toán": date,
-                "Số tiền": amount,
-                "Phương thức TT": payment_method,
+                "Ngày thanh toán": cell(parts, i_date),
+                "Số tiền": _digits(cell(parts, i_amount)),
+                "Phương thức TT": _norm(cell(parts, i_pm)) or file_pm,
                 "Số tham chiếu thẻ": "",
                 "Trạng thái": "",
                 "ID hóa đơn VAT": "",
             })
 
-    total = total_printed or str(sum(int(r["Số tiền"]) for r in rows if r["Số tiền"]))
+    payment_method = file_pm or (rows[0]["Phương thức TT"] if rows else "")
+    # Tổng = cộng dồn số tiền thật của các dòng (đúng cả khi file có nhiều bảng)
+    total = str(sum(int(r["Số tiền"]) for r in rows if r["Số tiền"]))
     meta = {
         "account_id": account_id,
         "payment_method": payment_method,
@@ -151,6 +181,46 @@ def load_account_names(spreadsheet) -> dict:
     return out
 
 
+# ── Chống quá tải API (quota 60 lệnh ghi/phút/user của Sheets) ─────────────────
+
+# Giãn cách tối thiểu giữa 2 lệnh gọi API → tối đa ~40 lệnh/phút, dưới trần 60.
+# Tăng số này nếu chạy song song nhiều tool dùng chung service account.
+_MIN_INTERVAL = 1.5
+_rate_lock = threading.Lock()
+_last_call = 0.0
+
+
+def _throttle():
+    """Đảm bảo 2 lệnh gọi API liên tiếp cách nhau ít nhất _MIN_INTERVAL giây."""
+    global _last_call
+    with _rate_lock:
+        wait = _last_call + _MIN_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_call = time.monotonic()
+
+
+def _is_quota_429(e: Exception) -> bool:
+    resp = getattr(e, "response", None)
+    if getattr(resp, "status_code", None) == 429:
+        return True
+    return "[429]" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
+
+
+def _api_call(fn, *args, **kwargs):
+    """Gọi API Sheets có giãn nhịp; nếu vẫn dính 429 thì chờ rồi tự thử lại."""
+    delay = 20
+    for attempt in range(5):
+        _throttle()
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            if attempt == 4 or not _is_quota_429(e):
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 60)
+
+
 # ── Định dạng cột TEXT ──────────────────────────────────────────────────────────
 
 def _format_text_columns(worksheet, headers: list):
@@ -168,17 +238,17 @@ def _format_text_columns(worksheet, headers: list):
             }
         })
     if requests:
-        worksheet.spreadsheet.batch_update({"requests": requests})
+        _api_call(worksheet.spreadsheet.batch_update, {"requests": requests})
 
 
 # ── Upsert theo ID giao dịch ────────────────────────────────────────────────────
 
 def upsert_by_id(worksheet, rows: list[dict], replace: bool = False) -> dict:
-    if replace or not worksheet.get_all_values():
+    existing = _api_call(worksheet.get_all_values)
+    if replace or not existing:
         sheet_hdr, body = list(SUMMARY_HEADERS), []
     else:
-        existing = worksheet.get_all_values()
-        sheet_hdr = existing[0] if existing and existing[0] else list(SUMMARY_HEADERS)
+        sheet_hdr = existing[0] if existing[0] else list(SUMMARY_HEADERS)
         body = [list(r) for r in existing[1:]]
         seen = {_normalize(h) for h in sheet_hdr}
         for h in SUMMARY_HEADERS:
@@ -214,11 +284,29 @@ def upsert_by_id(worksheet, rows: list[dict], replace: bool = False) -> dict:
     for row in rows:
         body.append([val(row, h) for h in sheet_hdr])
 
-    worksheet.clear()
+    # Ghi đè 1 LẦN thay cho clear() + update từng khúc 1000 dòng: đệm ô trống
+    # phủ hết phần dữ liệu cũ còn thừa → tiết kiệm quota ghi (60 lệnh/phút)
+    # và không còn khoảnh khắc tab bị trống nếu lỗi giữa chừng.
     all_data = [sheet_hdr] + body
-    for start in range(0, len(all_data), 1000):
-        worksheet.update(f"A{start + 1}", all_data[start:start + 1000],
-                         value_input_option="RAW")
+    ncols = max(len(sheet_hdr), max((len(r) for r in existing), default=0))
+    all_data = [r + [""] * (ncols - len(r)) for r in all_data]
+    all_data += [[""] * ncols for _ in range(len(existing) - len(all_data))]
+
+    # Cột "Số tiền" ghi dưới dạng SỐ (int), không phải text → Sheets tính tổng
+    # trực tiếp, bỏ dấu ' báo "số lưu dạng văn bản". Cột ID vẫn giữ text (bên dưới).
+    money_i = next((i for i, h in enumerate(sheet_hdr)
+                    if _normalize(h) == _normalize("Số tiền")), None)
+    if money_i is not None:
+        for r in all_data[1:]:                       # bỏ hàng tiêu đề
+            v = str(r[money_i]).strip()
+            if v.isdigit():
+                r[money_i] = int(v)
+
+    if worksheet.row_count < len(all_data) or worksheet.col_count < ncols:
+        _api_call(worksheet.resize,
+                  rows=max(worksheet.row_count, len(all_data)),
+                  cols=max(worksheet.col_count, ncols))
+    _api_call(worksheet.update, "A1", all_data, value_input_option="RAW")
     _format_text_columns(worksheet, sheet_hdr)
     return {"tab": worksheet.title, "added": len(rows),
             "removed": removed, "transactions": len(incoming)}
@@ -245,11 +333,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("FB Invoice Summary Import → Google Sheet")
-        w, h = 1160, 700
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(940, 580)
+        from ui_kit import size_window
+        size_window(self, min_w=1040, min_h=600)
         self.configure(bg=self.BG)
 
         self._spreadsheet = None
@@ -600,19 +685,31 @@ class App(tk.Tk):
 
     def _import_worker(self, items: list, replace: bool):
         added = removed = errors = 0
+        created: dict = {}   # title → ws (tab đã tạo/dùng trong lần chạy này)
+        wiped: set = set()   # title đã bị "Thay thế" — chỉ xóa 1 lần/tab
         for item in items:
             item["status"] = "importing"
             self.after(0, lambda i=item: self._refresh_tree_row(i))
             try:
-                if item["ws"] is None:
+                # Nhiều file cùng 1 tab: tạo tab 1 lần rồi dùng lại cho các file sau
+                ws = item["ws"]
+                if ws is None:
                     title = item["suggested"]
-                    ws = self._spreadsheet.add_worksheet(
-                        title=title, rows=max(len(item["rows"]) + 10, 100),
-                        cols=len(SUMMARY_HEADERS))
+                    ws = created.get(title) or next(
+                        (w for w in self._worksheets if w.title == title), None)
+                    if ws is None:
+                        ws = _api_call(
+                            self._spreadsheet.add_worksheet,
+                            title=title, rows=max(len(item["rows"]) + 10, 100),
+                            cols=len(SUMMARY_HEADERS))
+                        self._worksheets.append(ws)
+                        self.after(0, lambda t=title: self._tab_list.insert("end", t))
                     item["ws"] = ws
-                    self._worksheets.append(ws)
-                    self.after(0, lambda t=title: self._tab_list.insert("end", t))
-                stats = upsert_by_id(item["ws"], item["rows"], replace=replace)
+                created[ws.title] = ws
+                # "Thay thế" chỉ xóa lần đầu chạm tab; file cùng tab sau đó chỉ thêm mới
+                eff_replace = replace and ws.title not in wiped
+                stats = upsert_by_id(ws, item["rows"], replace=eff_replace)
+                wiped.add(ws.title)
                 added += stats["added"]
                 removed += stats["removed"]
                 item["status"] = "done"

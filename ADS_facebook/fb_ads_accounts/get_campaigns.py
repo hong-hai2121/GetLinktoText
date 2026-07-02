@@ -49,6 +49,23 @@ STATUS_MAP = {
     "ARCHIVED": "Đã lưu trữ",
 }
 
+# Trạng thái PHÂN PHỐI (cột "Phân phối" trên Trình quản lý QC) — suy từ effective_status.
+# Đang hoạt động (đang phân phối) / Đang chờ (chờ duyệt·xử lý) / Không hoạt động (tắt·lưu trữ).
+DELIVERY_MAP = {
+    "ACTIVE":          "Đang hoạt động",
+    "IN_PROCESS":      "Đang chờ",
+    "PENDING_REVIEW":  "Đang chờ",
+    "PENDING_BILLING_INFO": "Đang chờ",
+    "PREAPPROVED":     "Đang chờ",
+    "PAUSED":          "Không hoạt động",
+    "CAMPAIGN_PAUSED": "Không hoạt động",
+    "ADSET_PAUSED":    "Không hoạt động",
+    "ARCHIVED":        "Không hoạt động",
+    "DELETED":         "Không hoạt động",
+    "WITH_ISSUES":     "Không hoạt động",
+    "DISAPPROVED":     "Không hoạt động",
+}
+
 # ── Loại action để bóc từ actions / action_values / purchase_roas ──────────────
 INBOX_TYPES = [
     "onsite_conversion.messaging_conversation_started_7d",
@@ -130,6 +147,17 @@ def _date_params() -> dict:
     if DATE_PRESET:
         return {"date_preset": DATE_PRESET}
     return {"time_range": json.dumps(TIME_RANGE)}
+
+
+# Lấy CẢ campaign đã xóa/đã lưu trữ. FB v20.0 KHÔNG nhận `effective_status` trực
+# tiếp (báo "Invalid parameter") — phải lọc qua `filtering` với campaign.effective_status.
+CAMPAIGN_STATUSES = ["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]
+LIVE_STATUSES = {"ACTIVE", "PAUSED"}      # luôn hiện, kể cả không chi tiêu trong kỳ
+
+
+def _status_filter() -> str:
+    return json.dumps([{"field": "campaign.effective_status",
+                        "operator": "IN", "value": CAMPAIGN_STATUSES}])
 
 
 # Fields gửi cho Insights API (dùng chung cho campaign và ad level)
@@ -264,7 +292,8 @@ def _act_id(account_id: str) -> str:
 def fetch_campaigns(account_id: str) -> list[dict]:
     url = f"https://graph.facebook.com/{FB_API_VERSION}/{_act_id(account_id)}/campaigns"
     params = {
-        "fields":       "id,name,status",
+        "fields":       "id,name,status,effective_status",  # effective_status = trạng thái phân phối
+        "filtering":    _status_filter(),    # gồm cả camp đã xóa/đã lưu trữ
         "access_token": ACCESS_TOKEN,
         "limit":        100,
     }
@@ -277,6 +306,7 @@ def fetch_insights_campaign_level(account_id: str) -> list[dict]:
         "level":        "campaign",
         **_date_params(),
         "fields":       f"campaign_id,{_INSIGHTS_FIELDS}",
+        "filtering":    _status_filter(),    # gồm insights của camp đã xóa/đã lưu trữ
         "access_token": ACCESS_TOKEN,
         "limit":        500,
     }
@@ -472,7 +502,7 @@ def _insights_cols(m: dict) -> list:
 # ── Row builder ────────────────────────────────────────────────────────────────
 
 def _campaign_row(camp_id, camp_name, is_selected, m: dict,
-                  status: str, now_str: str, auto_by_spend: bool = False) -> list:
+                  delivery: str, now_str: str, auto_by_spend: bool = False) -> list:
     """Dòng Campaign — 25 cột."""
     chon = "TRUE" if (m["spend"] > 0 if auto_by_spend else is_selected) else "FALSE"
     return [
@@ -480,7 +510,7 @@ def _campaign_row(camp_id, camp_name, is_selected, m: dict,
         "Campaign",                           # B
         camp_id,                              # C  Campaign ID
         camp_name,                            # D  Tên
-        STATUS_MAP.get(status, status),       # E
+        DELIVERY_MAP.get(delivery, delivery), # E  Phân phối (trạng thái phân phối)
     ] + _insights_cols(m) + [
         int(round(m["spend"])) if m["spend"] > 0 else "",  # X  Chi Phí Campaign (số nguyên)
         now_str,                                            # Y  Cập Nhật Lúc
@@ -545,11 +575,20 @@ def get_all_accounts(spreadsheet) -> list[dict]:
     return accounts
 
 
-def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = False):
-    """Fetch campaign + insights cho danh sách tài khoản, ghi vào Sheets và JSON."""
+def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = False,
+                     progress=None):
+    """Fetch campaign + insights cho danh sách tài khoản, ghi vào Sheets và JSON.
+
+    progress: callback tuỳ chọn (done, total, tên_TK, ghi_chú) — cập nhật tiến trình GUI.
+    """
     month_label = datetime.now().strftime("%m/%Y")
+    total = len(accounts)
     dump_campaigns:     dict[str, list] = {}
     dump_insights_camp: dict[str, list] = {}
+
+    def _emit(done, name, note=""):
+        if progress:
+            progress(done, total, name, note)
 
     set_call_delay(CALL_DELAY_SECONDS)
 
@@ -562,6 +601,7 @@ def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = Fa
                 print(f"  ⏱ Nghỉ {ACCOUNT_DELAY_SECONDS:g}s trước tài khoản tiếp theo...")
                 time.sleep(ACCOUNT_DELAY_SECONDS)
             print(f"\n[{acc_name}] Xử lý tháng {month_label}...")
+            _emit(idx, acc_name, "đang lấy danh sách campaign…")
 
             ws = get_or_create_worksheet(spreadsheet, acc_name)
 
@@ -570,17 +610,28 @@ def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = Fa
             print(f"  → {selected_count} campaign đang được chọn lấy chi tiết (giữ nguyên).")
 
             campaigns = fetch_campaigns(acc_id)
-            print(f"  → {len(campaigns)} campaign.")
+            print(f"  → {len(campaigns)} campaign (gồm cả đã xóa/đã lưu trữ).")
             dump_campaigns[acc_name] = campaigns
+            _emit(idx, acc_name, f"{len(campaigns)} camp · đang lấy chi tiêu…")
 
             camp_insights = fetch_insights_campaign_level(acc_id)
             camp_insights_map = {r["campaign_id"]: r for r in camp_insights if "campaign_id" in r}
             print(f"  → {len(camp_insights)} dòng insights campaign.")
             dump_insights_camp[acc_name] = camp_insights
 
+            # Camp còn sống (ACTIVE/PAUSED) luôn hiện; camp đã xóa/đã lưu trữ CHỈ hiện
+            # nếu có chi tiêu trong kỳ đã chọn (tránh kéo cả trăm camp lưu trữ cũ).
+            visible_camps = [
+                c for c in campaigns
+                if c.get("status") in LIVE_STATUSES or c.get("id") in camp_insights_map
+            ]
+            n_extra = sum(1 for c in visible_camps if c.get("status") not in LIVE_STATUSES)
+            print(f"  → {len(visible_camps)} camp hiển thị "
+                  f"({n_extra} đã xóa/đã lưu trữ có chi tiêu trong kỳ).")
+
             status_order = {"ACTIVE": 0, "PAUSED": 1, "ARCHIVED": 2, "DELETED": 3}
             sorted_camps = sorted(
-                campaigns,
+                visible_camps,
                 key=lambda c: (status_order.get(c.get("status", ""), 9), c.get("name", "")),
             )
             now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -590,14 +641,16 @@ def run_for_accounts(spreadsheet, accounts: list[dict], auto_by_spend: bool = Fa
                     camp.get("name", ""),
                     detail_selections.get(camp.get("id", ""), False),
                     parse_insight_metrics(camp_insights_map.get(camp.get("id", ""), {})),
-                    camp.get("status", ""),
+                    camp.get("effective_status", camp.get("status", "")),  # trạng thái phân phối
                     now_str,
                     auto_by_spend=auto_by_spend,
                 )
                 for camp in sorted_camps
             ]
+            _emit(idx, acc_name, f"đang ghi {len(rows)} dòng vào sheet…")
             write_to_sheet(ws, rows)
             print(f"  → Đã ghi {len(rows)} dòng vào tab '{sanitize_sheet_name(acc_name)}'.")
+            _emit(idx + 1, acc_name, f"xong · {len(rows)} dòng")
 
     except RateLimitError as e:
         rate_limited = True
@@ -640,11 +693,8 @@ class App(tk.Tk):
         super().__init__()
         self.title("Get Campaigns – Chọn Tài Khoản")
         
-        w, h = 780, 440
-        x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(560, 320)
+        from ui_kit import size_window
+        size_window(self, min_w=900, min_h=520)
         self.configure(bg=self.BG)
         self.resizable(True, True)
 
@@ -692,36 +742,62 @@ class App(tk.Tk):
 
     def _build_ui(self):
         outer = tk.Frame(self, bg=self.BG)
-        outer.pack(fill="both", expand=True, padx=18, pady=14)
+        outer.pack(fill="both", expand=True, padx=24, pady=20)
 
+        # ── Header ──
         hdr = tk.Frame(outer, bg=self.BG)
-        hdr.pack(fill="x", pady=(0, 10))
-        tk.Label(hdr, text="Get Campaigns", bg=self.BG,
-                 font=("Segoe UI Semibold", 15), fg=self.TEXT).pack(side="left")
+        hdr.pack(fill="x", pady=(0, 2))
+        tk.Label(hdr, text="Phase 1 — Campaigns", bg=self.BG,
+                 font=("Segoe UI Semibold", 18), fg=self.TEXT).pack(side="left")
         self._status_lbl = tk.Label(hdr, text="Đang kết nối...",
                                     bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED)
-        self._status_lbl.pack(side="right")
+        self._status_lbl.pack(side="right", pady=(8, 0))
 
         tk.Label(outer,
-                 text="Click dòng để bật / tắt. Chỉ tài khoản ✓ được gọi API. "
-                      "Không ảnh hưởng sheet TKQC API.",
+                 text="Chọn tài khoản để lấy campaign + chi tiêu tháng. Click dòng để bật / tắt; "
+                      "chỉ tài khoản ✓ mới gọi API. Không ảnh hưởng sheet TKQC API.",
                  bg=self.BG, font=("Segoe UI", 9), fg=self.MUTED,
-                 justify="left", anchor="w").pack(fill="x", pady=(0, 4))
+                 justify="left", anchor="w").pack(fill="x", pady=(2, 14))
 
+        # ── Tuỳ chọn ──
         opt_row = tk.Frame(outer, bg=self.BG)
-        opt_row.pack(fill="x", pady=(0, 8))
+        opt_row.pack(fill="x", pady=(0, 12))
         self._spend_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opt_row, text="Tự chọn campaign có Spend (cột A = TRUE nếu có chi tiêu)",
-            variable=self._spend_var,
-            bg=self.BG, fg=self.TEXT, activebackground=self.BG,
-            font=("Segoe UI", 9), relief="flat", bd=0,
+            variable=self._spend_var, bg=self.BG, fg=self.TEXT,
+            activebackground=self.BG, activeforeground=self.TEXT,
+            selectcolor=self.BORDER, font=("Segoe UI", 9), relief="flat", bd=0,
+            cursor="hand2", takefocus=0,
         ).pack(side="left")
 
-        # Pack bot trước card để luôn hiển thị dù cửa sổ thấp
+        # ── Thanh dưới (tiến trình + nút) — pack trước để luôn hiện ──
         bot = tk.Frame(outer, bg=self.BG)
-        bot.pack(fill="x", pady=(12, 0), side="bottom")
+        bot.pack(fill="x", side="bottom", pady=(16, 0))
 
+        prog = tk.Frame(bot, bg=self.BG)
+        prog.pack(fill="x", pady=(0, 12))
+        self._prog_lbl = tk.Label(prog, text="Sẵn sàng.", bg=self.BG, fg=self.MUTED,
+                                  font=("Segoe UI", 9), anchor="w")
+        self._prog_lbl.pack(fill="x")
+        self._progress = ttk.Progressbar(prog, mode="determinate", length=200)
+        self._progress.pack(fill="x", pady=(5, 0))
+
+        btns = tk.Frame(bot, bg=self.BG)
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Bật tất cả",
+                   command=lambda: self._set_all(True)).pack(side="left")
+        ttk.Button(btns, text="Tắt tất cả",
+                   command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
+        self._count_lbl = tk.Label(btns, text="", bg=self.BG,
+                                   font=("Segoe UI", 9), fg=self.MUTED)
+        self._count_lbl.pack(side="left", padx=12)
+        self._run_btn = ttk.Button(btns, text="▶  Chạy", style="Accent.TButton",
+                                   command=self._run, state="disabled")
+        self._run_btn.pack(side="right")
+        ttk.Button(btns, text="Huỷ", command=self.destroy).pack(side="right", padx=(0, 8))
+
+        # ── Danh sách tài khoản (card) ──
         card = tk.Frame(outer, bg=self.CARD,
                         highlightthickness=1, highlightbackground=self.BORDER)
         card.pack(fill="both", expand=True)
@@ -736,9 +812,9 @@ class App(tk.Tk):
         self._tree.heading("acc_id",   text="ID Tài Khoản",   anchor="w")
         self._tree.heading("da_chi",   text="Đã Chi",          anchor="e")
         self._tree.column("chon",     width=56,  stretch=False, anchor="center", minwidth=50)
-        self._tree.column("acc_name", width=220, stretch=True,  minwidth=120)
-        self._tree.column("acc_id",   width=150, stretch=False, minwidth=100)
-        self._tree.column("da_chi",   width=130, stretch=False, minwidth=90,  anchor="e")
+        self._tree.column("acc_name", width=260, stretch=True,  minwidth=140)
+        self._tree.column("acc_id",   width=170, stretch=False, minwidth=110)
+        self._tree.column("da_chi",   width=150, stretch=False, minwidth=100, anchor="e")
 
         vsb = ttk.Scrollbar(card, orient="vertical",   command=self._tree.yview)
         hsb = ttk.Scrollbar(card, orient="horizontal", command=self._tree.xview)
@@ -753,23 +829,6 @@ class App(tk.Tk):
 
         self._tree.bind("<ButtonRelease-1>", self._on_click)
         self._tree.bind("<space>",           self._on_space)
-
-        ttk.Button(bot, text="Bật tất cả",
-                   command=lambda: self._set_all(True)).pack(side="left")
-        ttk.Button(bot, text="Tắt tất cả",
-                   command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
-
-        self._count_lbl = tk.Label(bot, text="", bg=self.BG,
-                                   font=("Segoe UI", 9), fg=self.MUTED)
-        self._count_lbl.pack(side="left", padx=10)
-
-        self._run_btn = ttk.Button(bot, text="Chạy",
-                                   style="Accent.TButton",
-                                   command=self._run, state="disabled")
-        self._run_btn.pack(side="right")
-        ttk.Button(bot, text="Huỷ", command=self.destroy).pack(side="right", padx=(0, 8))
-        self._progress = ttk.Progressbar(bot, mode="indeterminate", length=110)
-        self._progress.pack(side="right", padx=(0, 10))
 
     # ── Connect ───────────────────────────────────────────────────────────────
 
@@ -858,35 +917,53 @@ class App(tk.Tk):
             return
         auto_by_spend = self._spend_var.get() if self._spend_var else False
         self._run_btn.configure(state="disabled")
-        self._progress.start(12)
+        self._progress.configure(mode="determinate", maximum=len(accounts), value=0)
+        self._prog_lbl.configure(text=f"Bắt đầu…  0/{len(accounts)} tài khoản",
+                                 fg=self.TEXT)
         self._set_status(f"Đang chạy {len(accounts)} tài khoản...")
         threading.Thread(target=self._run_worker,
                          args=(list(accounts), auto_by_spend), daemon=True).start()
 
     def _run_worker(self, accounts: list[dict], auto_by_spend: bool = False):
         try:
-            run_for_accounts(self._spreadsheet, accounts, auto_by_spend=auto_by_spend)
+            run_for_accounts(self._spreadsheet, accounts,
+                             auto_by_spend=auto_by_spend, progress=self._emit_progress)
             self.after(0, self._done)
         except RateLimitError as e:
             self.after(0, lambda e=e: self._rate_limited(str(e)))
         except Exception as e:
             self.after(0, lambda e=e: self._error(str(e)))
 
+    def _emit_progress(self, done: int, total: int, name: str, note: str):
+        """Gọi từ thread nền → chuyển về main thread cập nhật tiến trình."""
+        self.after(0, self._apply_progress, done, total, name, note)
+
+    def _apply_progress(self, done: int, total: int, name: str, note: str):
+        self._progress.configure(maximum=total, value=done)
+        self._prog_lbl.configure(text=f"{done}/{total} tài khoản   ·   {name} — {note}",
+                                 fg=self.TEXT)
+        self._set_status(f"Đang chạy…  {done}/{total}")
+
     def _done(self):
-        self._progress.stop()
+        try:
+            self._progress.configure(value=self._progress["maximum"])
+        except tk.TclError:
+            pass
         self._run_btn.configure(state="normal")
+        self._prog_lbl.configure(text="✓  Hoàn tất tất cả tài khoản đã chọn.", fg="#198754")
         self._set_status("✓ Hoàn thành!")
         messagebox.showinfo("Hoàn thành", "Đã lấy xong campaign cho các tài khoản được chọn.")
 
     def _rate_limited(self, msg: str):
-        self._progress.stop()
         self._run_btn.configure(state="normal")
+        self._prog_lbl.configure(
+            text="⚠  Dừng do rate limit — dữ liệu đã xử lý xong đã được lưu.", fg=self.ACCENT)
         self._set_status("⚠ Rate limit — đã lưu dữ liệu", error=True)
         messagebox.showwarning("Rate Limit", f"{msg}\n\nDữ liệu các tài khoản đã xử lý xong đã được lưu.")
 
     def _error(self, msg: str):
-        self._progress.stop()
         self._run_btn.configure(state="normal")
+        self._prog_lbl.configure(text=f"✗  Lỗi: {msg}", fg="#dc3545")
         self._set_status(f"✗ Lỗi: {msg}", error=True)
         messagebox.showerror("Lỗi", msg)
 
