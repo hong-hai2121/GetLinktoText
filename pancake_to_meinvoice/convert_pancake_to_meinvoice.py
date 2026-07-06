@@ -790,12 +790,20 @@ def transform_to_meinvoice(df: pd.DataFrame, col_map: dict) -> tuple[pd.DataFram
         giam_gia_raw = get_val(row, "giam_gia")
 
         # ── Ghép địa chỉ đầy đủ ─────────────────────────────────────────────
-        dia_chi_parts = [get_val(row, "dia_chi")]
+        # Cột "Địa chỉ" gốc thường đã chứa sẵn Phường/Xã, Quận/Huyện, Tỉnh.
+        # Trước khi ghép mỗi phần, kiểm tra xem địa chỉ hiện tại đã có chưa
+        # (so khớp sau khi chuẩn hóa dấu + hoa/thường) → tránh lặp.
+        dia_chi = get_val(row, "dia_chi")
+        dia_chi_norm = _normalize_name(dia_chi)
         for ec in extra_addr_cols:
             v = str(row.get(ec, "")).strip()
-            if v and v.lower() not in ("nan", "none", ""):
-                dia_chi_parts.append(v)
-        dia_chi = ", ".join(p for p in dia_chi_parts if p)
+            if not v or v.lower() in ("nan", "none", ""):
+                continue
+            v_norm = _normalize_name(v)
+            if v_norm and v_norm in dia_chi_norm:
+                continue  # phần này đã nằm trong địa chỉ → bỏ qua, không ghép lặp
+            dia_chi = f"{dia_chi}, {v}" if dia_chi else v
+            dia_chi_norm = _normalize_name(dia_chi)
 
         # ── Ngày hóa đơn ────────────────────────────────────────────────────
         # Ưu tiên: external → ngày giao → ngày tạo đơn → default

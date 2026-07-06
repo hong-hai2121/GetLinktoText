@@ -441,12 +441,6 @@ def upsert(worksheet, csv_headers: list, csv_rows: list, replace: bool = False) 
                     r.append("")
 
     id_idx = sheet_hdr.index(ID_COL) if ID_COL in sheet_hdr else None
-    existing_ids: dict = {}
-    if id_idx is not None:
-        for i, row in enumerate(sheet_body):
-            rid = row[id_idx].strip() if id_idx < len(row) else ""
-            if rid:
-                existing_ids[rid] = i
 
     def _get_csv_val(row: dict, col_name: str) -> str:
         if col_name in row:
@@ -454,20 +448,55 @@ def upsert(worksheet, csv_headers: list, csv_rows: list, replace: bool = False) 
         norm = csv_norm_map.get(_normalize(col_name))
         return str(row[norm]) if norm and norm in row else ""
 
-    updated = added = 0
-    for csv_row in csv_rows:
-        row_vals = [_get_csv_val(csv_row, h) for h in sheet_hdr]
+    # File CHI TIẾT có NHIỀU dòng cùng 1 'ID giao dịch' (mỗi chiến dịch/nhóm QC
+    # một dòng). Nếu dedup theo từng DÒNG như file danh sách thì các dòng cùng
+    # giao dịch sẽ ĐÈ lên nhau → mất hết chỉ còn 1 dòng. Nhận diện file chi tiết
+    # qua ID trùng lặp hoặc cột 'Tên chiến dịch' rồi dedup ở CẤP GIAO DỊCH.
+    incoming_ids = ([str(r.get(ID_COL, "")).strip() for r in csv_rows]
+                    if ID_COL in csv_headers else [])
+    incoming_ids = [i for i in incoming_ids if i]
+    is_detail = (len(incoming_ids) != len(set(incoming_ids))
+                 or _find_col(csv_headers, "Tên chiến dịch") is not None)
 
-        csv_id = str(csv_row.get(ID_COL, "")).strip() if ID_COL in csv_headers else ""
-
-        if csv_id and csv_id in existing_ids:
-            sheet_body[existing_ids[csv_id]] = row_vals
-            updated += 1
-        else:
-            if csv_id:
-                existing_ids[csv_id] = len(sheet_body)
-            sheet_body.append(row_vals)
+    if id_idx is not None and is_detail:
+        # Dedup CẤP GIAO DỊCH: xoá mọi dòng cũ có ID trùng lô mới, rồi thêm CẢ lô
+        # mới (giữ đủ nhiều dòng/1 giao dịch, idempotent khi import lại).
+        id_set = set(incoming_ids)
+        kept, updated = [], 0
+        for row in sheet_body:
+            rid = row[id_idx].strip() if id_idx < len(row) else ""
+            if rid and rid in id_set:
+                updated += 1
+                continue
+            kept.append(row)
+        sheet_body = kept
+        added = 0
+        for csv_row in csv_rows:
+            sheet_body.append([_get_csv_val(csv_row, h) for h in sheet_hdr])
             added += 1
+    else:
+        # Dedup CẤP DÒNG (file danh sách: 1 dòng/1 giao dịch) — hành vi như cũ.
+        existing_ids: dict = {}
+        if id_idx is not None:
+            for i, row in enumerate(sheet_body):
+                rid = row[id_idx].strip() if id_idx < len(row) else ""
+                if rid:
+                    existing_ids[rid] = i
+
+        updated = added = 0
+        for csv_row in csv_rows:
+            row_vals = [_get_csv_val(csv_row, h) for h in sheet_hdr]
+
+            csv_id = str(csv_row.get(ID_COL, "")).strip() if ID_COL in csv_headers else ""
+
+            if csv_id and csv_id in existing_ids:
+                sheet_body[existing_ids[csv_id]] = row_vals
+                updated += 1
+            else:
+                if csv_id:
+                    existing_ids[csv_id] = len(sheet_body)
+                sheet_body.append(row_vals)
+                added += 1
 
     # Làm sạch cột tiền: bỏ dấu ' / ₫, đổi text → SỐ để cộng/SUM được trên Sheet.
     # Áp cho MỌI dòng (cũ + mới) để cả cột đồng nhất kiểu số.
@@ -818,12 +847,24 @@ class App(tk.Tk):
 
         KHÔNG cắt ngắn về tên trước dấu '(' — phần '(ID tài khoản)' là một phần
         của tên tab. Cắt ngắn dễ trỏ nhầm sang một tab khác có cột khác.
-        Ví dụ: 'Tk2 A Hải +7 (796502949963935)_fb_billing_DANH_SACH_2026-06-01'
-               → 'Tk2 A Hải +7 (796502949963935)'
+
+        File CHI TIẾT ('…_fb_billing_CHI_TIET_…') có bộ cột KHÁC HẲN file danh
+        sách (19 cột vs 7 cột), nên map sang tab RIÊNG '<tên> Chi tiết' — trùng
+        tên sheet 'Chi tiết' mà extension tạo. Không thấy tab đó → tạo tab mới,
+        KHÔNG so cột nhầm với tab danh sách '<tên>'.
+        Ví dụ:
+          'Tk2 A Hải +7 (796502949963935)_fb_billing_DANH_SACH_2026-06-01'
+            → 'Tk2 A Hải +7 (796502949963935)'
+          'Tk2 A Hải +7 (796502949963935)_fb_billing_CHI_TIET_2026-06-01'
+            → 'Tk2 A Hải +7 (796502949963935) Chi tiết'
         """
         m = re.match(r'^(.+?)_fb_billing', stem, re.IGNORECASE)
         name = m.group(1).strip() if m else stem.strip()
-        return [name] if name else []
+        if not name:
+            return []
+        if re.search(r'_fb_billing_chi[_ ]?tiet', stem, re.IGNORECASE):
+            return [f"{name} Chi tiết"]
+        return [name]
 
     @staticmethod
     def _norm_for_match(s: str) -> str:

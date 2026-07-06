@@ -260,16 +260,19 @@ def compare_spend(detail_sheet: str = DETAIL_SHEET, campaign_sheet: str = CAMPAI
     all_names = sorted(set(billing_by_camp) | set(spend_by_camp))
 
     sep = "=" * 72
-    det_col  = (detail_sheet[:12]   + "..") if len(detail_sheet)   > 14 else detail_sheet
-    camp_col = (campaign_sheet[:12] + "..") if len(campaign_sheet) > 14 else campaign_sheet
+    # Canh chiều rộng cột "Tên chiến dịch" theo tên DÀI NHẤT để in ĐẦY ĐỦ, không cắt "..".
+    label_skip = f"GIAO DỊCH TỔNG đã bỏ qua ({skipped_total})"
+    name_w = max([len("Tên chiến dịch"), len("TỔNG CỘNG"), len(label_skip)]
+                 + [len(n) for n in all_names])
+    VW = 16  # chiều rộng cột số
     print(f"\n{sep}")
-    print(f"  So sánh Spend giữa 2 trang đã chọn:")
-    print(f"    • '{detail_sheet}'  (cột Số tiền phân bổ)")
-    print(f"    • '{campaign_sheet}'  (cột Spend Tháng Này)")
+    print(f"  So sánh Spend giữa 2 tab (tên tab đầy đủ):")
+    print(f"    • Cột 'Số tiền PB' = '{detail_sheet}'")
+    print(f"    • Cột 'Spend'      = '{campaign_sheet}'")
     print(f"  Tolerance: {tolerance:,.0f} ₫")
     print(sep)
-    print(f"  {'Tên chiến dịch':<40} {det_col:>14} {camp_col:>14} {'Chênh':>12}")
-    print(f"  {'-'*40} {'-'*14} {'-'*14} {'-'*12}")
+    print(f"  {'Tên chiến dịch':<{name_w}} {'Số tiền PB':>{VW}} {'Spend':>{VW}} {'Chênh':>14}")
+    print(f"  {'-'*name_w} {'-'*VW} {'-'*VW} {'-'*14}")
 
     match_count = 0
     diff_rows = []
@@ -294,15 +297,13 @@ def compare_spend(detail_sheet: str = DETAIL_SHEET, campaign_sheet: str = CAMPAI
                 diff_rows.append((name, b, s, diff))
             total_b += b
             total_s += s
-            short = name[:38] + ".." if len(name) > 40 else name
-            print(f"  {short:<40} {b:>14,.0f} {s:>14,.0f} {diff:>+12,.0f}{flag}")
+            print(f"  {name:<{name_w}} {b:>{VW},.0f} {s:>{VW},.0f} {diff:>+14,.0f}{flag}")
 
     # ── Hàng tổng cộng cuối bảng ────────────────────────────────────────────────
-    print(f"  {'-'*40} {'-'*14} {'-'*14} {'-'*12}")
-    print(f"  {'TỔNG CỘNG':<40} {total_b:>14,.0f} {total_s:>14,.0f} {total_b - total_s:>+12,.0f}")
+    print(f"  {'-'*name_w} {'-'*VW} {'-'*VW} {'-'*14}")
+    print(f"  {'TỔNG CỘNG':<{name_w}} {total_b:>{VW},.0f} {total_s:>{VW},.0f} {total_b - total_s:>+14,.0f}")
     # Hàng tổng tiền của các giao dịch tổng (trống Số tiền phân bổ) đã bỏ qua phía trên
-    label_skip = f"GIAO DỊCH TỔNG đã bỏ qua ({skipped_total})"
-    print(f"  {label_skip:<40} {skipped_txn_amount:>14,.0f} {'':>14} {'':>12}")
+    print(f"  {label_skip:<{name_w}} {skipped_txn_amount:>{VW},.0f} {'':>{VW}} {'':>14}")
 
     print(f"\n  Khớp (≤{tolerance:,.0f}): {match_count}  |  Lệch: {len(diff_rows)}  |  "
           f"Chỉ có trong '{detail_sheet}': {len(only_in_billing)}  |  "
