@@ -12,11 +12,12 @@ from src.services.get_text import GetTextService, StopRequestedError
 class GetTextApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("GetTextFromLink - GUI")
-        w, h = 1200, 680
+        self.root.title("GetTextFromLink — Trích xuất nội dung")
+        # Cửa sổ gọn, không ép tỉ lệ 21:9
+        w, h = 1200, 720
         self.root.geometry(f"{w}x{h}")
         self.center_window(w, h)
-        self.root.minsize(w, h)
+        self.root.minsize(1080, 640)
 
         self.selected_model = tk.StringVar(value=config.MODEL_NAME)
 
@@ -35,11 +36,12 @@ class GetTextApp:
         self._result_color_tags = set()
         self._result_bold_font = None
 
+        self._init_theme()
         self.build_ui()
         self.load_links()
         self.service = GetTextService(logger=self.log)
 
-    def center_window(self, w: int = 1200, h: int = 680):
+    def center_window(self, w: int = 1200, h: int = 720):
         self.root.update_idletasks()
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -47,167 +49,310 @@ class GetTextApp:
         y = max(0, (sh - h) // 2)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
+    # ── Theme / Styles ──────────────────────────────────────────────────────
+    def _init_theme(self):
+        # Bảng màu hiện đại (light)
+        self.C = {
+            "bg": "#eef1f7",
+            "surface": "#ffffff",
+            "surface_alt": "#f4f6fb",
+            "border": "#d8e0ec",
+            "primary": "#4f46e5",
+            "primary_dk": "#4338ca",
+            "primary_lt": "#e9eafe",
+            "success": "#16a34a",
+            "success_dk": "#128a3f",
+            "danger": "#e11d48",
+            "danger_dk": "#be123c",
+            "text": "#1e293b",
+            "muted": "#6b7280",
+            "header": "#4f46e5",
+            "header_text": "#ffffff",
+        }
+        self.F = {
+            "title": ("Segoe UI", 16, "bold"),
+            "subtitle": ("Segoe UI", 10),
+            "h": ("Segoe UI", 11, "bold"),
+            "body": ("Segoe UI", 10),
+            "small": ("Segoe UI", 9),
+            "section": ("Segoe UI", 9, "bold"),
+            "btn": ("Segoe UI", 10, "bold"),
+            "mono": ("Consolas", 10),
+        }
+        self.root.configure(bg=self.C["bg"])
+        self.setup_styles()
+
+    def setup_styles(self):
+        C, F = self.C, self.F
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        # Frames
+        style.configure("App.TFrame", background=C["bg"])
+        style.configure("Card.TFrame", background=C["surface"])
+        style.configure("Surface.TFrame", background=C["surface"])
+        style.configure("Header.TFrame", background=C["header"])
+        style.configure("Status.TFrame", background=C["surface"])
+
+        # Labels
+        style.configure("TLabel", background=C["surface"], foreground=C["text"], font=F["body"])
+        style.configure("Title.TLabel", background=C["header"], foreground=C["header_text"], font=F["title"])
+        style.configure("Subtitle.TLabel", background=C["header"], foreground="#dcdefb", font=F["subtitle"])
+        style.configure("Heading.TLabel", background=C["surface"], foreground=C["primary_dk"], font=F["h"])
+        style.configure("Section.TLabel", background=C["surface"], foreground=C["muted"], font=F["section"])
+        style.configure("Muted.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
+        style.configure("Badge.TLabel", background=C["primary_dk"], foreground="#ffffff", font=F["small"], padding=(10, 4))
+        style.configure("Status.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
+
+        # Cards (labelframe)
+        style.configure(
+            "Card.TLabelframe",
+            background=C["surface"],
+            bordercolor=C["border"],
+            relief="solid",
+            borderwidth=1,
+            padding=14,
+        )
+        style.configure("Card.TLabelframe.Label", background=C["surface"], foreground=C["primary_dk"], font=F["h"])
+
+        # Buttons
+        style.configure(
+            "Primary.TButton", background=C["primary"], foreground="#ffffff",
+            font=F["btn"], borderwidth=0, padding=(12, 9),
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", C["primary_dk"]), ("disabled", "#c3c7dc")],
+            foreground=[("disabled", "#eef0f7")],
+        )
+
+        style.configure(
+            "Danger.TButton", background=C["danger"], foreground="#ffffff",
+            font=F["btn"], borderwidth=0, padding=(12, 9),
+        )
+        style.map(
+            "Danger.TButton",
+            background=[("active", C["danger_dk"]), ("disabled", "#e7b6c1")],
+            foreground=[("disabled", "#faeef1")],
+        )
+
+        style.configure(
+            "Ghost.TButton", background=C["surface_alt"], foreground=C["text"],
+            font=F["btn"], borderwidth=1, bordercolor=C["border"], padding=(12, 9),
+        )
+        style.map(
+            "Ghost.TButton",
+            background=[("active", C["primary_lt"]), ("disabled", "#f0f2f6")],
+            bordercolor=[("active", C["primary"])],
+            foreground=[("active", C["primary_dk"]), ("disabled", "#adb3c2")],
+        )
+
+        # Checkbutton / Radiobutton trên nền card
+        style.configure("Card.TCheckbutton", background=C["surface"], foreground=C["text"], font=F["body"])
+        style.map(
+            "Card.TCheckbutton",
+            background=[("active", C["surface"])],
+            foreground=[("active", C["primary_dk"]), ("disabled", "#9aa1b1")],
+        )
+        style.configure("Card.TRadiobutton", background=C["surface"], foreground=C["text"], font=F["body"])
+        style.map(
+            "Card.TRadiobutton",
+            background=[("active", C["surface"])],
+            foreground=[("active", C["primary_dk"]), ("disabled", "#9aa1b1")],
+        )
+
+        # Combobox / Spinbox
+        style.configure(
+            "TCombobox", fieldbackground=C["surface"], background=C["surface"],
+            foreground=C["text"], bordercolor=C["border"], arrowcolor=C["primary"], padding=5,
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", C["surface"])],
+            foreground=[("readonly", C["text"])],
+            selectbackground=[("readonly", C["surface"])],
+            selectforeground=[("readonly", C["text"])],
+            bordercolor=[("focus", C["primary"])],
+        )
+        style.configure(
+            "TSpinbox", fieldbackground=C["surface"], foreground=C["text"],
+            bordercolor=C["border"], arrowcolor=C["primary"], padding=5,
+        )
+        style.map("TSpinbox", bordercolor=[("focus", C["primary"])])
+
+        # Separator
+        style.configure("TSeparator", background=C["border"])
+
+        # Notebook
+        style.configure("Modern.TNotebook", background=C["bg"], borderwidth=0, tabmargins=(2, 4, 2, 0))
+        style.configure(
+            "Modern.TNotebook.Tab", background=C["surface_alt"], foreground=C["muted"],
+            font=F["btn"], padding=(20, 10), borderwidth=0,
+        )
+        style.map(
+            "Modern.TNotebook.Tab",
+            background=[("selected", C["surface"]), ("active", C["primary_lt"])],
+            foreground=[("selected", C["primary_dk"])],
+        )
+
     def build_ui(self):
         for child in self.root.winfo_children():
             child.destroy()
 
+        C, F = self.C, self.F
+
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(0, weight=0)
-        self.root.grid_rowconfigure(1, weight=1)
-        self.root.grid_rowconfigure(2, weight=0)
+        self.root.grid_rowconfigure(0, weight=0)  # header
+        self.root.grid_rowconfigure(1, weight=0)  # controls band
+        self.root.grid_rowconfigure(2, weight=1)  # notebook
+        self.root.grid_rowconfigure(3, weight=0)  # status
 
-        # ── Top panel ────────────────────────────────────────────────────────
-        top = ttk.Frame(self.root, padding=(10, 10, 10, 0))
-        top.grid(row=0, column=0, sticky="ew")
-        top.grid_columnconfigure(0, weight=1)
-        top.grid_columnconfigure(1, weight=0)
+        # ── Header ───────────────────────────────────────────────────────────
+        header = ttk.Frame(self.root, style="Header.TFrame", padding=(24, 16))
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(1, weight=0)
 
-        # ── Config frame (left) ───────────────────────────────────────────
-        cfg = ttk.LabelFrame(top, text="Cấu hình", padding=(10, 6))
-        cfg.grid(row=0, column=0, sticky="ew")
-        cfg.grid_columnconfigure(0, weight=1)
-        cfg.grid_columnconfigure(1, weight=1)
+        htext = ttk.Frame(header, style="Header.TFrame")
+        htext.grid(row=0, column=0, sticky="w")
+        ttk.Label(htext, text="🎬  GetTextFromLink", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            htext,
+            text="Trích xuất & chuyển video / link thành văn bản bằng Whisper",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
-        # Static info — 1 dòng compact
-        device_label = "GPU (CUDA)" if config.device == "cuda" else "CPU"
-        info_text = (
-            f"📁 Video: {config.OUTPUT_VIDEO_DIR}   |   "
-            f"📄 Word: {config.OUTPUT_WORD_FILE}   |   "
-            f"💻 {device_label}"
-        )
-        ttk.Label(cfg, text=info_text, foreground="gray").grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
-        )
+        device_label = "GPU · CUDA" if config.device == "cuda" else "CPU"
+        ttk.Label(header, text=f"💻  {device_label}", style="Badge.TLabel").grid(row=0, column=1, sticky="e")
 
-        ttk.Separator(cfg, orient="horizontal").grid(
-            row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8)
-        )
+        # ── Controls band (config + actions) ─────────────────────────────────
+        band = ttk.Frame(self.root, style="App.TFrame", padding=(16, 14, 16, 6))
+        band.grid(row=1, column=0, sticky="ew")
+        band.grid_columnconfigure(0, weight=1)
+        band.grid_columnconfigure(1, weight=0, minsize=330)
 
-        # ── Cột trái ─────────────────────────────────────────────────────
-        left = ttk.Frame(cfg)
-        left.grid(row=2, column=0, sticky="nw", padx=(0, 16))
+        # ── Config card ───────────────────────────────────────────────────
+        cfg = ttk.LabelFrame(band, text="  Cấu hình  ", style="Card.TLabelframe")
+        cfg.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        for i in range(3):
+            cfg.grid_columnconfigure(i, weight=1, uniform="cfg")
 
-        # Model
-        model_row = ttk.Frame(left)
-        model_row.pack(anchor="w", pady=(0, 6))
-        ttk.Label(model_row, text="Model Whisper:").pack(side="left", padx=(0, 8))
+        # Cột 0 — Nhận diện
+        c0 = ttk.Frame(cfg, style="Surface.TFrame")
+        c0.grid(row=0, column=0, sticky="nw", padx=(0, 18))
+        ttk.Label(c0, text="NHẬN DIỆN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(c0, text="Model Whisper", style="TLabel").pack(anchor="w")
         ttk.Combobox(
-            model_row,
+            c0,
             textvariable=self.selected_model,
             values=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
             state="readonly",
-            width=16,
-        ).pack(side="left")
+            width=20,
+        ).pack(anchor="w", fill="x", pady=(3, 10))
+        ttk.Label(c0, text="Số link mỗi lần (0 = tất cả)", style="TLabel").pack(anchor="w")
+        ttk.Spinbox(
+            c0, from_=0, to=100000, textvariable=self.max_links_per_run_var, width=20
+        ).pack(anchor="w", fill="x", pady=(3, 0))
 
-        # Số link mỗi lần
-        link_row = ttk.Frame(left)
-        link_row.pack(anchor="w", pady=(0, 6))
-        ttk.Label(link_row, text="Số link xử lý mỗi lần (0 = tất cả):").pack(side="left", padx=(0, 8))
-        ttk.Spinbox(link_row, from_=0, to=100000, width=8, textvariable=self.max_links_per_run_var).pack(side="left")
-
-        # Checkboxes nhóm trái
+        # Cột 1 — Tùy chọn
+        c1 = ttk.Frame(cfg, style="Surface.TFrame")
+        c1.grid(row=0, column=1, sticky="nw", padx=(0, 18))
+        ttk.Label(c1, text="TÙY CHỌN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
-            left,
-            text="Bỏ qua video dài hơn 15 phút",
-            variable=self.skip_long_video_var,
-        ).pack(anchor="w", pady=(0, 4))
-
+            c1, text="Bỏ qua video dài hơn 15 phút",
+            variable=self.skip_long_video_var, style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=3)
         ttk.Checkbutton(
-            left,
-            text="Không gửi nội dung lên GPT, chỉ lưu transcript",
-            variable=self.skip_gpt_var,
-        ).pack(anchor="w", pady=(0, 4))
-
+            c1, text="Chỉ lưu transcript, không gửi GPT",
+            variable=self.skip_gpt_var, style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=3)
         ttk.Checkbutton(
-            left,
-            text="Chuyển link đã xử lý sang processed_links.txt",
-            variable=self.move_processed_links_var,
-        ).pack(anchor="w", pady=(0, 4))
+            c1, text="Chuyển link đã xử lý → processed_links.txt",
+            variable=self.move_processed_links_var, style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=3)
 
-        # ── Cột phải ─────────────────────────────────────────────────────
-        right = ttk.Frame(cfg)
-        right.grid(row=2, column=1, sticky="nw")
-
-        # Chế độ chia nhỏ
-        title_row = ttk.Frame(right)
-        title_row.pack(anchor="w", pady=(0, 4))
+        # Cột 2 — Chia nhỏ & tiêu đề
+        c2 = ttk.Frame(cfg, style="Surface.TFrame")
+        c2.grid(row=0, column=2, sticky="nw")
+        ttk.Label(c2, text="CHIA NHỎ & TIÊU ĐỀ", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
-            title_row,
-            text="Chia nhỏ audio + lấy Tiêu đề/Mô tả/Tag",
-            variable=self.title_mode_var,
-            command=self.on_title_toggle,
-        ).pack(side="left")
+            c2, text="Chia nhỏ audio + lấy Tiêu đề / Mô tả / Tag",
+            variable=self.title_mode_var, command=self.on_title_toggle, style="Card.TCheckbutton",
+        ).pack(anchor="w")
 
-        chunk_row = ttk.Frame(right)
-        chunk_row.pack(anchor="w", padx=(20, 0), pady=(0, 6))
-        ttk.Label(chunk_row, text="Số đoạn đầu nhận diện:").pack(side="left", padx=(0, 6))
+        chunk_row = ttk.Frame(c2, style="Surface.TFrame")
+        chunk_row.pack(anchor="w", padx=(8, 0), pady=(7, 7))
+        ttk.Label(chunk_row, text="Số đoạn đầu nhận diện:", style="TLabel").pack(side="left", padx=(0, 8))
         self.max_chunks_spin = ttk.Spinbox(
-            chunk_row, from_=1, to=50, width=5, textvariable=self.max_chunks_var, state="disabled"
+            chunk_row, from_=1, to=50, width=6, textvariable=self.max_chunks_var, state="disabled"
         )
         self.max_chunks_spin.pack(side="left")
 
-        # Submode — RadioButton (đúng hơn Checkbutton)
-        submode_frame = ttk.LabelFrame(right, text="Chế độ con", padding=(8, 4))
-        submode_frame.pack(anchor="w", padx=(20, 0), pady=(0, 4))
-
+        sub = ttk.Frame(c2, style="Surface.TFrame")
+        sub.pack(anchor="w", padx=(8, 0))
+        ttk.Label(sub, text="Chế độ con:", style="Muted.TLabel").pack(side="left", padx=(0, 8))
         self._submode_radios = []
         for label, value in [("Tiêu đề", "title_only"), ("Mô tả", "full"), ("Nội dung", "content_only")]:
             rb = ttk.Radiobutton(
-                submode_frame,
-                text=label,
-                variable=self.title_submode_var,
-                value=value,
-                state="disabled",
+                sub, text=label, variable=self.title_submode_var, value=value,
+                state="disabled", style="Card.TRadiobutton",
             )
-            rb.pack(side="left", padx=(0, 12))
+            rb.pack(side="left", padx=(0, 10))
             self._submode_radios.append(rb)
 
-        # File processed links info
-        ttk.Label(
-            right,
-            text=f"📋 Processed: {config.PROCESSED_LINKS_FILE}",
-            foreground="gray",
-        ).pack(anchor="w", pady=(8, 0))
+        # Đường dẫn (dòng thông tin dưới cùng)
+        ttk.Separator(cfg, orient="horizontal").grid(row=1, column=0, columnspan=3, sticky="ew", pady=(12, 8))
+        info_text = (
+            f"📁 Video: {config.OUTPUT_VIDEO_DIR}      "
+            f"📄 Word: {config.OUTPUT_WORD_FILE}      "
+            f"📋 Processed: {config.PROCESSED_LINKS_FILE}"
+        )
+        ttk.Label(cfg, text=info_text, style="Muted.TLabel", wraplength=980, justify="left").grid(
+            row=2, column=0, columnspan=3, sticky="w"
+        )
 
-        # ── Action frame (right) ──────────────────────────────────────────
-        action = ttk.LabelFrame(top, text="Thao tác", padding=10)
-        action.grid(row=0, column=1, sticky="ne", padx=(10, 0))
-        action.grid_columnconfigure(0, weight=1)
-        action.grid_columnconfigure(1, weight=1)
+        # ── Action card ───────────────────────────────────────────────────
+        action = ttk.LabelFrame(band, text="  Thao tác  ", style="Card.TLabelframe")
+        action.grid(row=0, column=1, sticky="nsew")
+        action.grid_columnconfigure(0, weight=1, uniform="act")
+        action.grid_columnconfigure(1, weight=1, uniform="act")
 
-        self.start_btn = ttk.Button(action, text="▶ Bắt đầu xử lý", command=self.start_process, width=22)
-        self.start_btn.grid(row=0, column=0, padx=(0, 8), pady=(0, 8), sticky="ew")
-
-        self.stop_btn = ttk.Button(action, text="⏹ Dừng", command=self.stop_process, width=22, state="disabled")
-        self.stop_btn.grid(row=0, column=1, pady=(0, 8), sticky="ew")
+        self.start_btn = ttk.Button(action, text="▶  Bắt đầu", command=self.start_process, style="Primary.TButton")
+        self.start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 8))
+        self.stop_btn = ttk.Button(
+            action, text="⏹  Dừng", command=self.stop_process, style="Danger.TButton", state="disabled"
+        )
+        self.stop_btn.grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=(0, 8))
 
         self.restart_firefox_btn = ttk.Button(
-            action, text="♻ Khởi động lại Firefox", command=self.restart_firefox_async, width=22
+            action, text="♻  Khởi động lại Firefox", command=self.restart_firefox_async, style="Ghost.TButton"
         )
-        self.restart_firefox_btn.grid(row=1, column=0, padx=(0, 8), sticky="ew")
+        self.restart_firefox_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
-        self.save_btn = ttk.Button(action, text="💾 Lưu danh sách", command=self.save_links, width=22)
-        self.save_btn.grid(row=1, column=1, sticky="ew")
+        self.save_btn = ttk.Button(action, text="💾  Lưu danh sách", command=self.save_links, style="Ghost.TButton")
+        self.save_btn.grid(row=2, column=0, sticky="ew", padx=(0, 6))
+        self.reload_btn = ttk.Button(action, text="🔄  Tải lại", command=self.load_links, style="Ghost.TButton")
+        self.reload_btn.grid(row=2, column=1, sticky="ew", padx=(6, 0))
 
-        self.reload_btn = ttk.Button(action, text="🔄 Tải lại danh sách", command=self.load_links, width=22)
-        self.reload_btn.grid(row=2, column=0, columnspan=2, pady=(8, 0), sticky="ew")
-
-        # ── Main notebook ──────────────────────────────────────────────────
-        main = ttk.LabelFrame(self.root, text="Danh sách", padding=10)
-        main.grid(row=1, column=0, sticky="nsew", padx=10, pady=(8, 4))
+        # ── Main notebook ────────────────────────────────────────────────────
+        main = ttk.Frame(self.root, style="App.TFrame", padding=(16, 4, 16, 10))
+        main.grid(row=2, column=0, sticky="nsew")
         main.grid_rowconfigure(0, weight=1)
         main.grid_columnconfigure(0, weight=1)
 
-        self.nb = ttk.Notebook(main)
+        self.nb = ttk.Notebook(main, style="Modern.TNotebook")
         self.nb.grid(row=0, column=0, sticky="nsew")
 
-        tab_log = ttk.Frame(self.nb)
-        tab_links = ttk.Frame(self.nb)
-        tab_result = ttk.Frame(self.nb)
+        tab_log = ttk.Frame(self.nb, style="Card.TFrame", padding=2)
+        tab_links = ttk.Frame(self.nb, style="Card.TFrame", padding=2)
+        tab_result = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
 
-        self.nb.add(tab_log, text="  Nhật ký  ")
-        self.nb.add(tab_links, text="  Danh sách link  ")
-        self.nb.add(tab_result, text="  Nội dung Word  ")
+        self.nb.add(tab_log, text="  📜  Nhật ký  ")
+        self.nb.add(tab_links, text="  🔗  Danh sách link  ")
+        self.nb.add(tab_result, text="  📄  Nội dung Word  ")
 
         for tab in (tab_log, tab_links):
             tab.grid_rowconfigure(0, weight=1)
@@ -218,39 +363,44 @@ class GetTextApp:
         tab_result.grid_rowconfigure(1, weight=1)
         tab_result.grid_columnconfigure(0, weight=1)
 
-        result_toolbar = ttk.Frame(tab_result, padding=(0, 0, 0, 6))
-        result_toolbar.grid(row=0, column=0, sticky="ew")
+        result_toolbar = ttk.Frame(tab_result, style="Card.TFrame")
+        result_toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.copy_result_btn = ttk.Button(
-            result_toolbar,
-            text="📋 Copy (giữ màu)",
-            command=self.copy_result_with_color,
-            width=22,
+            result_toolbar, text="📋  Copy (giữ màu)", command=self.copy_result_with_color, style="Ghost.TButton"
         )
         self.copy_result_btn.pack(side="left")
         self.download_docx_btn = ttk.Button(
-            result_toolbar,
-            text="⬇ Tải .docx (giữ màu)",
-            command=self.download_result_docx,
-            width=20,
+            result_toolbar, text="⬇  Tải .docx", command=self.download_result_docx, style="Ghost.TButton"
         )
         self.download_docx_btn.pack(side="left", padx=(8, 0))
         self.download_txt_btn = ttk.Button(
-            result_toolbar,
-            text="⬇ Tải file .txt",
-            command=self.download_result_txt,
-            width=18,
+            result_toolbar, text="⬇  Tải .txt", command=self.download_result_txt, style="Ghost.TButton"
         )
         self.download_txt_btn.pack(side="left", padx=(8, 0))
         ttk.Label(
             result_toolbar,
-            text="Dán vào Word/WordPad hoặc Google Docs để giữ màu & định dạng giống file docx. "
-            "Nút 'Tải file .txt' lưu nội dung vào thư mục Downloads.",
-            foreground="gray",
-        ).pack(side="left", padx=(8, 0))
+            text="Dán vào Word / WordPad hoặc Google Docs để giữ màu & định dạng. "
+            "Nút 'Tải .txt' lưu nội dung vào thư mục Downloads.",
+            style="Muted.TLabel",
+            wraplength=760,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
 
-        self.log_text = scrolledtext.ScrolledText(tab_log, wrap=tk.WORD)
-        self.links_text = scrolledtext.ScrolledText(tab_links, wrap=tk.WORD)
-        self.result_text = scrolledtext.ScrolledText(tab_result, wrap=tk.WORD)
+        text_kwargs = dict(
+            wrap=tk.WORD,
+            bg=C["surface"],
+            fg=C["text"],
+            relief="flat",
+            borderwidth=0,
+            padx=14,
+            pady=10,
+            insertbackground=C["primary"],
+            selectbackground=C["primary_lt"],
+            selectforeground=C["text"],
+        )
+        self.log_text = scrolledtext.ScrolledText(tab_log, font=F["mono"], **text_kwargs)
+        self.links_text = scrolledtext.ScrolledText(tab_links, font=F["body"], **text_kwargs)
+        self.result_text = scrolledtext.ScrolledText(tab_result, font=F["body"], **text_kwargs)
 
         self.log_text.grid(row=0, column=0, sticky="nsew")
         self.links_text.grid(row=0, column=0, sticky="nsew")
@@ -261,24 +411,29 @@ class GetTextApp:
 
         # ── Status bar ────────────────────────────────────────────────────
         self._status_var = tk.StringVar(value="Sẵn sàng")
-        status_bar = ttk.Frame(self.root, relief="sunken")
-        status_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=0)
-        ttk.Label(status_bar, textvariable=self._status_var, anchor="w", padding=(8, 2)).pack(
+        status_bar = ttk.Frame(self.root, style="Status.TFrame", padding=(16, 7))
+        status_bar.grid(row=3, column=0, sticky="ew")
+        self._status_indicator = ttk.Label(
+            status_bar, text="●", foreground=C["success"], background=C["surface"], font=F["body"]
+        )
+        self._status_indicator.pack(side="left", padx=(0, 8))
+        ttk.Label(status_bar, textvariable=self._status_var, style="Status.TLabel").pack(
             side="left", fill="x", expand=True
         )
-        self._status_indicator = ttk.Label(status_bar, text="●", foreground="green", padding=(8, 2))
-        self._status_indicator.pack(side="right")
 
     # ── Tab switching ──────────────────────────────────────────────────────
     def on_tab_changed(self, event=None):
-        tab_text = self.nb.tab(self.nb.select(), "text").strip()
+        try:
+            idx = self.nb.index(self.nb.select())
+        except Exception:
+            idx = 0
 
-        if tab_text == "Danh sách link":
+        if idx == 1:  # Danh sách link
             self.links_text.config(state="normal")
             self.links_text.delete("1.0", "end")
             self.load_links()
             self.links_text.see("1.0")
-        elif tab_text == "Nội dung Word":
+        elif idx == 2:  # Nội dung Word
             self.result_text.config(state="normal")
             self.result_text.delete("1.0", "end")
             self.load_result_docx()

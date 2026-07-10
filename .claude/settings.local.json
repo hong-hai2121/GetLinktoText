@@ -13,7 +13,9 @@
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
       "PowerShell(python -m py_compile \"D:\\\\Python\\\\GetLinktoText\\\\MisaThueSuafile\\\\lap_day_ma_van_don.py\")",
       "PowerShell(if \\($?\\) { \"OK - compile s?ch\" })",
-      "PowerShell(if \\($?\\) { \"OK - compile sach\" })"
+      "PowerShell(if \\($?\\) { \"OK - compile sach\" })",
+      "PowerShell(Get-PSDrive C | Select-Object Used,Free,@{Name=\"Used\\(GB\\)\";Expression={[math]::Round\\($_.Used/1GB,2\\)}},@{Name=\"Free\\(GB\\)\";Expression={[math]::Round\\($_.Free/1GB,2\\)}},@{Name=\"Total\\(GB\\)\";Expression={[math]::Round\\(\\($_.Used+$_.Free\\)/1GB,2\\)}})",
+      "PowerShell(Get-ChildItem C:\\\\ -File -Force -ErrorAction SilentlyContinue | Select-Object Name,@{Name=\"Size\\(GB\\)\";Expression={[math]::Round\\($_.Length/1GB,2\\)}} | Sort-Object 'Size\\(GB\\)' -Descending | Format-Table -AutoSize)"
     ]
   }
 }
