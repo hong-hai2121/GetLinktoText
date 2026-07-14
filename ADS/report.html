@@ -1,0 +1,962 @@
+<meta charset="utf-8">
+<title>Trình quản lý quảng cáo — Xem chỉ số chiến dịch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --fb-blue:#1877F2; --fb-blue-d:#166FE5;
+    --bg:#f0f2f5; --card:#ffffff; --line:#e4e6eb; --line2:#dadde1;
+    --text:#050505; --muted:#65676B; --muted2:#8a8d91;
+    --green:#31A24C; --gray-dot:#BCC0C4; --amber:#f5a623;
+    --hover:#f5f6f7; --head:#f7f8fa; --sticky-sh:rgba(0,0,0,.08);
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); font-size:14px; line-height:1.35;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--fb-blue);text-decoration:none}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    background:var(--card); border-bottom:1px solid var(--line);
+    padding:12px 20px; display:flex; align-items:center; gap:14px;
+    position:sticky; top:0; z-index:40;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+  .brand .logo{
+    width:30px;height:30px;border-radius:8px;background:var(--fb-blue);
+    color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;
+    font-family:Georgia,serif;
+  }
+  .brand small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+  .topbar .spacer{flex:1}
+  .btn{
+    border:1px solid var(--line2); background:#fff; color:var(--text);
+    padding:8px 14px; border-radius:6px; font-size:14px; font-weight:600;
+    cursor:pointer; display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+  }
+  .btn:hover{background:var(--hover)}
+  .btn.primary{background:var(--fb-blue);border-color:var(--fb-blue);color:#fff}
+  .btn.primary:hover{background:var(--fb-blue-d)}
+  .btn svg{width:16px;height:16px}
+
+  /* ---------- Layout ---------- */
+  .wrap{max-width:1500px;margin:0 auto;padding:16px 20px 60px}
+
+  .banner{
+    display:flex;align-items:center;gap:10px;background:#e7f3ff;color:#0a5dc2;
+    border:1px solid #cfe4fb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;
+  }
+  .banner.hide{display:none}
+  .banner b{font-weight:700}
+
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .stat .k{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+  .stat .v{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.01em}
+  .stat .s{color:var(--muted2);font-size:12px;margin-top:2px}
+
+  /* toolbar */
+  .toolbar{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0;
+    border-bottom:none;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .search{position:relative;flex:1;min-width:220px;max-width:360px}
+  .search input{
+    width:100%;padding:8px 12px 8px 34px;border:1px solid var(--line2);border-radius:20px;
+    font-size:14px;background:var(--hover);
+  }
+  .search input:focus{outline:none;background:#fff;border-color:var(--fb-blue)}
+  .search svg{position:absolute;left:11px;top:9px;width:16px;height:16px;color:var(--muted)}
+  .seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+  .seg button{border:none;background:#fff;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+  .seg button+button{border-left:1px solid var(--line2)}
+  .seg button.on{background:var(--fb-blue);color:#fff}
+  .tb-spacer{flex:1}
+  .count{color:var(--muted);font-size:13px;white-space:nowrap}
+
+  /* column chooser */
+  .chooser-wrap{position:relative}
+  .panel{
+    position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--line2);
+    border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;width:320px;max-height:60vh;overflow:auto;display:none;
+  }
+  .panel.open{display:block}
+  .panel h4{margin:6px 8px 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .panel label{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+  .panel label:hover{background:var(--hover)}
+  .panel .pactions{display:flex;gap:8px;padding:8px 6px 4px;border-top:1px solid var(--line);margin-top:6px}
+  .panel .pactions a{font-size:13px;cursor:pointer;font-weight:600}
+
+  /* table */
+  .tablecard{background:var(--card);border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);overflow:hidden}
+  .scroller{overflow:auto;max-height:calc(100vh - 250px)}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+  thead th{
+    position:sticky;top:0;z-index:10;background:var(--head);color:var(--muted);
+    font-weight:600;text-align:right;padding:11px 14px;white-space:nowrap;border-bottom:1px solid var(--line2);
+    cursor:pointer;user-select:none;
+  }
+  thead th.txt{text-align:left}
+  thead th .arrow{opacity:0;margin-left:5px;font-size:11px}
+  thead th.sorted .arrow{opacity:1}
+  thead th:hover{background:#eef0f3}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:middle}
+  tbody td.txt{text-align:left}
+  tbody tr:hover{background:var(--hover)}
+  tbody tr:hover .sticky-col{background:var(--hover)}
+  .muted{color:var(--muted2)}
+
+  /* sticky first column (campaign) */
+  .sticky-col{position:sticky;left:0;z-index:5;background:#fff;box-shadow:2px 0 0 rgba(0,0,0,.04)}
+  thead th.sticky-col{z-index:15;background:var(--head)}
+  .camp{display:flex;align-items:center;gap:12px;min-width:260px;max-width:420px}
+  .camp .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .camp .name b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis}
+  .camp .delivery{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:2px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--gray-dot);flex:none}
+  .dot.on{background:var(--green)}
+  .dot.off{background:var(--gray-dot)}
+
+  /* toggle switch */
+  .sw{width:34px;height:20px;border-radius:20px;background:#ccd0d5;position:relative;flex:none;transition:background .15s}
+  .sw.on{background:var(--fb-blue)}
+  .sw::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+  .sw.on::after{left:16px}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:#eef0f3;color:var(--muted)}
+  .subtag{color:var(--muted2);font-size:11px}
+
+  tfoot td{
+    position:sticky;bottom:0;background:#f7f8fa;font-weight:700;padding:12px 14px;border-top:2px solid var(--line2);
+    text-align:right;white-space:nowrap;z-index:8;
+  }
+  tfoot td.txt{text-align:left}
+  tfoot td.sticky-col{left:0;z-index:9;background:#f7f8fa}
+
+  /* dropzone overlay */
+  #drop{position:fixed;inset:0;background:rgba(24,119,242,.10);backdrop-filter:blur(1px);z-index:100;display:none;align-items:center;justify-content:center}
+  #drop.show{display:flex}
+  #drop .box{background:#fff;border:2px dashed var(--fb-blue);border-radius:16px;padding:44px 60px;text-align:center;font-size:18px;font-weight:700;color:var(--fb-blue)}
+
+  .empty{padding:60px 20px;text-align:center;color:var(--muted)}
+  .empty svg{width:52px;height:52px;color:var(--line2);margin-bottom:12px}
+  #file{display:none}
+  .foot-note{color:var(--muted2);font-size:12px;margin-top:14px;text-align:center}
+
+  /* ---------- Gợi ý & con trỏ dòng ---------- */
+  .tip{color:var(--muted);font-size:12.5px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  tbody tr{cursor:pointer}
+  /* chọn/copy được text trong bảng */
+  table, .an{-webkit-user-select:text;user-select:text}
+
+  /* ---------- Thanh file / nhiều tài khoản ---------- */
+  .filebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+  .filebar.hide{display:none}
+  .filebar .fbl{font-size:13px;color:var(--muted);font-weight:700}
+  .fchip{display:inline-flex;align-items:center;gap:6px;background:#eef4ff;border:1px solid #d3e2ff;color:#274b8f;border-radius:20px;padding:5px 6px 5px 10px;font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+  .fchip:hover{border-color:var(--fb-blue)}
+  .fchip .fck{width:14px;text-align:center;font-weight:800;color:var(--fb-blue);flex:none}
+  .fchip small{color:var(--muted);font-weight:600}
+  .fchip.off{background:#f0f2f5;border-color:var(--line2);color:var(--muted2);opacity:.7}
+  .fchip.off .fck{color:transparent}
+  .fchip .fx{border:none;background:#d3e2ff;color:#274b8f;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;padding:0}
+  .fchip .fx:hover{background:#f2c9c6;color:#9c2f28}
+  .fchip.off .fx{background:#e4e6eb;color:var(--muted)}
+  .filebar .fsel{border:none;background:none;color:var(--fb-blue);font-weight:700;font-size:12.5px;cursor:pointer;padding:4px 6px}
+  .filebar .fsel:hover{text-decoration:underline}
+  .filebar .fclear{padding:5px 12px;font-size:12.5px}
+
+  /* ---------- Bảng phân tích chi tiết (modal) ---------- */
+  .an-back{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
+  .an-back.show{display:flex}
+  .an{background:var(--card);border-radius:14px;width:100%;max-width:940px;box-shadow:0 18px 60px rgba(0,0,0,.35);overflow:hidden;margin:auto}
+  .an-head{display:flex;align-items:flex-start;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+  .an-head .ttl{flex:1;min-width:0}
+  .an-head .ttl b{font-size:18px;font-weight:800;display:block;line-height:1.25}
+  .an-head .ttl .sub{color:var(--muted);font-size:13px;margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .an-x{border:none;background:var(--hover);width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);flex:none}
+  .an-x:hover{background:#e6e8eb;color:var(--text)}
+  .an-body{padding:16px 22px 26px}
+
+  .st-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+  .st-badge.on{background:#e6f4ea;color:var(--green)}
+  .st-badge.off{background:#eef0f3;color:var(--muted)}
+  .obj-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;background:#eef4ff;color:#274b8f}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+  .kpi{border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .kpi .kk{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+  .kpi .kv{font-size:19px;font-weight:800;margin-top:4px;letter-spacing:-.01em}
+  .kpi .ks{font-size:11px;color:var(--muted2);margin-top:2px;min-height:14px}
+  .kpi.good{border-color:#bfe6ca;background:#f4fbf6}
+  .kpi.warn{border-color:#f2d99a;background:#fff9ec}
+  .kpi.bad{border-color:#f2b8b5;background:#fdf3f2}
+
+  .flags{list-style:none;margin:16px 0 2px;padding:0;display:flex;flex-direction:column;gap:8px}
+  .flag{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.45;border:1px solid transparent}
+  .flag .ic{flex:none;font-size:15px;line-height:1.35}
+  .flag.good{background:#f4fbf6;border-color:#d6efdf;color:#1c6b34}
+  .flag.warn{background:#fff9ec;border-color:#f2e0af;color:#8a5a00}
+  .flag.bad{background:#fdf3f2;border-color:#f2c9c6;color:#9c2f28}
+  .flag.info{background:#eef4ff;border-color:#d3e2ff;color:#274b8f}
+  .flag b{font-weight:800}
+
+  .an-sec{margin-top:20px}
+  .an-sec>h4{font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .an-sec>h4 .n{width:20px;height:20px;border-radius:6px;background:var(--fb-blue);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+  .mrows{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:0 22px}
+  .mrow{display:flex;align-items:baseline;gap:10px;padding:7px 2px;border-bottom:1px dashed var(--line)}
+  .mrow .ml{color:var(--muted);font-size:12.5px;flex:1;min-width:0}
+  .mrow .mv{font-weight:700;font-size:13.5px;white-space:nowrap;text-align:right}
+  .mrow .tag{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;flex:none}
+  .tag.good{background:#e6f4ea;color:var(--green)}
+  .tag.warn{background:#fdf1d6;color:#8a5a00}
+  .tag.bad{background:#fbe4e2;color:#9c2f28}
+  .an-note{color:var(--muted2);font-size:12px;margin-top:8px;line-height:1.5}
+  .an-note b{color:var(--muted);font-weight:700}
+  @media (max-width:560px){.an-body{padding:14px 14px 20px}.an-head{padding:14px}}
+</style>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="logo">f</span>
+    <div>Trình quản lý quảng cáo
+      <small id="daterange">Xem chỉ số chiến dịch từ file Excel</small>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="sheetBtn" style="display:none"></button>
+  <button class="btn primary" id="loadBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    Thêm file .xlsx
+  </button>
+</div>
+
+<div class="wrap">
+  <div class="banner" id="banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <span><b>Đang xem dữ liệu mẫu.</b> Bấm “Thêm file .xlsx” hoặc kéo–thả — có thể chọn <b>nhiều file của nhiều tài khoản</b> để xem gộp chung.</span>
+  </div>
+
+  <div class="filebar hide" id="filebar"></div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="q" type="text" placeholder="Tìm theo tên hoặc tài khoản…">
+    </div>
+    <div class="seg" id="statusSeg">
+      <button data-s="all" class="on">Tất cả</button>
+      <button data-s="active">Đang chạy</button>
+      <button data-s="inactive">Đã tắt</button>
+    </div>
+    <span class="tip">📊 Bấm một dòng để xem phân tích</span>
+    <div class="tb-spacer"></div>
+    <span class="count" id="count"></span>
+    <div class="chooser-wrap">
+      <button class="btn" id="colBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h13M10 18h10"/></svg>
+        Cột
+      </button>
+      <div class="panel" id="colPanel">
+        <h4>Hiển thị cột</h4>
+        <div id="colList"></div>
+        <div class="pactions"><a id="colAll">Chọn tất cả</a><a id="colNone">Bỏ chọn</a><a id="colReset">Mặc định</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tablecard">
+    <div class="scroller">
+      <table id="tbl">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+        <tfoot><tr id="tfoot"></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="foot-note">Dữ liệu đọc trực tiếp trong trình duyệt — không có gì được tải lên máy chủ. Định dạng tiền: VND (₫).</div>
+</div>
+
+<div id="drop"><div class="box">Thả file .xlsx vào đây để xem</div></div>
+
+<div class="an-back" id="anBack"><div class="an" id="anCard">
+  <div class="an-head">
+    <div class="ttl"><b id="anTitle"></b><div class="sub" id="anSub"></div></div>
+    <button class="an-x" id="anX" title="Đóng (Esc)">&times;</button>
+  </div>
+  <div class="an-body" id="anBody"></div>
+</div></div>
+
+<input type="file" id="file" accept=".xlsx,.xls,.csv" multiple>
+
+<script src="xlsx.full.min.js"></script>
+<script>
+/* ============================================================
+   Trình xem chỉ số quảng cáo Facebook (offline, chạy trong trình duyệt)
+   ============================================================ */
+
+/* ---------- Dữ liệu mẫu (cấp nhóm quảng cáo — file "hai h1, hôm 12.7") ---------- */
+const SAMPLE_HEADERS = ["Lượt bắt đầu báo cáo", "Lượt kết thúc báo cáo", "Tên nhóm quảng cáo", "Phân phối nhóm quảng cáo", "Kết quả", "Chỉ báo kết quả", "Chi phí trên mỗi kết quả", "Ngân sách nhóm quảng cáo", "Loại ngân sách nhóm quảng cáo", "Số tiền đã chi tiêu (VND)", "Lượt hiển thị", "Người tiếp cận", "Tần suất", "CPM (Chi phí trên mỗi 1.000 lượt hiển thị) (VND)", "Tổng số người liên hệ nhắn tin", "Người liên hệ nhắn tin mới", "Lượt mua", "Kết thúc", "Bắt đầu", "Cài đặt ghi nhận", "Giá thầu", "Loại giá thầu", "Lượt chỉnh sửa quan trọng gần đây nhất", "Chi phí trên mỗi lượt mua (VND)", "ROAS (lợi nhuận trên chi tiêu quảng cáo) của lượt mua", "CPC (tất cả) (VND)", "CPC (chi phí trên mỗi lượt click vào liên kết) (VND)", "CTR (tỷ lệ click vào liên kết)", "CTR (Tất cả)", "Lượt xem", "Người xem", "Số người click (tất cả)", "ThruPlay", "Lượt phát video trong tối thiểu 3 giây", "Chi phí trên mỗi người click (tất cả) (VND)", "ROAS kết quả", "Chỉ báo ROAS của kết quả", "Đơn đặt hàng đã tạo", "Tên chiến dịch"];
+const SAMPLE_ROWS = [
+  ["2026-07-12", "2026-07-12", "Nhóm quảng cáo Mức độ nhận biết mới", "active", 20364, "reach", 5338.09664113, 100000, "Hàng ngày", 108705, 20848, 20364, 1.023767, 5214.169225, 1, 1, "", "Đang diễn ra", "2026-07-06", "Lượt click trong 7 ngày hoặc lượt xem trong 1 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T02:24:06+0700", "", "", 572.131579, 1672.384615, 0.311781, 0.911358, 20672, 19436, 159, 790, 4584, 683.679245, "", "", "", "tương tác 1 6/7"],
+  ["2026-07-12", "2026-07-12", "Nhóm quảng cáo Lượt tương tác mới", "active", "", "", "", 400000, "Hàng ngày", 402741, 3499, 2387, 1.465857, 115101.743355, 11, 3, "", "Đang diễn ra", "2026-07-07", "Lượt click trong 7 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T00:06:33+0700", "", "", 1459.206522, 2721.222973, 4.22978, 7.887968, 3580, 2219, 218, 479, 1122, 1847.43578, "", "", "", "giá trị lượt mua 6/7"],
+  ["2026-07-12", "2026-07-12", "tin nhắn 6/7", "active", 13, "actions:onsite_conversion.messaging_conversation_started_7d", 41895.84615385, 500000, "Hàng ngày", 544646, 7960, 6357, 1.252163, 68422.864322, 23, 12, "", "Đang diễn ra", "2026-07-07", "Lượt click trong 7 ngày hoặc lượt xem trong 1 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T00:13:17+0700", "", 11.108133, 851.009375, 2086.766284, 3.278894, 8.040201, 7916, 5780, 471, 1020, 2092, 1156.360934, "", "", 1, "tin nhắn 6/7"]
+];
+
+/* ---------- Trạng thái ---------- */
+const S = { headers:[], cols:[], rows:[], order:[], files:[], sortIdx:null, sortDir:-1, q:"", status:"all", hidden:new Set(), defaultHidden:new Set(), isSample:true, map:{}, stats:{}, unit:'chiến dịch' };
+const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+const SRC_HEADER = 'Tài khoản / Nguồn';   // cột nguồn tự thêm khi gộp nhiều file
+
+/* ---------- Tiện ích số / định dạng ---------- */
+const nf0 = new Intl.NumberFormat('vi-VN',{maximumFractionDigits:0});
+const nf2 = new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2});
+const isBlank = v => v===null||v===undefined||v==='';
+function toNum(v){
+  if(typeof v==='number') return isFinite(v)?v:NaN;
+  if(isBlank(v)) return NaN;
+  const s=String(v).replace(/\s|₫|đ|VND/gi,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.');
+  const n=parseFloat(s); return isFinite(n)?n:NaN;
+}
+const fmtCur = v=>{const n=toNum(v);return isNaN(n)?String(v):nf0.format(Math.round(n))+' ₫';};
+const fmtInt = v=>{const n=toNum(v);return isNaN(n)?String(v):nf0.format(Math.round(n));};
+const fmtPct = v=>{const n=toNum(v);return isNaN(n)?String(v):nf2.format(n)+'%';};
+const fmtRatio = v=>{const n=toNum(v);return isNaN(n)?String(v):nf2.format(n);};
+
+/* ---------- Phân loại cột theo tên header ---------- */
+function classify(header){
+  const h=String(header||'').toLowerCase().trim();
+  const M=(type,agg,align,role)=>({type,agg:agg||'none',align:align||'right',role:role||null,fmt:pickFmt(type)});
+  if(h.includes('tài khoản')||h.includes('nguồn'))    return M('text','none','left','source');
+  if(h.includes('phân phối'))                         return M('status','none','left','status');
+  if(h.includes('tên quảng cáo')||h.includes('tên nhóm quảng cáo')||h.includes('tên chiến dịch')||h==='chiến dịch'||h.includes('campaign name')||h.includes('tên nhóm')) return M('text','none','left','name');
+  if(h.includes('bắt đầu báo cáo')||h.includes('kết thúc báo cáo')||h.includes('ngày')) return M('date','none','left');
+  if(h.includes('chỉ báo'))                           return M('text','none','left');
+  if(h.includes('đánh giá')||h.includes('mục tiêu'))  return M('text','none','left');
+  if(h.includes('loại ngân sách'))                    return M('text','none','left');
+  if(h.includes('cpm'))                               return M('currency','cpm','right');
+  if(h.includes('cpc'))                               return M('currency','none','right');
+  if(h.includes('tần suất'))                          return M('ratio','none','right','freq');
+  if(h.includes('ctr')||h.includes('tỷ lệ'))          return M('percent','wimpr','right');
+  if(h.includes('chi phí trên mỗi kết quả'))          return M('currency','cpr','right');
+  if(h.includes('chi phí trên mỗi'))                  return M('currency','none','right');
+  if(h.includes('roas'))                              return M('ratio', h.includes('lượt mua')?'roas':'none','right');
+  if(h.includes('giá trị chuyển đổi'))                return M('currency','sum','right','convvalue');
+  if(h.includes('số tiền đã chi tiêu')||h.includes('chi tiêu')) return M('currency','sum','right','spend');
+  if(h.includes('ngân sách'))                         return M('currency','none','right');
+  if(h.includes('lượt hiển thị')||h.includes('hiển thị')) return M('int','sum','right','impr');
+  if(h.includes('người tiếp cận')||h.includes('tiếp cận')) return M('int','sum','right','reach');
+  if(h.includes('đơn đặt hàng')||h.includes('lượt click')||h.includes('số lần'))  return M('int','sum','right');
+  if(h.includes('cài đặt ghi nhận'))                  return M('text','none','left');
+  if(h.includes('kết quả'))                           return M('int','sum','right','results');
+  if(h==='kết thúc'||h.includes('trạng thái'))        return M('text','none','left');
+  if(h.includes('(vnd)')||h.includes('vnd')||h.includes('₫')) return M('currency','sum','right');
+  return null; // suy luận sau theo dữ liệu
+}
+function pickFmt(t){return {currency:fmtCur,int:fmtInt,percent:fmtPct,ratio:fmtRatio,date:v=>String(v),status:v=>String(v),text:v=>String(v)}[t]||(v=>String(v));}
+
+function inferByData(colIdx){
+  let num=0,tot=0;
+  for(const r of S.rows){const v=r[colIdx]; if(isBlank(v))continue; tot++; if(!isNaN(toNum(v)))num++;}
+  if(tot>0 && num/tot>=0.6){ // đa số là số → số nguyên/thập phân
+    return {type:'int',agg:'sum',align:'right',role:null,fmt:fmtInt};
+  }
+  return {type:'text',agg:'none',align:'left',role:null,fmt:v=>String(v)};
+}
+
+/* ---------- Nạp dữ liệu ---------- */
+function loadData(headers, rows){
+  S.headers=headers.map(h=>String(h==null?'':h).trim());
+  S.rows=rows;
+  S.cols=S.headers.map((h,i)=>classify(h)||inferByData(i));
+  // Nếu có nhiều cột "tên" (vd vừa Tên nhóm QC vừa Tên chiến dịch): giữ 1 cột ghim (ưu tiên nhóm/adset), cột còn lại thành text thường
+  const nameCols=S.cols.map((c,i)=>c.role==='name'?i:-1).filter(i=>i>=0);
+  if(nameCols.length>1){
+    // ưu tiên cột chi tiết nhất làm dòng: quảng cáo (ad) > nhóm QC (adset) > chiến dịch
+    const pref=i=>{const h=S.headers[i].toLowerCase();
+      return (h.includes('tên quảng cáo')&&!h.includes('nhóm'))?0 : h.includes('nhóm')?1 : 2;};
+    const keep=nameCols.slice().sort((a,b)=>pref(a)-pref(b))[0];
+    nameCols.forEach(i=>{ if(i!==keep) S.cols[i]={type:'text',agg:'none',align:'left',role:'other',fmt:v=>String(v)}; });
+  }
+  // đơn vị của mỗi dòng (nhóm quảng cáo / chiến dịch / quảng cáo) để hiển thị đúng chữ
+  const nh=(S.headers[nameIdx()]||'').toLowerCase();
+  S.unit = nh.includes('nhóm')?'nhóm quảng cáo' : (nh.includes('quảng cáo')&&!nh.includes('chiến'))?'quảng cáo' : 'chiến dịch';
+  // ẩn mặc định các cột kỹ thuật để bảng gọn (vẫn xem đủ trong bảng phân tích)
+  S.defaultHidden=new Set();
+  S.headers.forEach((h,i)=>{
+    const lh=h.toLowerCase().trim();
+    // Chỉ ẩn mặc định đúng các cột này — CÒN LẠI HIỆN HẾT (vẫn bật/tắt được qua nút "Cột")
+    if(lh.includes('giá thầu')                                   // Giá thầu + Loại giá thầu
+      ||lh.includes('cài đặt ghi nhận')                          // Cài đặt ghi nhận
+      ||lh.includes('chỉnh sửa')                                 // Lượt chỉnh sửa quan trọng gần đây nhất
+      ||lh.includes('kết thúc báo cáo')||lh.includes('bắt đầu báo cáo') // Lượt kết thúc/bắt đầu báo cáo
+      ||lh==='kết thúc'||lh==='bắt đầu'                          // Kết thúc / Bắt đầu (lịch)
+      ||lh==='chỉ báo kết quả')                                  // Chỉ báo kết quả (giữ hiện "Chỉ báo ROAS…")
+      S.defaultHidden.add(i);
+  });
+  // Cột "Tài khoản/Nguồn" chỉ hiện khi gộp từ 2 file trở lên (1 file thì thừa)
+  const srcIdx=S.headers.indexOf(SRC_HEADER);
+  if(srcIdx>=0 && S.files.length<2) S.defaultHidden.add(srcIdx);
+  S.hidden=new Set(S.defaultHidden);
+  buildMap(); buildStats(); buildOrder();
+  // sắp xếp mặc định theo chi tiêu giảm dần nếu có
+  const spendIdx=S.cols.findIndex(c=>c.role==='spend');
+  S.sortIdx = spendIdx>=0?spendIdx:null; S.sortDir=-1;
+  buildChooser();
+  renderAll();
+}
+
+/* ---------- Lọc + sắp xếp ---------- */
+function nameIdx(){const i=S.cols.findIndex(c=>c.role==='name');return i>=0?i:0;}
+function statusOf(v){const s=String(v==null?'':v).toLowerCase();
+  if(s.includes('inactive')||s.includes('không')||s.includes('tắt')||s.includes('đã dừng')) return 'inactive';
+  if(s.includes('active')||s.includes('đang')||s.includes('recently')||s.includes('bật')) return 'active';
+  return 'other';
+}
+function statusColIdx(){return S.cols.findIndex(c=>c.role==='status');}
+
+function filteredRows(){
+  const ni=nameIdx(), si=statusColIdx(), sc=(S.map&&S.map.source>=0)?S.map.source:-1;
+  // Lọc theo file/tài khoản đang được chọn (chip bật/tắt)
+  const selOn=(sc>=0 && S.files.length)? new Set(S.files.filter(f=>f.on).map(f=>f.label)) : null;
+  let rows=S.rows.filter(r=>{
+    if(selOn && !selOn.has(String(r[sc]==null?'':r[sc]))) return false;
+    if(S.q){const ql=S.q.toLowerCase();
+      const n=String(r[ni]==null?'':r[ni]).toLowerCase();
+      const a=sc>=0?String(r[sc]==null?'':r[sc]).toLowerCase():'';
+      if(!n.includes(ql)&&!a.includes(ql))return false;}
+    if(S.status!=='all' && si>=0){ if(statusOf(r[si])!==S.status) return false; }
+    return true;
+  });
+  if(S.sortIdx!==null){
+    const c=S.cols[S.sortIdx], numeric=['currency','int','percent','ratio'].includes(c.type);
+    // Bấm cột "Chiến dịch" -> sắp xếp theo trạng thái bật/tắt (Đang chạy trước, Đã tắt sau), phụ theo tên
+    const byStatus = (c.role==='name' && si>=0);
+    const rank=v=>{const s=statusOf(v);return s==='active'?0:s==='inactive'?1:2;};
+    rows=rows.slice().sort((a,b)=>{
+      if(byStatus){
+        const d=rank(a[si])-rank(b[si]);
+        if(d) return d*S.sortDir;
+        const na=String(a[ni]==null?'':a[ni]).toLowerCase(), nb=String(b[ni]==null?'':b[ni]).toLowerCase();
+        return (na<nb?-1:na>nb?1:0)*S.sortDir; // cùng trạng thái: theo tên
+      }
+      let x=a[S.sortIdx], y=b[S.sortIdx];
+      const bx=isBlank(x), by=isBlank(y);
+      if(bx&&by)return 0; if(bx)return 1; if(by)return -1; // trống xuống cuối
+      if(numeric){x=toNum(x);y=toNum(y);}else{x=String(x).toLowerCase();y=String(y).toLowerCase();}
+      return (x<y?-1:x>y?1:0)*S.sortDir;
+    });
+  }
+  return rows;
+}
+
+/* ---------- Tổng hợp ---------- */
+function totals(rows){
+  const sum=idx=>rows.reduce((a,r)=>{const n=toNum(r[idx]);return a+(isNaN(n)?0:n);},0);
+  const get=role=>{const i=S.cols.findIndex(c=>c.role===role);return i<0?0:sum(i);};
+  const T={spend:get('spend'),impr:get('impr'),reach:get('reach'),results:get('results'),convvalue:get('convvalue')};
+  return {rows, T, sum};
+}
+
+/* ---------- Render ---------- */
+function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function renderAll(){
+  const rows=filteredRows();
+  const agg=totals(rows);
+  renderStats(agg);
+  renderHead();
+  renderBody(rows);
+  renderFoot(agg);
+  const nHidden=S.hidden.size;
+  document.getElementById('count').textContent = `${nf0.format(rows.length)} / ${nf0.format(S.rows.length)} ${S.unit}` + (nHidden?` · đang ẩn ${nHidden} cột (bấm “Cột” để hiện)`:'');
+  // khoảng thời gian báo cáo
+  const sIdx=S.headers.findIndex(h=>h.toLowerCase().includes('bắt đầu báo cáo'));
+  const eIdx=S.headers.findIndex(h=>h.toLowerCase().includes('kết thúc báo cáo'));
+  if(sIdx>=0&&eIdx>=0&&S.rows[0]) document.getElementById('daterange').textContent=`Kỳ báo cáo: ${S.rows[0][sIdx]} → ${S.rows[0][eIdx]}`;
+}
+
+function renderStats(agg){
+  const {T}=agg, box=document.getElementById('stats'); box.innerHTML='';
+  const cards=[
+    {k:cap(S.unit), v:nf0.format(agg.rows.length), s:S.isSample?'dữ liệu mẫu':'đang hiển thị'},
+    {k:'Đã chi tiêu', v:fmtCur(T.spend), s:'tổng ngân sách dùng'},
+    {k:'Lượt hiển thị', v:nf0.format(Math.round(T.impr)), s:'impressions'},
+    {k:'Người tiếp cận', v:nf0.format(Math.round(T.reach)), s:'reach'},
+    {k:'Kết quả', v:nf0.format(Math.round(T.results)), s:T.spend&&T.results?('~'+fmtCur(T.spend/T.results)+'/kết quả'):' '},
+  ];
+  cards.forEach(c=>{const d=el('div','stat');d.innerHTML=`<div class="k">${esc(c.k)}</div><div class="v">${c.v}</div><div class="s">${esc(c.s)}</div>`;box.appendChild(d);});
+}
+
+function renderHead(){
+  const tr=document.getElementById('thead'); tr.innerHTML='';
+  S.order.forEach(i=>{
+    if(S.hidden.has(i))return;
+    const h=S.headers[i], c=S.cols[i];
+    const th=el('th'); th.dataset.i=i;
+    if(c.align==='left')th.classList.add('txt');
+    if(c.role==='name')th.classList.add('sticky-col');
+    if(S.sortIdx===i)th.classList.add('sorted');
+    th.innerHTML=`${esc(h||' ')}<span class="arrow">${S.sortIdx===i?(S.sortDir<0?'▼':'▲'):'▲'}</span>`;
+    th.onclick=()=>{ if(S.sortIdx===i){S.sortDir*=-1;}else{S.sortIdx=i;S.sortDir=(c.role==='name')?1:-1;} renderAll(); }; // cột Chiến dịch: lần đầu Đang chạy lên trên
+    tr.appendChild(th);
+  });
+}
+
+function renderBody(rows){
+  const tb=document.getElementById('tbody'); tb.innerHTML='';
+  const ni=nameIdx(), si=statusColIdx();
+  if(!rows.length){
+    const td=el('td'); td.colSpan=S.headers.length-S.hidden.size||1;
+    td.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/></svg><div>Không có ${S.unit} phù hợp bộ lọc</div></div>`;
+    const tr=el('tr'); tr.appendChild(td); tb.appendChild(tr); return;
+  }
+  const frag=document.createDocumentFragment();
+  for(const r of rows){
+    const tr=el('tr');
+    tr.title='Bấm để xem phân tích chi tiết';
+    tr.onclick=()=>{ const sel=window.getSelection&&window.getSelection(); if(sel&&String(sel).length){return;} openAnalysis(r); };
+    S.order.forEach(i=>{
+      if(S.hidden.has(i))return;
+      const c=S.cols[i], v=r[i], td=el('td');
+      if(c.align==='left')td.classList.add('txt');
+      if(c.role==='name'){
+        td.classList.add('sticky-col');
+        const st = si>=0?statusOf(r[si]):'other';
+        const on = st==='active';
+        const delLabel = si>=0? deliveryLabel(r[si]) : '';
+        td.innerHTML=`<div class="camp">
+          <div class="sw ${on?'on':''}" title="Trạng thái phân phối"></div>
+          <div class="name"><b title="${esc(v)}">${esc(isBlank(v)?'(không tên)':v)}</b>
+            ${delLabel?`<span class="delivery"><span class="dot ${on?'on':'off'}"></span>${esc(delLabel)}</span>`:''}
+          </div></div>`;
+      } else if(c.type==='status'){
+        const st=statusOf(v), on=st==='active';
+        td.innerHTML=`<span class="badge"><span class="dot ${on?'on':'off'}" style="display:inline-block;vertical-align:middle;margin-right:5px"></span>${esc(deliveryLabel(v))}</span>`;
+      } else if(isBlank(v)){
+        td.innerHTML='<span class="muted">—</span>';
+      } else {
+        td.textContent=c.fmt(v);
+      }
+      tr.appendChild(td);
+    });
+    frag.appendChild(tr);
+  }
+  tb.appendChild(frag);
+}
+function deliveryLabel(v){const st=statusOf(v);
+  if(st==='active')return 'Đang hoạt động';
+  if(st==='inactive')return 'Không hoạt động';
+  return String(v);
+}
+
+function renderFoot(agg){
+  const tr=document.getElementById('tfoot'); tr.innerHTML='';
+  const {T,sum,rows}=agg;
+  let first=true;
+  S.order.forEach(i=>{
+    if(S.hidden.has(i))return;
+    const c=S.cols[i], td=el('td');
+    if(c.align==='left')td.classList.add('txt');
+    if(c.role==='name'){td.classList.add('sticky-col');}
+    let out='';
+    if(first){ out=`Tổng cộng · ${nf0.format(rows.length)} ${S.unit}`; first=false; }
+    else{
+      switch(c.agg){
+        case 'sum':   out=c.fmt(sum(i)); break;
+        case 'cpm':   out=T.impr?fmtCur(T.spend/T.impr*1000):''; break;
+        case 'cpr':   out=T.results?fmtCur(T.spend/T.results):''; break;
+        case 'roas':  out=T.spend?fmtRatio(T.convvalue/T.spend):''; break;
+        case 'wimpr':{ // trung bình có trọng số theo lượt hiển thị
+                      let num=0,den=0,imprIdx=S.cols.findIndex(cc=>cc.role==='impr');
+                      for(const r of rows){const x=toNum(r[i]);const w=imprIdx>=0?toNum(r[imprIdx]):1;if(!isNaN(x)&&!isNaN(w)){num+=x*w;den+=w;}}
+                      out=den?fmtPct(num/den):''; break;}
+        default: out='';
+      }
+    }
+    td.innerHTML = out || '<span class="muted"></span>';
+    tr.appendChild(td);
+  });
+}
+
+/* ================= Bảng phân tích chi tiết cho 1 dòng ================= */
+function buildMap(){
+  const H=S.headers.map(h=>String(h||'').toLowerCase());
+  const findAll=(inc,exc)=>{ exc=exc||[];
+    for(let i=0;i<H.length;i++){ if(inc.every(t=>H[i].includes(t)) && !exc.some(t=>H[i].includes(t))) return i; }
+    return -1; };
+  const exact=s=>H.indexOf(s);
+  const first=(...a)=>{ for(const x of a){ if(x>=0) return x; } return -1; };
+  S.map={
+    source:      first(findAll(['tài khoản']), findAll(['nguồn'])),
+    ad:          findAll(['tên quảng cáo'],['nhóm']),
+    adset:       findAll(['tên nhóm quảng cáo']),
+    campaign:    findAll(['tên chiến dịch']),
+    objective:   findAll(['mục tiêu']),
+    qRank:       findAll(['đánh giá chất lượng']),
+    engRank:     findAll(['đánh giá tỷ lệ tương tác']),
+    convRank:    findAll(['đánh giá tỷ lệ chuyển đổi']),
+    delivery:    findAll(['phân phối']),
+    resultInd:   findAll(['chỉ báo','kết quả'],['roas']),
+    results:     first(exact('kết quả'), findAll(['kết quả'],['chi phí','chỉ báo','roas'])),
+    costRes:     findAll(['chi phí trên mỗi kết quả']),
+    budget:      findAll(['ngân sách'],['loại']),
+    budgetType:  findAll(['loại ngân sách']),
+    bid:         findAll(['giá thầu'],['loại']),
+    bidType:     findAll(['loại giá thầu']),
+    lastEdit:    findAll(['chỉnh sửa']),
+    attribution: findAll(['cài đặt ghi nhận']),
+    reportEnd:   findAll(['kết thúc báo cáo']),
+    spend:       first(findAll(['số tiền đã chi']), findAll(['đã chi tiêu']), findAll(['chi tiêu'],['roas','trên mỗi'])),
+    orders:      findAll(['đơn đặt hàng']),
+    purchases:   first(exact('lượt mua'), findAll(['lượt mua'],['chi phí','roas','giá trị'])),
+    cpa:         findAll(['chi phí','lượt mua']),
+    roasBuy:     findAll(['roas','lượt mua']),
+    roasRes:     findAll(['roas','kết quả'],['chỉ báo']),
+    convValue:   findAll(['giá trị chuyển đổi']),
+    impr:        first(exact('lượt hiển thị'), findAll(['lượt hiển thị'],['cpm','trên mỗi'])),
+    reach:       findAll(['người tiếp cận']),
+    freq:        findAll(['tần suất']),
+    cpm:         findAll(['cpm']),
+    clicks:      findAll(['số người click']),
+    ctrLink:     first(findAll(['ctr','liên kết']), findAll(['ctr','link'])),
+    ctrAll:      findAll(['ctr','tất cả']),
+    cpcLink:     findAll(['cpc','liên kết']),
+    cpcAll:      findAll(['cpc','tất cả']),
+    cpcClick:    findAll(['chi phí trên mỗi người click']),
+    msgNew:      findAll(['liên hệ nhắn tin','mới']),
+    msgTotal:    findAll(['tổng','nhắn tin']),
+    cpMsg:       findAll(['chi phí','nhắn tin']),
+    video3s:     findAll(['lượt phát video']),
+    thruplay:    findAll(['thruplay']),
+    views:       first(exact('lượt xem'), findAll(['lượt xem'],['video','trang'])),
+    viewers:     findAll(['người xem'])
+  };
+}
+function buildStats(){
+  const i=S.map.cpm, a=[];
+  if(i>=0) for(const r of S.rows){ const n=toNum(r[i]); if(!isNaN(n)&&n>0) a.push(n); }
+  a.sort((x,y)=>x-y);
+  S.stats={ cpmMedian: a.length? a[Math.floor((a.length-1)/2)] : NaN };
+}
+/* Sắp cột theo THỨ TỰ QUAN TRỌNG (trái→phải), bất kể vị trí trong file gốc.
+   Cột "tên" (ghim) luôn đầu tiên; cột không nhận diện được đẩy về cuối, giữ thứ tự file. */
+function buildOrder(){
+  const ni=nameIdx();
+  const rank=new Map(); rank.set(ni,0);
+  const seq=['source','campaign','adset','delivery','objective','resultInd', // nhận diện & cấu hình
+    'spend','results','costRes','orders','purchases','cpa','roasBuy','roasRes','convValue', // tiền & kết quả
+    'impr','reach','freq','cpm',                                    // tiếp cận
+    'clicks','ctrLink','ctrAll','cpcLink','cpcAll','cpcClick',      // click
+    'qRank','engRank','convRank',                                   // chẩn đoán chất lượng
+    'msgNew','msgTotal','cpMsg',                                    // nhắn tin
+    'video3s','thruplay','views','viewers',                        // video
+    'budget','budgetType','bid','bidType','attribution','lastEdit','reportEnd']; // cấu hình phụ
+  seq.forEach((key,k)=>{ const i=S.map[key]; if(i>=0 && !rank.has(i)) rank.set(i,k+1); });
+  const BASE=1000;
+  S.order=S.headers.map((h,i)=>i).sort((a,b)=>{
+    const ra=rank.has(a)?rank.get(a):BASE+a, rb=rank.has(b)?rank.get(b):BASE+b;
+    return ra-rb;
+  });
+}
+function gv(r,k){ const i=S.map[k]; return (i!=null&&i>=0)? r[i] : undefined; }
+function gn(r,k){ return toNum(gv(r,k)); }
+
+function objName(ind){
+  const s=String(ind==null?'':ind).toLowerCase();
+  if(!s.trim()) return {t:'(chưa cấu hình)', bad:true};
+  if(s.includes('messaging')||s.includes('conversation')||s.includes('nhắn tin')) return {t:'Tin nhắn'};
+  if(s.includes('purchase')||s.includes('mua')) return {t:'Lượt mua'};
+  if(s.includes('reach')) return {t:'Tiếp cận / nhận biết'};
+  if(s.includes('impression')||s.includes('hiển thị')) return {t:'Hiển thị'};
+  if(s.includes('like')) return {t:'Thích trang / bài viết'};
+  if(s.includes('landing')||s.includes('trang đích')) return {t:'Xem trang đích'};
+  if(s.includes('link_click')||s.includes('liên kết')) return {t:'Click liên kết'};
+  if(s.includes('lead')) return {t:'Khách tiềm năng'};
+  if(s.includes('video')||s.includes('thruplay')) return {t:'Xem video'};
+  if(s.includes('engagement')||s.includes('tương tác')) return {t:'Tương tác'};
+  return {t:String(ind)};
+}
+function fFreq(f){ if(isNaN(f))return null; return f<1.5?{cls:'good',t:'ổn'}:f<3?{cls:'warn',t:'bắt đầu lặp'}:{cls:'bad',t:'cháy tệp'}; }
+function fCpm(v){ if(isNaN(v))return null; const m=S.stats&&S.stats.cpmMedian; if(!m||isNaN(m))return null;
+  return v>=m*2.2?{cls:'bad',t:'vọt cao'}:v>=m*1.4?{cls:'warn',t:'hơi cao'}:{cls:'good',t:'bình thường'}; }
+function fCtr(v){ if(isNaN(v))return null; return v<0.5?{cls:'bad',t:'yếu'}:v<1?{cls:'warn',t:'tạm'}:{cls:'good',t:'tốt'}; }
+function fRoas(v){ if(isNaN(v))return null; return v>=1.5?{cls:'good',t:'có lời'}:v>=1?{cls:'warn',t:'mỏng'}:{cls:'bad',t:'lỗ'}; }
+function rankTag(v){ const s=String(v==null?'':v).toLowerCase(); if(!s.trim())return null;
+  if(/trên|above/.test(s))return{cls:'good',t:'trên TB'};
+  if(/dưới|below/.test(s))return{cls:'bad',t:'dưới TB'};
+  if(/trung bình|average/.test(s))return{cls:'warn',t:'trung bình'};
+  return null; }
+
+function openAnalysis(r){
+  const cur=k=>{const n=gn(r,k);return isNaN(n)?null:fmtCur(n);};
+  const int=k=>{const n=gn(r,k);return isNaN(n)?null:fmtInt(n);};
+  const rat=k=>{const n=gn(r,k);return isNaN(n)?null:fmtRatio(n);};
+  const pct=k=>{const n=gn(r,k);return isNaN(n)?null:fmtPct(n);};
+  const txt=k=>{const v=gv(r,k);return isBlank(v)?null:esc(String(v));};
+  const joinDot=a=>{const x=a.filter(v=>v!=null&&v!=='');return x.length?x.join(' · '):null;};
+  const MR=(l,v,tag)=>`<div class="mrow"><span class="ml">${esc(l)}</span><span class="mv">${v==null?'<span class="muted">—</span>':v}</span>${tag?`<span class="tag ${tag.cls}">${esc(tag.t)}</span>`:''}</div>`;
+  const KP=(k,v,s,fl)=>`<div class="kpi ${fl?fl.cls:''}"><div class="kk">${esc(k)}</div><div class="kv">${v==null?'—':v}</div><div class="ks">${s?esc(s):''}</div></div>`;
+  const SEC=(n,title,rows)=>{const body=rows.filter(Boolean).join('');return body?`<div class="an-sec"><h4><span class="n">${n}</span>${esc(title)}</h4><div class="mrows">${body}</div></div>`:'';};
+
+  const active = statusOf(gv(r,'delivery'))==='active';
+  const obj = objName(gv(r,'resultInd'));
+  const nameV = !isBlank(gv(r,'ad')) ? gv(r,'ad') : !isBlank(gv(r,'adset')) ? gv(r,'adset') : gv(r,'campaign');
+
+  document.getElementById('anTitle').textContent = isBlank(nameV)?'(không tên)':String(nameV);
+  const campV = txt('campaign');
+  document.getElementById('anSub').innerHTML =
+      `<span class="st-badge ${active?'on':'off'}"><span class="dot ${active?'on':'off'}"></span>${active?'Đang chạy':'Đã tắt'}</span>`
+    + `<span class="obj-badge">🎯 ${esc(obj.t)}${obj.bad?' — lệch cấu hình':''}</span>`
+    + (campV?`<span>Chiến dịch: <b>${campV}</b></span>`:'');
+
+  const kpis = [
+    KP('Đã chi tiêu', cur('spend'), 'đốt bao nhiêu'),
+    KP('Kết quả', int('results'), cur('costRes')?('~'+cur('costRes')+'/KQ'):'theo mục tiêu'),
+    KP('CPA (mỗi đơn)', cur('cpa'), 'chi phí / lượt mua'),
+    KP('ROAS mua', rat('roasBuy'), '>1 mới có lời', fRoas(gn(r,'roasBuy'))),
+    KP('CPM', cur('cpm'), 'giá 1.000 hiển thị', fCpm(gn(r,'cpm'))),
+    KP('CTR liên kết', pct('ctrLink'), 'độ hút chất liệu', fCtr(gn(r,'ctrLink')))
+  ].join('');
+
+  const F=[];
+  if(isBlank(gv(r,'resultInd')))
+    F.push({cls:'bad',ic:'⛔',t:'<b>Chưa có "Chỉ báo kết quả"</b> — nhóm đang tối ưu lệch mục tiêu (giống nhóm "giá trị lượt mua"). Mọi chỉ số bên dưới chỉ đọc tham khảo.'});
+  const le=gv(r,'lastEdit');
+  if(le){ const d=new Date(le), endv=gv(r,'reportEnd'), e=endv?new Date(endv):new Date();
+    if(!isNaN(d)&&!isNaN(e)){ const days=(e-d)/86400000; if(days>=0&&days<3)
+      F.push({cls:'warn',ic:'🕒',t:`Vừa chỉnh sửa gần đây (${esc(String(le).slice(0,10))}) — đang trong <b>giai đoạn học máy</b>, số liệu chưa ổn định.`}); } }
+  if(!active) F.push({cls:'info',ic:'⏸️',t:'Nhóm hiện <b>không chạy</b> — số liệu là của kỳ đã qua.'});
+  const ff=fFreq(gn(r,'freq'));
+  if(ff&&ff.cls!=='good') F.push({cls:ff.cls,ic:'📣',t:`Tần suất ${fmtRatio(gn(r,'freq'))} — ${ff.cls==='bad'?'đang "dội bom" cùng một tệp → dễ chán, CPM tăng, kết quả tụt. Nên đổi tệp/chất liệu.':'người xem bắt đầu thấy lặp, theo dõi thêm.'}`});
+  const cf=fCpm(gn(r,'cpm'));
+  if(cf&&cf.cls==='bad') F.push({cls:'bad',ic:'💸',t:`CPM ${fmtCur(gn(r,'cpm'))} cao bất thường (median nhóm ~${fmtCur(S.stats.cpmMedian)}) — cờ đỏ: tệp hẹp, cạnh tranh cao hoặc chất liệu bị chấm kém.`});
+  const tf=fCtr(gn(r,'ctrLink'));
+  if(tf&&tf.cls==='bad') F.push({cls:'bad',ic:'🎯',t:`CTR liên kết ${fmtPct(gn(r,'ctrLink'))} thấp — quảng cáo chưa đủ hút (ảnh/tiêu đề). Nghẽn ở khâu <b>chất liệu</b>.`});
+  const rf=fRoas(gn(r,'roasBuy'));
+  if(rf) F.push({cls:rf.cls,ic:'📈',t:`ROAS lượt mua ${fmtRatio(gn(r,'roasBuy'))} — ${rf.cls==='good'?'đang có lời, vẫn phải so với biên lợi nhuận thật.':rf.cls==='warn'?'chỉ hoà/mỏng, cân nhắc tối ưu.':'đang lỗ trên chi tiêu.'}`});
+  const lowRanks=[['chất lượng','qRank'],['tương tác','engRank'],['tỷ lệ chuyển đổi','convRank']]
+    .filter(([n,k])=>/dưới|below/i.test(String(gv(r,k)||'')));
+  if(lowRanks.length) F.push({cls:'warn',ic:'🏷️',t:`Xếp hạng <b>dưới trung bình</b>: ${lowRanks.map(x=>x[0]).join(', ')} — ad yếu ở khâu ${lowRanks.map(x=>x[0]).join(' / ')} (nội dung / độ hấp dẫn / tệp–landing).`});
+  if(!F.length) F.push({cls:'good',ic:'✅',t:'Không có cảnh báo nổi bật — các chỉ số cơ bản đang trong ngưỡng ổn.'});
+  const flags = `<ul class="flags">${F.map(f=>`<li class="flag ${f.cls}"><span class="ic">${f.ic}</span><span>${f.t}</span></li>`).join('')}</ul>`;
+
+  const sec1 = SEC(1,'Nhận diện & cấu hình', [
+    S.map.ad>=0?MR('Tên quảng cáo', txt('ad')):'',
+    S.map.adset>=0?MR('Tên nhóm QC', txt('adset')):'',
+    S.map.campaign>=0?MR('Chiến dịch', txt('campaign')):'',
+    MR('Mục tiêu', txt('objective') || esc(obj.t), obj.bad?{cls:'bad',t:'lệch'}:null),
+    MR('Phân phối', esc(deliveryLabel(gv(r,'delivery'))), {cls:active?'good':'warn',t:active?'chạy':'tắt'}),
+    MR('Ngân sách', joinDot([cur('budget'), txt('budgetType')])),
+    MR('Giá thầu', joinDot([txt('bidType'), gn(r,'bid')?fmtCur(gn(r,'bid')):null])),
+    MR('Chỉnh sửa gần nhất', txt('lastEdit')?esc(String(gv(r,'lastEdit')).slice(0,10)):null),
+    MR('Ghi nhận (attribution)', txt('attribution'))
+  ]);
+  const sec2 = SEC(2,'Tiền & kết quả cuối', [
+    MR('Đã chi tiêu', cur('spend')),
+    MR('Kết quả', int('results')),
+    MR('Chi phí / kết quả', cur('costRes')),
+    MR('Đơn đặt hàng', int('orders')),
+    MR('Lượt mua', int('purchases')),
+    MR('Chi phí / lượt mua (CPA)', cur('cpa')),
+    MR('ROAS lượt mua', rat('roasBuy'), fRoas(gn(r,'roasBuy'))),
+    S.map.roasRes>=0?MR('ROAS kết quả', rat('roasRes')):'',
+    S.map.convValue>=0?MR('Giá trị chuyển đổi', cur('convValue')):''
+  ]);
+  const sec3 = SEC(3,'Tầng tiếp cận (phân phối)', [
+    MR('Lượt hiển thị', int('impr')),
+    MR('Người tiếp cận', int('reach')),
+    MR('Tần suất', rat('freq'), fFreq(gn(r,'freq'))),
+    MR('CPM', cur('cpm'), fCpm(gn(r,'cpm')))
+  ]);
+  const sec4 = SEC(4,'Tầng click & xếp hạng chất lượng', [
+    MR('Số người click (tất cả)', int('clicks')),
+    MR('CTR liên kết', pct('ctrLink'), fCtr(gn(r,'ctrLink'))),
+    MR('CTR (tất cả)', pct('ctrAll')),
+    MR('CPC liên kết', cur('cpcLink')),
+    MR('CPC (tất cả)', cur('cpcAll')),
+    MR('Chi phí / người click', cur('cpcClick')),
+    S.map.qRank>=0?MR('Đánh giá chất lượng', txt('qRank'), rankTag(gv(r,'qRank'))):'',
+    S.map.engRank>=0?MR('Đánh giá tỷ lệ tương tác', txt('engRank'), rankTag(gv(r,'engRank'))):'',
+    S.map.convRank>=0?MR('Đánh giá tỷ lệ chuyển đổi', txt('convRank'), rankTag(gv(r,'convRank'))):''
+  ]);
+
+  const spendN=gn(r,'spend'), msgNewN=gn(r,'msgNew'), ordersN=gn(r,'orders');
+  const hasMsg = (S.map.msgNew>=0&&!isBlank(gv(r,'msgNew'))) || (S.map.msgTotal>=0&&!isBlank(gv(r,'msgTotal'))) || obj.t==='Tin nhắn';
+  const sec5 = hasMsg ? SEC(5,'Tầng chuyển đổi tin nhắn', [
+    MR('Liên hệ nhắn tin MỚI', int('msgNew')),
+    MR('Tổng liên hệ nhắn tin', int('msgTotal')),
+    MR('CP / tin nhắn mới (tự tính)', (!isNaN(spendN)&&msgNewN>0)?fmtCur(spendN/msgNewN):null),
+    S.map.cpMsg>=0?MR('CP / liên hệ (theo FB)', cur('cpMsg')):'',
+    MR('Tỷ lệ chốt = đơn / tin nhắn mới', (ordersN>0&&msgNewN>0)?fmtPct(ordersN/msgNewN*100):null)
+  ]) : '';
+
+  const imprN=gn(r,'impr'), v3=gn(r,'video3s');
+  const hasVid = ['video3s','thruplay','views','viewers'].some(k=>S.map[k]>=0&&gn(r,k)>0);
+  const sec6 = hasVid ? SEC(6,'Tầng video', [
+    MR('Phát video ≥3 giây', int('video3s')),
+    MR('ThruPlay', int('thruplay')),
+    MR('Lượt xem', int('views')),
+    MR('Người xem', int('viewers')),
+    MR('Hook 3s = phát 3s / hiển thị (tự tính)', (v3>0&&imprN>0)?fmtPct(v3/imprN*100):null)
+  ]) : '';
+
+  const note = `<div class="an-note"><b>6 con số quyết định:</b> Chi tiêu → Kết quả &amp; CP/kết quả → CPA → ROAS → CPM → CTR liên kết. Ba số đầu trả lời “có lời không”, ba số sau trả lời “nghẽn ở đâu” (CPM cao = nghẽn phân phối, CTR thấp = nghẽn chất liệu). Ngưỡng gợi ý: Tần suất &lt;1,5 ổn / &gt;3 cháy tệp; ROAS &gt;1 mới bắt đầu có lời.</div>`;
+
+  document.getElementById('anBody').innerHTML =
+    `<div class="kpis">${kpis}</div>` + flags + sec1 + sec2 + sec3 + sec4 + sec5 + sec6 + note;
+
+  const back=document.getElementById('anBack');
+  back.classList.add('show'); back.scrollTop=0;
+  document.body.style.overflow='hidden';
+}
+function closeAnalysis(){ document.getElementById('anBack').classList.remove('show'); document.body.style.overflow=''; }
+
+/* ---------- Chọn cột ---------- */
+function buildChooser(){
+  const list=document.getElementById('colList'); list.innerHTML='';
+  S.order.forEach(i=>{
+    const h=S.headers[i], id='c'+i, lab=el('label');
+    lab.innerHTML=`<input type="checkbox" id="${id}" ${S.hidden.has(i)?'':'checked'}><span>${esc(h||'(cột trống)')}</span>`;
+    lab.querySelector('input').onchange=e=>{ if(e.target.checked)S.hidden.delete(i); else S.hidden.add(i); renderAll(); };
+    list.appendChild(lab);
+  });
+}
+function syncChooser(){document.querySelectorAll('#colList input').forEach(cb=>{const i=+cb.id.slice(1);cb.checked=!S.hidden.has(i);});}
+
+/* ---------- Đọc file ---------- */
+function findHeaderRow(aoa){
+  for(let i=0;i<Math.min(aoa.length,15);i++){
+    const row=aoa[i]||[];
+    const joined=row.map(x=>String(x==null?'':x).toLowerCase()).join('|');
+    if(joined.includes('chiến dịch')||joined.includes('campaign')||joined.includes('tên nhóm')) return i;
+  }
+  // fallback: hàng đầu tiên có >=3 ô không trống
+  for(let i=0;i<aoa.length;i++){const c=(aoa[i]||[]).filter(x=>!isBlank(x)).length; if(c>=3)return i;}
+  return 0;
+}
+function parseWorkbook(wb){
+  // chọn sheet có nhiều dữ liệu nhất
+  let best=null,bestN=-1;
+  wb.SheetNames.forEach(nm=>{
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:true,defval:''});
+    const n=aoa.reduce((a,r)=>a+(r||[]).filter(x=>!isBlank(x)).length,0);
+    if(n>bestN){bestN=n;best={nm,aoa};}
+  });
+  const aoa=best?best.aoa:[];
+  const hr=findHeaderRow(aoa);
+  const headers=(aoa[hr]||[]).map(x=>String(x==null?'':x).trim());
+  let last=headers.length; while(last>0 && headers[last-1]==='') last--;
+  const H=headers.slice(0,last);
+  const rows=aoa.slice(hr+1).filter(r=>(r||[]).some(x=>!isBlank(x))).map(r=>{const o=[];for(let i=0;i<H.length;i++)o[i]=r[i];return o;});
+  return {headers:H, rows};
+}
+
+/* ---------- Nhiều file / nhiều tài khoản ---------- */
+function addWorkbook(name, wb){
+  const {headers, rows}=parseWorkbook(wb);
+  if(!headers.length || !rows.length){ alert('File "'+name+'" không có dữ liệu đọc được.'); return; }
+  const label=String(name).replace(/\.(xlsx|xls|csv)$/i,'');
+  const rec={name,label,headers,rows,on:true};
+  const ex=S.files.findIndex(f=>f.label===label);     // trùng tên → nạp lại thay thế
+  if(ex>=0) S.files[ex]=rec; else S.files.push(rec);
+  mergeAndLoad();
+}
+function mergeFiles(){
+  // hợp nhất cột theo TÊN header (union), thêm cột nguồn ở đầu; mỗi file 1 tài khoản
+  const union=[], seen=new Set();
+  for(const f of S.files) for(const h of f.headers){ if(h!=='' && !seen.has(h)){ seen.add(h); union.push(h); } }
+  const headers=[SRC_HEADER, ...union];
+  const rows=[];
+  for(const f of S.files){
+    const pos=union.map(h=>f.headers.indexOf(h));
+    for(const r of f.rows){
+      const row=[f.label];
+      for(let k=0;k<union.length;k++){ const j=pos[k]; row.push(j>=0? r[j] : ''); }
+      rows.push(row);
+    }
+  }
+  return {headers, rows};
+}
+function mergeAndLoad(){
+  if(!S.files.length){ S.isSample=true; document.getElementById('banner').classList.remove('hide'); loadData(SAMPLE_HEADERS, SAMPLE_ROWS); renderFileBar(); return; }
+  const {headers, rows}=mergeFiles();
+  S.isSample=false;
+  document.getElementById('banner').classList.add('hide');
+  loadData(headers, rows);
+  renderFileBar();
+}
+function removeFileAt(i){ S.files.splice(i,1); mergeAndLoad(); }
+function clearFiles(){ S.files=[]; mergeAndLoad(); }
+function renderFileBar(){
+  const bar=document.getElementById('filebar'); if(!bar) return;
+  if(!S.files.length){ bar.innerHTML=''; bar.classList.add('hide'); return; }
+  bar.classList.remove('hide');
+  const multi=S.files.length>1, onCount=S.files.filter(f=>f.on).length;
+  const chips=S.files.map((f,i)=>`<span class="fchip ${f.on?'on':'off'}" data-i="${i}" title="${f.on?'Đang hiện — bấm để ẩn':'Đang ẩn — bấm để hiện'}"><span class="fck">${f.on?'✓':''}</span><span class="fnm">${esc(f.label)}</span><small>(${nf0.format(f.rows.length)})</small><button class="fx" data-i="${i}" title="Bỏ hẳn file này khỏi danh sách">&times;</button></span>`).join('');
+  const sel=multi?`<button class="fsel" id="fAll">Chọn hết</button><button class="fsel" id="fNone">Bỏ chọn hết</button>`:'';
+  bar.innerHTML=`<span class="fbl">📁 ${S.files.length} tài khoản/file${multi?` · đang hiện ${onCount}`:''}:</span>${chips}${sel}<button class="btn fclear" id="fclear">Xóa hết</button>`;
+  bar.querySelectorAll('.fchip').forEach(ch=>ch.onclick=e=>{ if(e.target.closest('.fx'))return; const i=+ch.dataset.i; S.files[i].on=!S.files[i].on; renderFileBar(); renderAll(); });
+  bar.querySelectorAll('.fx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); removeFileAt(+b.dataset.i); });
+  const all=document.getElementById('fAll'); if(all) all.onclick=()=>{S.files.forEach(f=>f.on=true); renderFileBar(); renderAll();};
+  const none=document.getElementById('fNone'); if(none) none.onclick=()=>{S.files.forEach(f=>f.on=false); renderFileBar(); renderAll();};
+  const fc=document.getElementById('fclear'); if(fc) fc.onclick=clearFiles;
+}
+function readFiles(fileList){
+  const files=Array.from(fileList||[]); if(!files.length) return;
+  files.forEach(file=>{
+    const fr=new FileReader();
+    fr.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:'array',cellDates:false}); addWorkbook(file.name, wb); }
+      catch(err){ alert('Không đọc được file "'+file.name+'": '+err.message); } };
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+/* ---------- Sự kiện ---------- */
+document.getElementById('loadBtn').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=e=>{ readFiles(e.target.files); e.target.value=''; };
+document.getElementById('q').oninput=e=>{S.q=e.target.value;renderAll();};
+document.getElementById('statusSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  S.status=b.dataset.s; document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x===b)); renderAll();};
+const colBtn=document.getElementById('colBtn'), colPanel=document.getElementById('colPanel');
+colBtn.onclick=e=>{e.stopPropagation();colPanel.classList.toggle('open');};
+document.addEventListener('click',e=>{if(!colPanel.contains(e.target)&&e.target!==colBtn)colPanel.classList.remove('open');});
+document.getElementById('colAll').onclick=()=>{S.hidden.clear();syncChooser();renderAll();};
+document.getElementById('colNone').onclick=()=>{S.headers.forEach((h,i)=>{if(S.cols[i].role!=='name')S.hidden.add(i);});syncChooser();renderAll();};
+document.getElementById('colReset').onclick=()=>{S.hidden=new Set(S.defaultHidden);syncChooser();renderAll();};
+
+/* đóng bảng phân tích */
+document.getElementById('anX').onclick=closeAnalysis;
+document.getElementById('anBack').addEventListener('click',e=>{ if(e.target.id==='anBack') closeAnalysis(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAnalysis(); });
+
+/* kéo thả */
+let dragc=0; const drop=document.getElementById('drop');
+window.addEventListener('dragenter',e=>{e.preventDefault();dragc++;drop.classList.add('show');});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('dragleave',e=>{dragc--;if(dragc<=0){dragc=0;drop.classList.remove('show');}});
+window.addEventListener('drop',e=>{e.preventDefault();dragc=0;drop.classList.remove('show');
+  readFiles(e.dataTransfer.files);});
+
+/* ---------- Khởi động ---------- */
+window.IMPORTED_DATA = {"headers": ["Lượt bắt đầu báo cáo", "Lượt kết thúc báo cáo", "Tên nhóm quảng cáo", "Phân phối nhóm quảng cáo", "Kết quả", "Chỉ báo kết quả", "Chi phí trên mỗi kết quả", "Ngân sách nhóm quảng cáo", "Loại ngân sách nhóm quảng cáo", "Số tiền đã chi tiêu (VND)", "Lượt hiển thị", "Người tiếp cận", "Tần suất", "CPM (Chi phí trên mỗi 1.000 lượt hiển thị) (VND)", "Tổng số người liên hệ nhắn tin", "Người liên hệ nhắn tin mới", "Lượt mua", "Kết thúc", "Bắt đầu", "Cài đặt ghi nhận", "Giá thầu", "Loại giá thầu", "Lượt chỉnh sửa quan trọng gần đây nhất", "Chi phí trên mỗi lượt mua (VND)", "ROAS (lợi nhuận trên chi tiêu quảng cáo) của lượt mua", "CPC (tất cả) (VND)", "CPC (chi phí trên mỗi lượt click vào liên kết) (VND)", "CTR (tỷ lệ click vào liên kết)", "CTR (Tất cả)", "Lượt xem", "Người xem", "Số người click (tất cả)", "ThruPlay", "Lượt phát video trong tối thiểu 3 giây", "Chi phí trên mỗi người click (tất cả) (VND)", "ROAS kết quả", "Chỉ báo ROAS của kết quả", "Đơn đặt hàng đã tạo", "Tên chiến dịch"], "rows": [["2026-07-12", "2026-07-12", "Nhóm quảng cáo Mức độ nhận biết mới", "active", 20364, "reach", 5338.09664113, 100000, "Hàng ngày", 108705, 20848, 20364, 1.023767, 5214.169225, 1, 1, "", "Đang diễn ra", "2026-07-06", "Lượt click trong 7 ngày hoặc lượt xem trong 1 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T02:24:06+0700", "", "", 572.131579, 1672.384615, 0.311781, 0.911358, 20672, 19436, 159, 790, 4584, 683.679245, "", "", "", "tương tác 1 6/7"], ["2026-07-12", "2026-07-12", "Nhóm quảng cáo Lượt tương tác mới", "active", "", "", "", 400000, "Hàng ngày", 402741, 3499, 2387, 1.465857, 115101.743355, 11, 3, "", "Đang diễn ra", "2026-07-07", "Lượt click trong 7 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T00:06:33+0700", "", "", 1459.206522, 2721.222973, 4.22978, 7.887968, 3580, 2219, 218, 479, 1122, 1847.43578, "", "", "", "giá trị lượt mua 6/7"], ["2026-07-12", "2026-07-12", "tin nhắn 6/7", "active", 13, "actions:onsite_conversion.messaging_conversation_started_7d", 41895.84615385, 500000, "Hàng ngày", 544646, 7960, 6357, 1.252163, 68422.864322, 23, 12, "", "Đang diễn ra", "2026-07-07", "Lượt click trong 7 ngày hoặc lượt xem trong 1 ngày", 0, "ABSOLUTE_OCPM", "2026-07-07T00:13:17+0700", "", 11.108133, 851.009375, 2086.766284, 3.278894, 8.040201, 7916, 5780, 471, 1020, 2092, 1156.360934, "", "", 1, "tin nhắn 6/7"]], "source": "hai h1, hôm 12.7.xlsx"};   /* trình sinh report.html sẽ chèn window.IMPORTED_DATA vào đây */
+if(window.IMPORTED_DATA && window.IMPORTED_DATA.headers){
+  // File nạp sẵn (từ xem_ads.py) trở thành "tài khoản" đầu tiên — vẫn thêm file khác được sau đó
+  const src=String(window.IMPORTED_DATA.source||'File đã nạp');
+  S.files=[{name:src, label:src.replace(/\.(xlsx|xls|csv)$/i,''), headers:window.IMPORTED_DATA.headers, rows:window.IMPORTED_DATA.rows, on:true}];
+  mergeAndLoad();
+} else {
+  loadData(SAMPLE_HEADERS, SAMPLE_ROWS);   // dữ liệu mẫu khi mở index.html trực tiếp
+  renderFileBar();
+}
+</script>

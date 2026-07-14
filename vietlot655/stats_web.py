@@ -14,10 +14,13 @@ trình duyệt. Chạy: python stats_web.py  [--game power655] [--no-open]
 
 import argparse
 import json
+import math
+import random
 import sqlite3
 import statistics
 import sys
 import webbrowser
+from collections import defaultdict
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
@@ -69,6 +72,93 @@ def compute_gap_stats(db_path: Path | str, game_type: str) -> dict | None:
         "range_max": gs["range_max"],
         "rel_diff": round(rel * 100, 2),
         "ok": rel < 0.05,
+    }
+
+
+def _gammq(a: float, x: float) -> float:
+    """Regularized upper incomplete gamma Q(a,x) — để tính p-value chi-square."""
+    if x <= 0:
+        return 1.0
+    gln = math.lgamma(a)
+    if x < a + 1.0:  # khai triển chuỗi cho P
+        ap, summ, delv = a, 1.0 / a, 1.0 / a
+        for _ in range(1000):
+            ap += 1.0
+            delv *= x / ap
+            summ += delv
+            if abs(delv) < abs(summ) * 1e-14:
+                break
+        return 1.0 - summ * math.exp(-x + a * math.log(x) - gln)
+    # phân số liên tục cho Q
+    b, c = x + 1.0 - a, 1e300
+    d = 1.0 / b
+    h = d
+    for i in range(1, 1000):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < 1e-300:
+            d = 1e-300
+        c = b + an / c
+        if abs(c) < 1e-300:
+            c = 1e-300
+        d = 1.0 / d
+        delv = d * c
+        h *= delv
+        if abs(delv - 1.0) < 1e-14:
+            break
+    return math.exp(-x + a * math.log(x) - gln) * h
+
+
+def compute_tests(db_path: Path | str, game_type: str) -> dict | None:
+    """Chi-square (55 số có ra đều không?) + Runs test (chuỗi tổng có ngẫu nhiên không?)."""
+    draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ
+    total = len(draws)
+    if total < 30:
+        return None
+    n = gap_stats.resolve_n(None, game_type)
+
+    # --- Chi-square goodness-of-fit: mỗi số kỳ vọng ra total*6/n lần ---
+    count = {x: 0 for x in range(1, n + 1)}
+    for d in draws:
+        for x in d:
+            count[x] += 1
+    expected = total * 6 / n
+    chi2 = sum((count[x] - expected) ** 2 / expected for x in range(1, n + 1))
+    df = n - 1
+    p_chi = _gammq(df / 2.0, chi2 / 2.0)
+
+    # --- Runs test trên chuỗi tổng 6 số so với trung vị (theo thời gian) ---
+    sums_chrono = [sum(d) for d in reversed(draws)]  # cũ -> mới
+    med = statistics.median(sums_chrono)
+    seq = [1 if s > med else 0 for s in sums_chrono if s != med]
+    n1 = sum(seq)
+    n2 = len(seq) - n1
+    runs = 1 + sum(1 for i in range(1, len(seq)) if seq[i] != seq[i - 1]) if seq else 0
+    z = None
+    if n1 > 0 and n2 > 0:
+        er = 2 * n1 * n2 / (n1 + n2) + 1
+        var = (2 * n1 * n2 * (2 * n1 * n2 - n1 - n2)) / (
+            (n1 + n2) ** 2 * (n1 + n2 - 1)
+        )
+        z = (runs - er) / math.sqrt(var) if var > 0 else 0.0
+
+    return {
+        "chi2": {
+            "stat": round(chi2, 2),
+            "df": df,
+            "expected": round(expected, 1),
+            "p": round(p_chi, 4),
+            "ok": p_chi > 0.05,
+        },
+        "runs": {
+            "runs": runs,
+            "expected": round(2 * n1 * n2 / (n1 + n2) + 1, 1) if (n1 and n2) else None,
+            "z": round(z, 3) if z is not None else None,
+            "n1": n1,
+            "n2": n2,
+            "ok": (z is not None and abs(z) < 1.96),
+        },
     }
 
 
@@ -151,6 +241,50 @@ def compute_extra_stats(
     top_pairs = sorted(pair_count.items(), key=lambda kv: (-kv[1], kv[0]))[:15]
     exp_pair = total * (6 / n) * (5 / (n - 1))  # kỳ vọng ngẫu nhiên cho 1 cặp
 
+    # Ma trận đồng xuất hiện đầy đủ (cho chế độ "theo cặp" ở bộ gợi ý).
+    cooc_mat = [[0] * n for _ in range(n)]
+    for (a, b), c in pair_count.items():
+        cooc_mat[a - 1][b - 1] = c
+        cooc_mat[b - 1][a - 1] = c
+
+    # --- Cấu trúc bộ số bổ sung: số liên tiếp, đuôi số ---
+    consec_dist: dict[int, int] = defaultdict(int)
+    last_digit = [0] * 10
+    for d in draws:
+        consec_dist[sum(1 for i in range(5) if d[i + 1] == d[i] + 1)] += 1
+        for x in d:
+            last_digit[x % 10] += 1
+    consecutive = [
+        {"label": str(k), "occ": consec_dist.get(k, 0)}
+        for k in range((max(consec_dist) if consec_dist else 0) + 1)
+    ]
+    with_consec = total - consec_dist.get(0, 0)
+
+    # --- Số lặp lại từ kỳ ngay trước ---
+    rep = [0] * 7
+    for t in range(total - 1):
+        rep[len(set(draws[t]) & set(draws[t + 1]))] += 1
+    comparisons = total - 1
+    repeat_prev = [{"label": str(k), "occ": rep[k]} for k in range(7)]
+    repeat_mean = (
+        round(sum(k * rep[k] for k in range(7)) / comparisons, 2) if comparisons else 0
+    )
+
+    # --- Khoảng nghỉ trung bình mỗi số (bổ sung cho "số gan") ---
+    appear_idx: dict[int, list[int]] = {num: [] for num in range(1, n + 1)}
+    for i, d in enumerate(draws):
+        for x in d:
+            appear_idx[x].append(i)
+
+    def _avg_rest(num: int):
+        idxs = appear_idx[num]
+        if len(idxs) < 2:
+            return None
+        return round((idxs[-1] - idxs[0]) / (len(idxs) - 1), 1)
+
+    for o in overdue:
+        o["rest"] = _avg_rest(o["number"])
+
     return {
         "total": total,
         "n": n,
@@ -168,11 +302,201 @@ def compute_extra_stats(
         "odd": odd,
         "low": low,
         "decade": decade,
+        "consecutive": consecutive,
+        "with_consec": with_consec,
+        "last_digit": [{"label": str(k), "occ": last_digit[k]} for k in range(10)],
+        "repeat_prev": repeat_prev,
+        "repeat_mean": repeat_mean,
+        "exp_rest": round(n / 6, 1),
         "overdue": overdue,
         "hot": hot,
         "pairs": [{"a": a, "b": b, "count": c} for (a, b), c in top_pairs],
         "exp_pair": round(exp_pair, 1),
+        "cooc": cooc_mat,
     }
+
+
+def compute_algo_picks(
+    db_path: Path | str, game_type: str, recent_w: int = 30, decay: float = 0.97
+) -> list[dict] | None:
+    """Chạy từng thuật toán lên lịch sử, mỗi cái xuất ra 1 bộ 6 số theo cách tính riêng.
+
+    LƯU Ý QUAN TRỌNG: đây chỉ là "áp dụng thuật toán để ra một con số"; khi backtest
+    tất cả đều xấp xỉ ngẫu nhiên (~0,65 số/kỳ). Không cái nào dự đoán được kỳ tới.
+    """
+    draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ, mỗi kỳ sort tăng
+    total = len(draws)
+    if total < 10:
+        return None
+    n = gap_stats.resolve_n(None, game_type)
+    nums = list(range(1, n + 1))
+
+    count = {x: 0 for x in nums}
+    weighted = {x: 0.0 for x in nums}
+    gap = {x: total for x in nums}
+    recent = {x: 0 for x in nums}
+    seen: set[int] = set()
+    win = min(recent_w, total)
+    cooc = [[0] * (n + 1) for _ in range(n + 1)]
+
+    for i, d in enumerate(draws):
+        w = decay ** i
+        for x in d:
+            count[x] += 1
+            weighted[x] += w
+            if x not in seen:
+                gap[x] = i
+                seen.add(x)
+            if i < win:
+                recent[x] += 1
+        for a, b in combinations(d, 2):
+            cooc[a][b] += 1
+            cooc[b][a] += 1
+
+    recent_rate = {x: recent[x] / win for x in nums}
+    posterior = {x: (count[x] + 1) / (total + 2) for x in nums}
+    last = draws[0]  # kỳ mới nhất
+    cooc_last = {j: sum(cooc[j][i] for i in last) for j in nums}
+
+    # Markov bậc 1: từ 6 số kỳ mới nhất -> số hay ra ở kỳ liền sau.
+    prev_occ = {x: 0 for x in nums}
+    conext = [[0] * (n + 1) for _ in range(n + 1)]
+    for t in range(total - 1):
+        older, newer = draws[t + 1], draws[t]
+        for i in older:
+            prev_occ[i] += 1
+            for j in newer:
+                conext[i][j] += 1
+    markov = {
+        j: sum(conext[i][j] / prev_occ[i] for i in last if prev_occ[i]) for j in nums
+    }
+
+    def top6(score, largest=True):
+        return sorted(nums, key=lambda x: (-score[x] if largest else score[x], x))[:6]
+
+    def zmap(d):
+        vals = list(d.values())
+        m = statistics.fmean(vals)
+        sd = statistics.pstdev(vals) or 1.0
+        return {k: (v - m) / sd for k, v in d.items()}
+
+    def greedy(seed_set):
+        s = list(seed_set)
+        while len(s) < 6:
+            best, bv = None, -1
+            for x in nums:
+                if x in s:
+                    continue
+                v = sum(cooc[x][y] for y in s)
+                if v > bv:
+                    bv, best = v, x
+            s.append(best)
+        return sorted(s)
+
+    zc, zr, zg, zl = zmap(count), zmap(recent_rate), zmap(gap), zmap(cooc_last)
+    composite = {x: zc[x] + zr[x] + zg[x] + zl[x] for x in nums}
+
+    # Cặp support cao nhất -> seed cho "frequent itemset".
+    top_pair, tpv = (1, 2), -1
+    for a in nums:
+        for b in range(a + 1, n + 1):
+            if cooc[a][b] > tpv:
+                tpv, top_pair = cooc[a][b], (a, b)
+
+    # Monte Carlo & ngẫu nhiên có trọng số (seed cố định để tái lập).
+    rnd = random.Random(1234)
+    mc_pick = sorted(rnd.sample(nums, 6))
+
+    def weighted_sample():
+        rr = random.Random(5678)
+        pool, wts, chosen = nums[:], [count[x] for x in nums], []
+        for _ in range(6):
+            tot = sum(wts)
+            if tot <= 0:
+                idx = rr.randrange(len(pool))
+            else:
+                t, acc, idx = rr.random() * tot, 0.0, 0
+                for k, ww in enumerate(wts):
+                    acc += ww
+                    if acc >= t:
+                        idx = k
+                        break
+            chosen.append(pool.pop(idx))
+            wts.pop(idx)
+        return sorted(chosen)
+
+    # Thuật toán di truyền: tối đa hoá "độ điển hình" (cặp mạnh + cân đối tổng/chẵn-lẻ/thấp-cao).
+    target_sum = 3 * (n + 1)
+    low_max = n // 2
+
+    def fix6(lst, rr):
+        out: list[int] = []
+        for x in lst:
+            if 1 <= x <= n and x not in out:
+                out.append(x)
+            if len(out) == 6:
+                break
+        while len(out) < 6:
+            c = rr.randint(1, n)
+            if c not in out:
+                out.append(c)
+        return sorted(out)
+
+    def fitness(s):
+        co = sum(cooc[a][b] for a, b in combinations(s, 2)) / (tpv * 15 + 1)
+        odd = sum(1 for x in s if x % 2)
+        low = sum(1 for x in s if x <= low_max)
+        bal = -abs(odd - 3) - abs(low - 3) - abs(sum(s) - target_sum) / (target_sum * 0.15)
+        return co + bal
+
+    gr = random.Random(999)
+    pop = [fix6(gr.sample(nums, 6), gr) for _ in range(60)]
+    for _ in range(60):
+        pop.sort(key=fitness, reverse=True)
+        pop = pop[:20]
+        while len(pop) < 60:
+            p1, p2 = gr.choice(pop[:10]), gr.choice(pop[:20])
+            child = list(dict.fromkeys(p1 + p2))
+            if len(child) > 6:
+                child = gr.sample(child, 6)
+            if gr.random() < 0.3:
+                child[gr.randrange(len(child))] = gr.randint(1, n)
+            pop.append(fix6(child, gr))
+    pop.sort(key=fitness, reverse=True)
+    ga_pick = sorted(pop[0])
+
+    return [
+        {"key": "hot", "group": "Tần suất & thời gian", "name": "Tần suất cao (số nóng)",
+         "note": "6 số về nhiều nhất toàn lịch sử", "pick": top6(count)},
+        {"key": "cold", "group": "Tần suất & thời gian", "name": "Tần suất thấp (số lạnh)",
+         "note": "6 số về ít nhất toàn lịch sử", "pick": top6(count, largest=False)},
+        {"key": "weighted", "group": "Tần suất & thời gian", "name": "Tần suất có trọng số",
+         "note": f"ưu tiên kỳ gần (giảm dần {decay}^kỳ)", "pick": top6(weighted)},
+        {"key": "ma", "group": "Tần suất & thời gian", "name": "Trung bình trượt",
+         "note": f"tỉ lệ về cao nhất trong {win} kỳ gần nhất", "pick": top6(recent_rate)},
+        {"key": "gap", "group": "Tần suất & thời gian", "name": "Khoảng cách xuất hiện (số gan)",
+         "note": "6 số lâu chưa về nhất", "pick": top6(gap)},
+        {"key": "bayes", "group": "Tần suất & thời gian", "name": "Xác suất Bayes",
+         "note": "hậu nghiệm Beta(1,1) — tần suất làm mượt", "pick": top6(posterior)},
+        {"key": "markov", "group": "Quan hệ cặp/nhóm", "name": "Chuỗi Markov (bậc 1)",
+         "note": "từ 6 số kỳ mới nhất → số hay ra ở kỳ liền sau", "pick": top6(markov)},
+        {"key": "cooc", "group": "Quan hệ cặp/nhóm", "name": "Ma trận đồng xuất hiện",
+         "note": "số đồng xuất hiện nhiều nhất với 6 số kỳ mới nhất", "pick": top6(cooc_last)},
+        {"key": "pairs", "group": "Quan hệ cặp/nhóm", "name": "Cặp & nhóm số (tham lam)",
+         "note": "khởi từ số nóng nhất, ghép dần theo cặp hay đi cùng",
+         "pick": greedy([max(nums, key=lambda x: (count[x], -x))])},
+        {"key": "itemset", "group": "Quan hệ cặp/nhóm", "name": "Apriori / FP-Growth",
+         "note": "ghép từ cặp support cao nhất — 2 thuật toán cho cùng kết quả, chỉ khác tốc độ",
+         "pick": greedy(list(top_pair))},
+        {"key": "composite", "group": "Tổng hợp & ngẫu nhiên", "name": "Chấm điểm tổng hợp",
+         "note": "cộng z-score: tần suất + phong độ + độ gan + đồng xuất hiện", "pick": top6(composite)},
+        {"key": "ga", "group": "Tổng hợp & ngẫu nhiên", "name": "Thuật toán di truyền",
+         "note": "tiến hoá bộ số tối đa hoá 'độ điển hình' (cặp mạnh + cân đối)", "pick": ga_pick},
+        {"key": "wrand", "group": "Tổng hợp & ngẫu nhiên", "name": "Ngẫu nhiên có trọng số",
+         "note": "bốc 6 số, xác suất tỉ lệ thuận tần suất", "pick": weighted_sample()},
+        {"key": "mc", "group": "Tổng hợp & ngẫu nhiên", "name": "Mô phỏng Monte Carlo",
+         "note": "mọi số xấp xỉ đều → kết quả ~ bốc ngẫu nhiên", "pick": mc_pick},
+    ]
 
 
 def load_game_data(
@@ -268,6 +592,8 @@ def load_game_data(
         "streaks": streaks,
         "gaps": compute_gap_stats(db_path, game_type),
         "extra": compute_extra_stats(db_path, game_type),
+        "algos": compute_algo_picks(db_path, game_type),
+        "tests": compute_tests(db_path, game_type),
     }
 
 
@@ -364,6 +690,13 @@ HTML_TEMPLATE = r"""<!doctype html>
   .sugnote li{margin:3px 0}
   .sugnote b{color:var(--text)}
   .sugnote .wl{color:var(--warn);display:block;margin-top:8px}
+  .sugctl{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;margin-bottom:8px}
+  .sugctl label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+  .sugctl select,.sugctl input{background:var(--surface);border:1px solid var(--border);
+    color:var(--text);border-radius:7px;padding:6px 9px;font-size:13px}
+  .sugctl input{width:104px;font-variant-numeric:tabular-nums}
+  .chip.lock{background:var(--good)}
+  .setmeta b{color:var(--text);font-size:13px}
   .simrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
   .simrow input{background:var(--surface);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:7px 11px;font-size:13px;min-width:230px;flex:1;
@@ -376,6 +709,47 @@ HTML_TEMPLATE = r"""<!doctype html>
   .simtbl th{color:var(--muted);font-weight:500;font-size:11.5px}
   .simtbl .hit{color:var(--good);font-weight:600}
   .simtbl .wait{color:var(--muted)}
+  .btgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));gap:10px;margin-top:8px}
+  .btcol{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .btcol.lead{border-color:var(--good);box-shadow:0 0 0 1px var(--good) inset}
+  .btcol .nm{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;
+    align-items:center;gap:6px}
+  .btcol .nm .star{color:var(--good)}
+  .btcol .big{font-size:24px;font-weight:650;margin:6px 0 0;font-variant-numeric:tabular-nums}
+  .btcol .k{font-size:11px;color:var(--muted)}
+  .btcol .k b{color:var(--text);font-weight:600}
+  .btcol .mini{margin-top:8px;border-top:1px solid var(--border);padding-top:6px}
+  .btcol .hl{display:flex;align-items:center;gap:6px;font-size:11.5px;margin:3px 0;
+    font-variant-numeric:tabular-nums}
+  .btcol .hl .num{width:20px;color:var(--text2)}
+  .btcol .hl .bar{flex:1;height:6px;border-radius:3px;background:var(--series-soft)}
+  .btcol .hl .bar>span{display:block;height:6px;border-radius:3px;background:var(--series)}
+  .btcol .hl .pct{width:34px;text-align:right;color:var(--muted)}
+  .btwin{border-top:1px solid var(--border);padding:8px 0}
+  .btwin .wtitle{font-size:13px;font-weight:600}
+  .btwin .wcount{font-weight:400;color:var(--muted);font-size:11.5px;margin-left:6px;
+    font-variant-numeric:tabular-nums}
+  .wlevel{font-size:11.5px;color:var(--muted);margin:7px 0 3px}
+  .wsets{display:flex;flex-wrap:wrap;gap:8px}
+  .wset{display:inline-flex;gap:3px;padding:3px 5px;border:1px solid var(--border);border-radius:8px}
+  .wset .chip{width:24px;height:24px;font-size:11px}
+  .chip.win{background:var(--good)}
+  .wmore{align-self:center;color:var(--muted);font-size:11.5px}
+  #btSets{width:100%;min-height:120px;max-height:280px;margin-top:6px;resize:vertical;
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;
+    font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
+  .algogrp{font-size:12px;color:var(--muted);font-weight:600;margin:14px 0 4px;
+    text-transform:uppercase;letter-spacing:.04em}
+  .algorow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;
+    border-bottom:1px solid var(--border)}
+  .algoinfo{flex:1 1 240px;min-width:220px}
+  .algoinfo b{font-size:13px}
+  .algoinfo .note{color:var(--muted);font-size:11.5px;display:block;margin-top:1px}
+  .algorow .chips{flex:0 0 auto}
+  .algorow .chip{width:27px;height:27px;font-size:12px}
+  .banner{background:var(--series-soft);border:1px solid var(--border);border-radius:10px;
+    padding:10px 14px;font-size:12.5px;color:var(--text);margin-bottom:6px}
   h2{font-size:15px;font-weight:600;margin:30px 0 4px}
   h2 .hint{font-weight:400;color:var(--muted);font-size:12.5px;margin-left:8px}
   .grid6{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
@@ -418,6 +792,62 @@ HTML_TEMPLATE = r"""<!doctype html>
 
   <div class="cards" id="cards"></div>
 
+  <h2>Bộ số gợi ý <span class="hint">chỉ để tham khảo — KHÔNG tăng xác suất trúng</span></h2>
+  <div class="panel" id="sugPanel" style="max-width:840px">
+    <div class="sugctl">
+      <label>Chế độ
+        <select id="sugMode">
+          <option value="balanced">Cân đối (điển hình)</option>
+          <option value="hot">Thiên số nóng</option>
+          <option value="gan">Thiên số gan</option>
+          <option value="pairs">Theo cặp hay đi cùng</option>
+          <option value="payout">Tránh số đông</option>
+        </select>
+      </label>
+      <label>Số bộ
+        <select id="sugCount"><option>3</option><option selected>5</option><option>10</option></select>
+      </label>
+      <label>Khoá số<input id="sugLock" type="text" inputmode="numeric" placeholder="vd: 7 22"></label>
+      <label>Loại số<input id="sugExcl" type="text" inputmode="numeric" placeholder="vd: 13"></label>
+      <button class="btn" id="genBtn" type="button">🎲 Tạo</button>
+    </div>
+    <div class="pc warn" id="sugMsg"></div>
+    <div class="sugwrap">
+      <div class="sugleft"><div id="suggestList"></div></div>
+      <div class="sugnote" id="sugNote"></div>
+    </div>
+  </div>
+
+  <h2>Bảng xếp hạng chế độ (backtest thực) <span class="hint">Tạo &amp; lưu bội số trước · sau khi có kết quả thì nhập vào &amp; So sánh (dữ liệu lưu trong trình duyệt, mở lại vẫn còn)</span></h2>
+  <div class="panel" id="btPanel" style="max-width:1000px">
+    <div class="sugctl">
+      <label>Số bộ / giải thuật<input id="btCount" type="text" inputmode="numeric" value="1000"></label>
+      <button class="btn" id="btGen" type="button">🎲 Tạo &amp; lưu</button>
+      <span style="flex:1"></span>
+      <label>Kết quả trúng (6 số)<input id="btInput" type="text" inputmode="numeric" placeholder="Nhập 6 số" style="width:220px"></label>
+      <button class="btn" id="btCmp" type="button">🔍 So sánh</button>
+    </div>
+    <div class="pc warn" id="btMsg"></div>
+    <div class="pc" id="btStatus"></div>
+    <details id="btSetsWrap" style="margin-top:6px"><summary>Xem các bội số đã tạo &amp; lưu</summary>
+      <textarea id="btSets" readonly placeholder="Chưa có — bấm Tạo &amp; lưu"></textarea>
+    </details>
+    <div id="btBody"></div>
+  </div>
+
+  <h2>Mô phỏng: cần tạo bao nhiêu bộ để trúng? <span class="hint">nhập 6 số kết quả — máy tạo vé ngẫu nhiên liên tục tới khi trùng</span></h2>
+  <div class="panel" id="simPanel" style="max-width:680px">
+    <div class="simrow">
+      <input id="simInput" type="text" inputmode="numeric" placeholder="Nhập 6 số">
+      <button class="btn" id="simRun" type="button">▶ Chạy</button>
+      <button class="btn" id="simStop" type="button" disabled>■ Dừng</button>
+    </div>
+    <div class="pc warn" id="simMsg"></div>
+    <div class="simcount" id="simCount"></div>
+    <table class="simtbl" id="simTable"></table>
+    <div class="pc" style="margin-top:10px">Mỗi "bộ" là 1 vé 6 số ngẫu nhiên. Trúng 6/6 trung bình cần hàng chục triệu bộ — không có cách rút ngắn vì mỗi kỳ độc lập.</div>
+  </div>
+
   <h2>Phân bố theo vị trí <span class="hint">mỗi kỳ sort tăng dần x1 ≤ … ≤ x6 · giá trị nào hay là xN</span></h2>
   <div class="grid6" id="positions"></div>
 
@@ -438,6 +868,12 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div class="pc" id="gapVerdict" style="margin-top:8px"></div>
   </div>
 
+  <h2>Kiểm định thống kê <span class="hint">máy quay có ĐỀU và NGẪU NHIÊN không? (không dùng để chọn số)</span></h2>
+  <div class="panel" id="testPanel" style="max-width:660px">
+    <div class="cards" id="testCards" style="margin:0 0 8px"></div>
+    <div class="pc" id="testNote"></div>
+  </div>
+
   <h2>Tổng &amp; cân bằng bộ số <span class="hint">giúp loại bộ số quá lệch</span></h2>
   <div class="panel" id="balPanel">
     <div class="cards" id="balCards" style="margin:0 0 8px"></div>
@@ -447,6 +883,11 @@ HTML_TEMPLATE = r"""<!doctype html>
       <div><div class="pc">Số lẻ mỗi kỳ (còn lại là chẵn)</div><div id="oddChart"></div></div>
       <div><div class="pc">Số "thấp" (1–<span id="lowMax"></span>) mỗi kỳ</div><div id="lowChart"></div></div>
       <div><div class="pc">Đầu số (theo hàng chục)</div><div id="decChart"></div></div>
+    </div>
+    <div class="grid3" style="margin-top:12px">
+      <div><div class="pc">Đuôi số (chữ số cuối 0–9)</div><div id="tailChart"></div></div>
+      <div><div class="pc">Số cặp liên tiếp mỗi kỳ</div><div id="consecChart"></div></div>
+      <div><div class="pc" id="repTitle">Số lặp lại từ kỳ trước</div><div id="repChart"></div></div>
     </div>
   </div>
 
@@ -460,28 +901,11 @@ HTML_TEMPLATE = r"""<!doctype html>
   <h2>Cặp số hay đi cùng <span class="hint" id="pairHint"></span></h2>
   <div class="panel" id="pairPanel" style="max-width:560px"><div id="pairTable"></div></div>
 
-  <h2>Bộ số gợi ý <span class="hint">chỉ để tham khảo — KHÔNG tăng xác suất trúng</span></h2>
-  <div class="panel" id="sugPanel" style="max-width:760px">
-    <div class="sugwrap">
-      <div class="sugleft">
-        <div id="suggestList"></div>
-        <button class="btn" id="genBtn" type="button" style="margin-top:10px">🎲 Tạo bộ khác</button>
-      </div>
-      <div class="sugnote" id="sugNote"></div>
-    </div>
-  </div>
-
-  <h2>Mô phỏng: cần tạo bao nhiêu bộ để trúng? <span class="hint">nhập 6 số kết quả — máy tạo vé ngẫu nhiên liên tục tới khi trùng</span></h2>
-  <div class="panel" id="simPanel" style="max-width:680px">
-    <div class="simrow">
-      <input id="simInput" type="text" inputmode="numeric" placeholder="Nhập 6 số">
-      <button class="btn" id="simRun" type="button">▶ Chạy</button>
-      <button class="btn" id="simStop" type="button" disabled>■ Dừng</button>
-    </div>
-    <div class="pc warn" id="simMsg"></div>
-    <div class="simcount" id="simCount"></div>
-    <table class="simtbl" id="simTable"></table>
-    <div class="pc" style="margin-top:10px">Mỗi "bộ" là 1 vé 6 số ngẫu nhiên. Trúng 6/6 trung bình cần hàng chục triệu bộ — không có cách rút ngắn vì mỗi kỳ độc lập.</div>
+  <h2>Bộ số theo từng thuật toán <span class="hint">chạy thuật toán trên lịch sử → ra 6 số theo cách tính của nó</span></h2>
+  <div class="panel" id="algoPanel">
+    <div class="banner">⚠ Đây là <b>kết quả tính từ lịch sử theo đúng từng thuật toán</b> — để hiểu thuật toán làm gì, KHÔNG phải để tin nó trúng. Khi backtest, tất cả đều xấp xỉ ngẫu nhiên (~0,65 số/kỳ).</div>
+    <div id="algoList"></div>
+    <div class="pc" style="margin-top:12px">Nhóm máy học (Logistic, Random Forest, XGBoost, Mạng nơ-ron, LSTM) cần thư viện ngoài (sklearn/xgboost/torch) và khi backtest cũng cho kết quả ~ ngẫu nhiên — mình để riêng, làm nếu bạn cần.</div>
   </div>
 
   <footer id="footer"></footer>
@@ -656,11 +1080,14 @@ function render(){
      tipTitle:d=>('chuỗi dài đúng '+esc(d.label))});
 
   renderGap();
+  renderTests();
   renderBalance();
   renderGanHot();
   renderPairs();
   renderSuggest();
+  renderBacktest();
   renderSim();
+  renderAlgos();
 
   document.getElementById('footer').textContent =
     'Nguồn: vietlott_data.db · tạo lúc ' + GENERATED;
@@ -693,6 +1120,29 @@ function renderGap(){
 
 const argmax = arr => arr.reduce((bi,v,i,a)=> v>a[bi]?i:bi, 0);
 
+function renderTests(){
+  const t = DATA[current].tests;
+  const panel = document.getElementById('testPanel');
+  if(!t){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const c=t.chi2, r=t.runs;
+  document.getElementById('testCards').innerHTML =
+    mkTile('Chi-square (đồng đều?)', 'χ² = '+c.stat,
+      'df='+c.df+' · p='+c.p+' · '+(c.ok?'ĐỀU':'LỆCH')) +
+    mkTile('Runs test (ngẫu nhiên?)', (r.z!=null?('Z = '+r.z):'—'),
+      'runs='+r.runs+(r.expected!=null?(' / kỳ vọng '+r.expected):'')+
+      ' · '+(r.ok?'NGẪU NHIÊN':'BẤT THƯỜNG'));
+  document.getElementById('testNote').innerHTML =
+    (c.ok
+      ? '<span class="good">✓ Chi-square p='+c.p+' (&gt;0,05): 55 số ra ĐỀU nhau, không số nào bị thiên vị.</span>'
+      : '<span class="warn">⚠ Chi-square p='+c.p+' (≤0,05): có dấu hiệu lệch phân phối.</span>')
+    + '<br>' +
+    (r.ok
+      ? '<span class="good">✓ Runs test |Z|&lt;1,96: chuỗi tổng không có streak bất thường → ngẫu nhiên.</span>'
+      : '<span class="warn">⚠ Runs test |Z|≥1,96: chuỗi có dấu hiệu bất thường.</span>')
+    + '<br><span style="color:var(--muted)">Hai kiểm định chỉ xác nhận máy công bằng — KHÔNG dùng để chọn số.</span>';
+}
+
 function renderBalance(){
   const ex = DATA[current].extra;
   const panel = document.getElementById('balPanel');
@@ -701,12 +1151,15 @@ function renderBalance(){
   document.getElementById('lowMax').textContent = ex.low_max;
 
   const oK = argmax(ex.odd), lK = argmax(ex.low);
+  const consecPct = Math.round(ex.with_consec/ex.total*100);
   document.getElementById('balCards').innerHTML =
     mkTile('Tổng TB', ex.sum.mean.toLocaleString('vi'),
       'thực tế '+ex.sum.min+'–'+ex.sum.max) +
     mkTile('Vùng tổng hay gặp', ex.sum.p10+'–'+ex.sum.p90, '~80% số kỳ') +
     mkTile('Chẵn/lẻ hay gặp', oK+' lẻ · '+(6-oK)+' chẵn', '') +
-    mkTile('Thấp/cao hay gặp', lK+' thấp · '+(6-lK)+' cao', '1–'+ex.low_max+' là thấp');
+    mkTile('Thấp/cao hay gặp', lK+' thấp · '+(6-lK)+' cao', '1–'+ex.low_max+' là thấp') +
+    mkTile('Kỳ có số liên tiếp', consecPct+'%', ex.with_consec+' / '+ex.total+' kỳ') +
+    mkTile('Lặp lại từ kỳ trước', ex.repeat_mean+' số', 'trung bình mỗi kỳ');
 
   const bins = ex.sum.bins;
   columnChart(document.getElementById('sumChart'),
@@ -724,6 +1177,18 @@ function renderBalance(){
   columnChart(document.getElementById('decChart'),
     ex.decade.map(d=>({label:d.label, value:d.occ})),
     {W:340,H:170,labelEvery:1,tipTitle:d=>('đầu số '+esc(d.label))});
+
+  columnChart(document.getElementById('tailChart'),
+    ex.last_digit.map(d=>({label:d.label, value:d.occ})),
+    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>('đuôi '+esc(d.label))});
+  columnChart(document.getElementById('consecChart'),
+    ex.consecutive.map(d=>({label:d.label, value:d.occ})),
+    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' cặp liên tiếp')});
+  columnChart(document.getElementById('repChart'),
+    ex.repeat_prev.map(d=>({label:d.label, value:d.occ})),
+    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' số lặp lại')});
+  document.getElementById('repTitle').textContent =
+    'Số lặp lại từ kỳ trước (TB '+ex.repeat_mean+')';
 }
 
 function renderGanHot(){
@@ -731,10 +1196,12 @@ function renderGanHot(){
   const panel = document.getElementById('ganPanel');
   if(!ex){ panel.style.display='none'; return; }
   panel.style.display='';
+  document.getElementById('ganTitle').textContent =
+    'Gan nhất — số kỳ chưa về (nghỉ TB lý thuyết ~'+ex.exp_rest+' kỳ)';
   document.getElementById('hotTitle').textContent =
     'Nóng '+ex.recent_n+' kỳ gần nhất — số lần về';
   columnChart(document.getElementById('ganChart'),
-    ex.overdue.map(o=>({label:o.number, value:o.gap})),
+    ex.overdue.map(o=>({label:o.number, value:o.gap, sub:'nghỉ TB '+(o.rest==null?'—':o.rest)+' kỳ'})),
     {W:460,H:200,labelAll:true,labelEvery:1,tipTitle:d=>('số '+esc(d.label)+' · chưa về')});
   columnChart(document.getElementById('hotChart'),
     ex.hot.map(o=>({label:o.number, value:o.count})),
@@ -758,50 +1225,411 @@ function renderPairs(){
   document.getElementById('pairTable').innerHTML = '<table class="ptbl"><tbody>'+rows+'</tbody></table>';
 }
 
-function genSet(ex){
-  const n = ex.n, lowMax = ex.low_max, p10 = ex.sum.p10, p90 = ex.sum.p90;
-  for(let t=0;t<3000;t++){
-    const set = new Set();
-    while(set.size < 6) set.add(1 + Math.floor(Math.random()*n));
-    const arr = [...set];
-    const s = arr.reduce((a,b)=>a+b,0);
-    const odd = arr.filter(x=>x%2===1).length;
-    const low = arr.filter(x=>x<=lowMax).length;
-    if(s>=p10 && s<=p90 && odd>=2 && odd<=4 && low>=2 && low<=4)
-      return arr.sort((a,b)=>a-b);
-  }
-  return [1,2,3,4,5,6];
+function sugInputs(){
+  const parse = id => (document.getElementById(id).value.match(/\d+/g)||[]).map(Number);
+  return {
+    mode: document.getElementById('sugMode').value,
+    count: parseInt(document.getElementById('sugCount').value,10)||5,
+    lock: parse('sugLock'),
+    excl: parse('sugExcl'),
+  };
 }
+function overlap(a,b){ let c=0; for(const x of a) if(b.includes(x)) c++; return c; }
+
+function sugEngine(){
+  const g = DATA[current], ex = g.extra, n = ex.n;
+  const positions = g.positions || [], cooc = ex.cooc;
+  const freq = {}; (g.frequency||[]).forEach(f=>freq[f.number]=f);
+  const latest = new Set(ex.latest||[]);
+  const {mode,count,lock,excl} = sugInputs();
+  const exclSet = new Set(excl.filter(x=>x>=1&&x<=n));
+  const locked = [...new Set(lock.filter(x=>x>=1&&x<=n&&!exclSet.has(x)))].slice(0,5);
+
+  const sumBinMax = Math.max(1,...ex.sum.bins.map(b=>b.occ));
+  const oddMax = Math.max(1,...ex.odd), lowMx = Math.max(1,...ex.low);
+  const consMax = Math.max(1,...ex.consecutive.map(c=>c.occ));
+  const repMax = Math.max(1,...ex.repeat_prev.map(r=>r.occ));
+  const sumBinOcc = s => { for(const b of ex.sum.bins){ const e=+b.label;
+    if(s>=e&&s<=e+14) return b.occ; } return 0; };
+
+  function score(set){
+    const sum=set.reduce((a,b)=>a+b,0);
+    const odd=set.filter(x=>x%2).length;
+    const low=set.filter(x=>x<=ex.low_max).length;
+    let cons=0; for(let i=0;i<5;i++) if(set[i+1]===set[i]+1) cons++;
+    const rep=set.filter(x=>latest.has(x)).length;
+    const parts={
+      'Tổng':      sumBinOcc(sum)/sumBinMax,
+      'Chẵn/lẻ':   (ex.odd[odd]||0)/oddMax,
+      'Thấp/cao':  (ex.low[low]||0)/lowMx,
+      'Liên tiếp': ((ex.consecutive[cons]||{occ:0}).occ)/consMax,
+      'Lặp':       ((ex.repeat_prev[rep]||{occ:0}).occ)/repMax,
+    };
+    const vals=Object.values(parts);
+    return {set,sum,odd,low,cons,rep,parts,
+      score:Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*100)};
+  }
+  function passes(m){
+    if(m.sum<ex.sum.p10||m.sum>ex.sum.p90) return false;
+    if(m.odd<2||m.odd>4||m.low<2||m.low>4||m.cons>1||m.rep>2) return false;
+    if(new Set(m.set.map(x=>Math.floor((x-1)/10))).size<3) return false;
+    for(let i=0;i<6;i++){ const p=positions[i]; if(p&&(m.set[i]<p.min||m.set[i]>p.max)) return false; }
+    return true;
+  }
+  const weightOf = x => exclSet.has(x)?0:
+    mode==='hot' ? (freq[x]?freq[x].count:0)+1 :
+    mode==='gan' ? (freq[x]?freq[x].gap:0)+1 :
+    mode==='payout' ? (x>31?3:1) : 1;
+  function sampleWeighted(){
+    const chosen=[...locked], used=new Set(chosen);
+    while(chosen.length<6){
+      let tot=0; const w=new Array(n+1).fill(0);
+      for(let x=1;x<=n;x++){ if(used.has(x)||exclSet.has(x)) continue; w[x]=weightOf(x); tot+=w[x]; }
+      if(tot<=0){ const rem=[]; for(let x=1;x<=n;x++) if(!used.has(x)&&!exclSet.has(x)) rem.push(x);
+        if(!rem.length) break; const p=rem[Math.random()*rem.length|0]; chosen.push(p); used.add(p); continue; }
+      let r=Math.random()*tot, acc=0, pick=1;
+      for(let x=1;x<=n;x++){ acc+=w[x]; if(acc>=r){pick=x;break;} }
+      chosen.push(pick); used.add(pick);
+    }
+    return chosen.sort((a,b)=>a-b);
+  }
+  function genPair(){
+    const s=[...locked], used=new Set(s);
+    if(!s.length){ let tot=0,w=new Array(n+1).fill(0);
+      for(let x=1;x<=n;x++){ if(exclSet.has(x)) continue; w[x]=(freq[x]?freq[x].count:1); tot+=w[x]; }
+      let r=Math.random()*tot,acc=0,pk=1; for(let x=1;x<=n;x++){acc+=w[x];if(acc>=r){pk=x;break;}}
+      s.push(pk); used.add(pk); }
+    while(s.length<6){
+      const cand=[];
+      for(let x=1;x<=n;x++){ if(used.has(x)||exclSet.has(x)) continue;
+        let v=0; for(const y of s) v+=cooc[x-1][y-1]; cand.push([x,v]); }
+      if(!cand.length) break;
+      cand.sort((a,b)=>b[1]-a[1]);
+      const top=cand.slice(0,3), pk=top[Math.random()*top.length|0][0];
+      s.push(pk); used.add(pk);
+    }
+    return s.sort((a,b)=>a-b);
+  }
+  const gen = mode==='pairs'? genPair : sampleWeighted;
+
+  const pool=[], seen=new Set(); let relaxed=false;
+  for(let t=0;t<9000 && pool.length<count*10; t++){
+    const s=gen(); if(s.length<6) continue;
+    const key=s.join(','); if(seen.has(key)) continue;
+    const m=score(s); if(!passes(m)) continue;
+    seen.add(key); pool.push(m);
+  }
+  if(pool.length<count){ relaxed=true;
+    for(let t=0;t<4000 && pool.length<count*6; t++){
+      const s=gen(); if(s.length<6) continue; const key=s.join(',');
+      if(seen.has(key)) continue; seen.add(key); pool.push(score(s));
+    }
+  }
+  pool.sort((a,b)=>b.score-a.score);
+  const out=[];
+  for(const c of pool){ if(out.every(o=>overlap(o.set,c.set)<=4)){ out.push(c); if(out.length>=count) break; } }
+  for(let i=0;out.length<count&&i<pool.length;i++) if(!out.includes(pool[i])) out.push(pool[i]);
+  return {out:out.slice(0,count), relaxed, mode, locked, excl:[...exclSet]};
+}
+
+const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
+  pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông'};
 function renderSuggest(){
   const ex = DATA[current].extra;
   const panel = document.getElementById('sugPanel');
   if(!ex){ panel.style.display='none'; return; }
   panel.style.display='';
+  const res = sugEngine();
   let html='';
-  for(let i=0;i<5;i++){
-    const arr = genSet(ex);
-    const s = arr.reduce((a,b)=>a+b,0);
-    const odd = arr.filter(x=>x%2===1).length;
-    const low = arr.filter(x=>x<=ex.low_max).length;
-    html += '<div class="setrow"><span class="lbl">Bộ '+(i+1)+'</span>'+
-      arr.map(x=>'<span class="chip">'+x+'</span>').join('')+
-      '<span class="setmeta">tổng '+s+' · '+odd+' lẻ/'+(6-odd)+' chẵn · '+
-      low+' thấp/'+(6-low)+' cao</span></div>';
-  }
-  document.getElementById('suggestList').innerHTML = html;
+  res.out.forEach((c,i)=>{
+    html += '<div class="setrow"><span class="lbl">#'+(i+1)+'</span>'+
+      c.set.map(x=>'<span class="chip'+(res.locked.includes(x)?' lock':'')+'">'+x+'</span>').join('')+
+      '<span class="setmeta">điểm <b>'+c.score+'</b> · tổng '+c.sum+' · '+c.odd+' lẻ · '+
+      c.low+' thấp · '+c.cons+' liên tiếp · lặp '+c.rep+'</span></div>';
+  });
+  document.getElementById('suggestList').innerHTML = html ||
+    '<div class="pc">Không tạo được bộ nào với khoá/loại số hiện tại.</div>';
+  document.getElementById('sugMsg').textContent = res.relaxed
+    ? '⚠ Ràng buộc quá chặt (khoá số?) — đã nới lỏng để đủ '+res.out.length+' bộ.' : '';
 
   document.getElementById('sugNote').innerHTML =
-    '<div class="notet">Vì sao chọn được các số này?</div>'+
-    'Mỗi bộ là 6 số bốc ngẫu nhiên, nhưng chỉ giữ lại bộ "trông giống" một kỳ '+
-    'quay điển hình — phải thỏa cả 3 điều kiện lấy từ chính lịch sử:'+
-    '<ol>'+
-    '<li>Tổng 6 số nằm trong vùng hay gặp <b>'+ex.sum.p10+'–'+ex.sum.p90+
-      '</b> (~80% số kỳ).</li>'+
-    '<li>Cân đối chẵn/lẻ: <b>2–4 số lẻ</b> (lịch sử hay gặp 3 lẻ/3 chẵn).</li>'+
-    '<li>Cân đối thấp/cao: <b>2–4 số</b> thuộc 1–'+ex.low_max+'.</li>'+
-    '</ol>'+
-    'Bộ nào lệch (tổng quá to/nhỏ, gần như toàn lẻ, dồn hết số thấp…) bị loại.'+
-    '<span class="wl">⚠ Chỉ giúp bộ số "trông cân đối" — KHÔNG tăng xác suất trúng.</span>';
+    '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
+    '<b>Điểm điển hình</b> = mức bộ số khớp với thói quen lịch sử ở 5 mặt: '+
+    'tổng, chẵn/lẻ, thấp/cao, số liên tiếp, số lặp kỳ trước (100 = giống nhất).'+
+    '<div style="margin-top:6px">Bộ còn phải qua ràng buộc: tổng trong '+
+    ex.sum.p10+'–'+ex.sum.p90+', 2–4 lẻ, 2–4 thấp, ≤1 cặp liên tiếp, trải ≥3 hàng chục, '+
+    'mỗi vị trí x1–x6 trong dải lịch sử, lặp kỳ trước ≤2.</div>'+
+    '<div style="margin-top:6px"><b>Chế độ '+MODE_NAME[res.mode]+':</b> '+
+    ({balanced:'bốc đều, chỉ cần điển hình.',hot:'thiên số về nhiều.',
+      gan:'thiên số lâu chưa về.',pairs:'ghép theo cặp hay đi cùng.',
+      payout:'ưu tiên số &gt;31, ít người đánh → nếu trúng ít bị chia giải.'}[res.mode])+'</div>'+
+    '<span class="wl">⚠ Không chế độ nào tăng xác suất trúng. "Tránh số đông" chỉ tối ưu tiền nhận khi trúng.</span>';
+}
+
+// --- So sánh 5 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
+const BT_MODES = [['balanced','Cân đối'],['hot','Thiên số nóng'],['gan','Thiên số gan'],
+  ['pairs','Theo cặp hay đi cùng'],['payout','Tránh số đông']];
+
+function btBuildGen(){
+  const g = DATA[current], ex = g.extra, n = ex.n;
+  const cooc = ex.cooc;
+  const freq = {}; (g.frequency||[]).forEach(f=>freq[f.number]=f);
+
+  function wArr(mode){
+    const w = new Float64Array(n+1);
+    for(let x=1;x<=n;x++) w[x] =
+      mode==='hot'    ? (freq[x]?freq[x].count:0)+1 :
+      mode==='gan'    ? (freq[x]?freq[x].gap:0)+1 :
+      mode==='payout' ? (x>31?3:1) : 1;
+    return w;
+  }
+  const W = {balanced:wArr('balanced'), hot:wArr('hot'), gan:wArr('gan'), payout:wArr('payout')};
+  const pairSeed = (()=>{ const w=new Float64Array(n+1);
+    for(let x=1;x<=n;x++) w[x] = freq[x]?freq[x].count:1; return w; })();
+
+  // Bốc 6 số theo trọng số của giải thuật (KHÔNG lọc "điển hình" — đây là backtest,
+  // lọc theo kỳ mới nhất sẽ chặn mọi bộ trùng >2 số với kết quả và làm hỏng thống kê).
+  function sampleWeighted(w){
+    const used=new Uint8Array(n+1), chosen=[];
+    for(let c=0;c<6;c++){
+      let tot=0; for(let x=1;x<=n;x++) if(!used[x]) tot+=w[x];
+      let r=Math.random()*tot, acc=0, pick=1;
+      for(let x=1;x<=n;x++){ if(used[x]) continue; acc+=w[x]; if(acc>=r){pick=x;break;} }
+      used[pick]=1; chosen.push(pick);
+    }
+    return chosen.sort((a,b)=>a-b);
+  }
+  function genPair(){
+    const used=new Uint8Array(n+1), s=[];
+    let tot=0; for(let x=1;x<=n;x++) tot+=pairSeed[x];
+    let r=Math.random()*tot, acc=0, pk=1;
+    for(let x=1;x<=n;x++){ acc+=pairSeed[x]; if(acc>=r){pk=x;break;} }
+    s.push(pk); used[pk]=1;
+    while(s.length<6){
+      const cand=[];
+      for(let x=1;x<=n;x++){ if(used[x]) continue;
+        let v=0; for(const y of s) v+=cooc[x-1][y-1]; cand.push([x,v]); }
+      cand.sort((a,b)=>b[1]-a[1]);
+      const top=cand.slice(0,3), pick=top[Math.random()*top.length|0][0];
+      s.push(pick); used[pick]=1;
+    }
+    return s.sort((a,b)=>a-b);
+  }
+  const gen = mode => mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
+  return {n, gen};
+}
+
+// --- Lưu / nạp bội số đã tạo (localStorage — sống qua F5 & mở lại trình duyệt) ---
+let btSaved = null;                    // batch trong phiên: {game,n,count,created,sets{mode:[[..],..]}}
+function btKey(){ return 'vietlott_bt_' + DATA[current].game_type; }
+function btWidth(n){ return n < 10 ? 1 : n < 100 ? 2 : 3; }
+function encSets(arr, w){ let s=''; for(const set of arr) for(const x of set)
+  s += String(x).padStart(w,'0'); return s; }
+function decSets(str, w){ const step=6*w, out=[];
+  for(let i=0;i+step<=str.length;i+=step){ const set=[];
+    for(let j=0;j<step;j+=w) set.push(parseInt(str.substr(i+j,w),10)); out.push(set); }
+  return out; }
+function btSave(batch){
+  try{
+    const w=btWidth(batch.n), enc={v:1,game:batch.game,n:batch.n,count:batch.count,
+      created:batch.created,sets:{}};
+    for(const k in batch.sets) enc.sets[k]=encSets(batch.sets[k],w);
+    localStorage.setItem(btKey(), JSON.stringify(enc));
+    return true;
+  }catch(e){ return false; }
+}
+function btLoad(){
+  try{
+    const raw=localStorage.getItem(btKey()); if(!raw) return null;
+    const enc=JSON.parse(raw), w=btWidth(enc.n), sets={};
+    for(const k in enc.sets) sets[k]=decSets(enc.sets[k],w);
+    return {game:enc.game,n:enc.n,count:enc.count,created:enc.created,sets};
+  }catch(e){ return null; }
+}
+function btNow(){ const d=new Date(), p=x=>String(x).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+
+function fillSetsTextarea(batch){
+  const ta=document.getElementById('btSets'); if(!ta) return;
+  const PREV=200;                      // xem trước tối đa 200 bộ/giải thuật cho nhẹ
+  let txt='';
+  BT_MODES.forEach(([k,nm])=>{
+    const arr=batch.sets[k]||[];
+    txt += '== '+nm+' ('+arr.length.toLocaleString('vi')+' bộ) ==\n';
+    arr.slice(0,PREV).forEach(s=> txt += s.join(' ')+'\n');
+    if(arr.length>PREV) txt += '… và '+(arr.length-PREV).toLocaleString('vi')+' bộ nữa (đã lưu đủ)\n';
+    txt += '\n';
+  });
+  ta.value = txt.trimEnd();
+}
+
+// NÚT TẠO: sinh count bộ/giải thuật, LƯU (ghi đè bộ cũ), hiện ra ô văn bản.
+function btGenerate(){
+  const ex = DATA[current].extra; if(!ex) return;
+  const msg = document.getElementById('btMsg');
+  let count = parseInt(document.getElementById('btCount').value,10) || 1000;
+  count = Math.max(50, Math.min(count, 20000));           // giới hạn để lưu vừa localStorage
+  document.getElementById('btCount').value = count;
+  const btn = document.getElementById('btGen'), old = btn.textContent;
+  btn.disabled=true; btn.textContent='Đang tạo…';
+  msg.className='pc warn'; msg.textContent='';
+  document.getElementById('btBody').innerHTML='';         // kết quả so sánh cũ không còn đúng
+  setTimeout(()=>{
+    const eng = btBuildGen(), sets={};
+    BT_MODES.forEach(([k])=>{ const a=new Array(count);
+      for(let i=0;i<count;i++) a[i]=eng.gen(k); sets[k]=a; });
+    const batch = {game:DATA[current].game_type, n:ex.n, count, created:btNow(), sets};
+    btSaved = batch;
+    const ok = btSave(batch);
+    fillSetsTextarea(batch);
+    document.getElementById('btStatus').innerHTML =
+      '✅ Đã tạo &amp; ' + (ok
+        ? 'lưu <b>'+count.toLocaleString('vi')+'</b> bộ/giải thuật lúc <b>'+batch.created+
+          '</b> (mở lại trang vẫn còn) — đã xoá bộ cũ, thay bằng bộ mới.'
+        : 'giữ <b>'+count.toLocaleString('vi')+'</b> bộ/giải thuật trong PHIÊN này (không lưu được vào trình duyệt).') +
+      ' Giờ nhập kết quả trúng rồi bấm <b>So sánh</b>.';
+    msg.textContent = ok ? '' : '⚠ Không lưu lâu dài được (trình duyệt chặn localStorage ở file://) — đóng trang sẽ mất.';
+    btn.disabled=false; btn.textContent=old;
+  }, 20);
+}
+
+// Thống kê mức trùng của MỘT tập bộ ĐÃ LƯU với kết quả win.
+function btStatsFromSets(mode, sets, win){
+  const dist=[0,0,0,0,0,0,0], numHit={}, wins={3:[],4:[],5:[],6:[]};
+  let sumMatched=0, best=0;
+  for(const s of sets){
+    let c=0; for(const x of s) if(win.has(x)){ c++; numHit[x]=(numHit[x]||0)+1; }
+    dist[c]++; sumMatched+=c; if(c>best) best=c;
+    if(c>=3) wins[c].push(s);
+  }
+  const made=sets.length;
+  return {mode, made, dist, best, numHit, wins,
+    avg: made ? sumMatched/made : 0,
+    hit3: dist[3]+dist[4]+dist[5]+dist[6],
+    hit4: dist[4]+dist[5]+dist[6],
+    hit5: dist[5]+dist[6], hit6: dist[6]};
+}
+
+// NÚT SO SÁNH: đối chiếu kết quả với bội số ĐÃ LƯU trước đó.
+function btCompare(){
+  const ex = DATA[current].extra; if(!ex) return;
+  const msg = document.getElementById('btMsg');
+  const target = parseTicket(document.getElementById('btInput').value, ex.n);
+  if(!target){ msg.className='pc warn';
+    msg.textContent='Nhập đúng 6 số khác nhau trong khoảng 1–'+ex.n+'.'; return; }
+  const batch = btSaved || btLoad();
+  if(!batch || !batch.sets){ msg.className='pc warn';
+    msg.textContent='Chưa có bội số đã lưu — bấm "Tạo & lưu" trước.'; return; }
+  if(batch.game !== DATA[current].game_type){ msg.className='pc warn';
+    msg.textContent='Bội số đã lưu thuộc game khác ('+batch.game+') — bấm "Tạo & lưu" lại.'; return; }
+  msg.textContent='';
+  const win = new Set(target);
+  const stats = BT_MODES.map(([k])=>btStatsFromSets(k, batch.sets[k]||[], win));
+  renderBtResult(target, stats, batch.count, batch.created);
+}
+
+function renderBtResult(target, stats, count, created){
+  const ex = DATA[current].extra, n = ex.n;
+  const baseline = Math.round(36/n*1000)/1000;
+  const bestAvg = Math.max(...stats.map(s=>s.avg));
+  const nameOf = {}; BT_MODES.forEach(([k,nm])=>nameOf[k]=nm);
+
+  let cols='';
+  stats.forEach(s=>{
+    const lead = s.avg===bestAvg;
+    const rates = target.map(x=>({x, r: s.made ? (s.numHit[x]||0)/s.made*100 : 0}))
+                        .sort((a,b)=>b.r-a.r);
+    let mini='';
+    rates.forEach(o=>{ mini +=
+      '<div class="hl"><span class="num">'+o.x+'</span>'+
+      '<span class="bar"><span style="width:'+Math.round(o.r)+'%"></span></span>'+
+      '<span class="pct">'+o.r.toFixed(0)+'%</span></div>'; });
+    cols += '<div class="btcol'+(lead?' lead':'')+'">'+
+      '<div class="nm"><span>'+esc(nameOf[s.mode])+'</span>'+(lead?'<span class="star">★</span>':'')+'</div>'+
+      '<div class="k">TB trùng / vé</div>'+
+      '<div class="big">'+s.avg.toFixed(3)+'</div>'+
+      '<div class="k" style="margin-top:4px">≥3: <b>'+s.hit3+'</b> · ≥4: <b>'+s.hit4+
+        '</b> · ≥5: <b>'+s.hit5+'</b> · 6: <b>'+s.hit6+'</b></div>'+
+      '<div class="k">Tốt nhất <b>'+s.best+'</b> số · '+s.made.toLocaleString('vi')+' bộ</div>'+
+      '<div class="mini"><div class="k" style="margin-bottom:4px">Số KQ có trong bộ (tỉ lệ)</div>'+mini+'</div>'+
+    '</div>';
+  });
+
+  // Kiểu so sánh 2: liệt kê các BỘ TRÚNG (3/4/5/6 số) của từng giải thuật.
+  const win = new Set(target);
+  const WCAP = 15;
+  let winHtml='';
+  stats.forEach(s=>{
+    let body='', any=false;
+    [6,5,4,3].forEach(l=>{
+      const arr=s.wins[l]; if(!arr.length) return; any=true;
+      let sets='';
+      arr.slice(0,WCAP).forEach(set=>{ sets+='<span class="wset">'+
+        set.map(x=>'<span class="chip'+(win.has(x)?' win':'')+'">'+x+'</span>').join('')+'</span>'; });
+      if(arr.length>WCAP) sets+='<span class="wmore">+'+(arr.length-WCAP)+' bộ nữa</span>';
+      body+='<div class="wlevel">Trúng '+l+' số ('+arr.length+' bộ):</div><div class="wsets">'+sets+'</div>';
+    });
+    if(!any) body='<div class="wlevel">Không có bộ nào trúng ≥3 số.</div>';
+    winHtml += '<div class="btwin"><div class="wtitle">'+esc(nameOf[s.mode])+
+      ' <span class="wcount">6:'+s.wins[6].length+' · 5:'+s.wins[5].length+
+      ' · 4:'+s.wins[4].length+' · 3:'+s.wins[3].length+'</span></div>'+body+'</div>';
+  });
+
+  const isLatest = (ex.latest||[]).join(',') === target.join(',');
+  const latestNote = isLatest
+    ? '<div class="banner" style="margin-top:10px">ℹ Bạn đang đối chiếu với <b>chính kỳ mới nhất</b> — thống kê (nóng/gan/cặp) đã bao gồm kỳ này, nên <b>số nóng &amp; cặp</b> trùng cao hơn còn <b>số gan gần như không trúng</b> (các số vừa ra thì không còn "gan"). Muốn so công bằng, hãy nhập kết quả một kỳ khác.</div>'
+    : '';
+
+  document.getElementById('btStatus').innerHTML =
+    'Đối chiếu kết quả <b>'+target.join(' ')+'</b> với <b>'+count.toLocaleString('vi')+
+    '</b> bộ/giải thuật đã lưu'+(created?' lúc <b>'+created+'</b>':'')+
+    ' · ngẫu nhiên lý thuyết TB <b>'+baseline+'</b> số trùng/vé.';
+  document.getElementById('btBody').innerHTML =
+    '<div class="btgrid">'+cols+'</div>'+ latestNote +
+    '<div class="pc" style="margin-top:10px">Mỗi cột là 1 giải thuật: <b>TB trùng/vé</b> = trung bình số trùng với kết quả; '+
+    '<b>≥3…6</b> = số bộ đạt mức đó; hàng dưới là tỉ lệ mỗi số kết quả xuất hiện trong '+count.toLocaleString('vi')+' bộ. '+
+    '★ = TB cao nhất. So sánh dùng <b>đúng bộ đã lưu</b> nên kết quả cố định; bấm <b>Tạo &amp; lưu</b> để bốc bộ mới. Chênh lệch giữa các giải thuật hầu như chỉ là nhiễu.</div>'+
+    '<details open style="margin-top:12px"><summary>Bộ số trúng của từng giải thuật (nhóm theo 3/4/5/6 số · số trúng tô xanh)</summary>'+
+    winHtml+'</details>';
+}
+
+function renderBacktest(){
+  const ex = DATA[current].extra;
+  const panel = document.getElementById('btPanel');
+  if(!ex){ panel.style.display='none'; return; }
+  panel.style.display='';
+  document.getElementById('btInput').placeholder = 'Nhập 6 số (1–'+ex.n+')';
+  document.getElementById('btMsg').textContent='';
+  document.getElementById('btBody').innerHTML='';
+  const batch = btLoad();
+  btSaved = batch;
+  const status = document.getElementById('btStatus');
+  const ta = document.getElementById('btSets');
+  if(batch && batch.sets){
+    fillSetsTextarea(batch);
+    status.innerHTML = '💾 Đang có <b>'+(batch.count||0).toLocaleString('vi')+
+      '</b> bộ/giải thuật đã lưu lúc <b>'+(batch.created||'?')+
+      '</b>. Nhập kết quả trúng rồi bấm <b>So sánh</b>. (Bấm <b>Tạo &amp; lưu</b> để thay bằng bộ mới.)';
+  } else {
+    if(ta) ta.value='';
+    status.innerHTML = 'Chưa có bội số nào được lưu. Bấm <b>Tạo &amp; lưu</b> để tạo &amp; lưu bội số cho từng giải thuật '+
+      '(lần sau mở lại vẫn còn để So sánh).';
+  }
+}
+
+function renderAlgos(){
+  const algos = DATA[current].algos;
+  const panel = document.getElementById('algoPanel');
+  if(!algos){ panel.style.display='none'; return; }
+  panel.style.display='';
+  let html='', grp=null;
+  for(const a of algos){
+    if(a.group !== grp){ grp=a.group; html += '<div class="algogrp">'+esc(grp)+'</div>'; }
+    html += '<div class="algorow"><div class="algoinfo"><b>'+esc(a.name)+'</b>'+
+      '<span class="note">'+esc(a.note)+'</span></div>'+
+      '<div class="chips">'+a.pick.map(x=>'<span class="chip">'+x+'</span>').join('')+'</div></div>';
+  }
+  document.getElementById('algoList').innerHTML = html;
 }
 
 // --- mô phỏng: cần bao nhiêu vé để trúng 3/4/5/6 số --------------------------
@@ -942,9 +1770,16 @@ document.getElementById('freqSort').onclick = (e)=>{
   e.target.textContent = 'Sắp theo: ' + (freqByCount?'số lần':'số');
   renderFreq();
 };
-document.getElementById('genBtn').onclick = ()=>{ renderSuggest(); };
+document.getElementById('genBtn').onclick = renderSuggest;
+document.getElementById('sugMode').onchange = renderSuggest;
+document.getElementById('sugCount').onchange = renderSuggest;
 document.getElementById('simRun').onclick = startSim;
 document.getElementById('simStop').onclick = ()=>{ finishSim(false); };
+document.getElementById('btGen').onclick = btGenerate;
+document.getElementById('btCmp').onclick = btCompare;
+document.getElementById('btInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') btCompare();
+});
 document.getElementById('themeBtn').onclick = ()=>{
   const cur = document.documentElement.getAttribute('data-theme');
   const isDark = cur ? cur==='dark'
