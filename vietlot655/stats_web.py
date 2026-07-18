@@ -16,6 +16,7 @@ import argparse
 import json
 import math
 import random
+import re
 import sqlite3
 import statistics
 import sys
@@ -29,6 +30,8 @@ import gap_stats
 from crawl import DB_PATH, EXPORT_DIR, ensure_dirs
 
 DEFAULT_HTML_PATH = EXPORT_DIR / "stats.html"
+MEGA_DB_PATH = DB_PATH.parent / "vietlott_mega645_data.db"
+MEGA_HTML_PATH = EXPORT_DIR / "stats_mega645.html"
 
 POSITION_NAMES = {
     1: "x1 · nhỏ nhất",
@@ -615,12 +618,83 @@ def load_all(
     return data
 
 
+def compute_frequency_list(
+    db_path: Path | str, game_type: str, n: int
+) -> list[dict]:
+    """Tính count + gap (kỳ chưa về) từng số trực tiếp từ draw_results.
+
+    Dùng cho trang rút gọn (Mega) khi DB chưa có bảng number_frequency — chỉ cần
+    'count' và 'gap' để chế độ số nóng/số gan ở phần Gợi ý & Backtest chạy đúng.
+    """
+    draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ
+    total = len(draws)
+    count = {x: 0 for x in range(1, n + 1)}
+    gap = {x: total for x in range(1, n + 1)}
+    seen: set[int] = set()
+    for i, d in enumerate(draws):
+        for x in d:
+            count[x] += 1
+            if x not in seen:
+                gap[x] = i
+                seen.add(x)
+    return [
+        {
+            "number": x,
+            "count": count[x],
+            "current_streak": 0,
+            "max_streak": 0,
+            "gap": gap[x],
+        }
+        for x in range(1, n + 1)
+    ]
+
+
+def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
+    """Nạp dữ liệu tối thiểu cho trang rút gọn (Gợi ý / Backtest / Mô phỏng).
+
+    Không cần các bảng number_frequency / position_* / number_streaks — mọi thứ
+    tính thẳng từ draw_results, nên chạy được cả khi DB chưa qua number_stats.py.
+    """
+    extra = compute_extra_stats(db_path, game_type)
+    if not extra:
+        return None
+    return {
+        "game_type": game_type,
+        "total_draws": extra["total"],
+        "positions": [],
+        "frequency": compute_frequency_list(db_path, game_type, extra["n"]),
+        "streaks": [],
+        "gaps": None,
+        "extra": extra,
+        "algos": None,
+        "tests": None,
+    }
+
+
+def load_all_minimal(
+    conn: sqlite3.Connection, db_path: Path | str, game_types: list[str] | None
+) -> list[dict]:
+    if not game_types:
+        game_types = [
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT game_type FROM draw_results ORDER BY game_type"
+            )
+        ]
+    data = []
+    for game_type in game_types:
+        game = load_game_data_minimal(db_path, game_type)
+        if game and game["total_draws"]:
+            data.append(game)
+    return data
+
+
 HTML_TEMPLATE = r"""<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thống kê Vietlott</title>
+<title>%%TITLE%%</title>
 <style>
   :root{
     --plane:#f9f9f7; --surface:#fcfcfb; --text:#0b0b0b; --text2:#52514e;
@@ -783,6 +857,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <h1>Thống kê Vietlott</h1>
     <span class="sub" id="subtitle"></span>
     <div class="spacer"></div>
+    %%NAV%%
     <button class="btn" id="themeBtn" type="button">◐ Sáng/Tối</button>
   </header>
 
@@ -848,6 +923,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div class="pc" style="margin-top:10px">Mỗi "bộ" là 1 vé 6 số ngẫu nhiên. Trúng 6/6 trung bình cần hàng chục triệu bộ — không có cách rút ngắn vì mỗi kỳ độc lập.</div>
   </div>
 
+  <!--LOWER_START-->
   <h2>Phân bố theo vị trí <span class="hint">mỗi kỳ sort tăng dần x1 ≤ … ≤ x6 · giá trị nào hay là xN</span></h2>
   <div class="grid6" id="positions"></div>
 
@@ -907,6 +983,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div id="algoList"></div>
     <div class="pc" style="margin-top:12px">Nhóm máy học (Logistic, Random Forest, XGBoost, Mạng nơ-ron, LSTM) cần thư viện ngoài (sklearn/xgboost/torch) và khi backtest cũng cho kết quả ~ ngẫu nhiên — mình để riêng, làm nếu bạn cần.</div>
   </div>
+  <!--LOWER_END-->
 
   <footer id="footer"></footer>
 </div>
@@ -916,6 +993,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 <script>
 const DATA = %%DATA%%;
 const GENERATED = "%%GENERATED%%";
+const SOURCE = "%%SOURCE%%";
 let current = 0, freqByCount = false;
 let simRunning = false, simTarget = null, simAttempts = 0, simHits = null;
 const SIM_CAP = 100000000, SIM_CHUNK = 300000;
@@ -1054,30 +1132,35 @@ function render(){
     mk('Số về nhiều nhất', hot ? (hot.number+' · '+hot.count+' lần') : '—') +
     mk('Lâu chưa về nhất', cold ? (cold.number+' · '+cold.gap+' kỳ') : '—');
 
-  // positions x1..x6
+  // positions x1..x6 (bỏ ở trang rút gọn -> #positions có thể không tồn tại)
   const pos = document.getElementById('positions');
-  pos.innerHTML = '';
-  for(const p of g.positions){
-    const panel = document.createElement('div');
-    panel.className = 'panel';
-    panel.innerHTML =
-      `<div class="pt">${esc(p.name)}</div>`+
-      `<div class="pc">dao động ${p.min}–${p.max} · hay gặp ${p.mode} · TB ${p.mean}</div>`+
-      `<div class="chart"></div>`;
-    pos.appendChild(panel);
-    columnChart(panel.querySelector('.chart'),
-      p.values.map(v=>({label:v.value, value:v.occ})),
-      {W:360, H:200, labelMax:true, softNonMax:true, labelEvery:5,
-       tipTitle:d=>('giá trị '+esc(d.label))});
+  if(pos){
+    pos.innerHTML = '';
+    for(const p of g.positions){
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML =
+        `<div class="pt">${esc(p.name)}</div>`+
+        `<div class="pc">dao động ${p.min}–${p.max} · hay gặp ${p.mode} · TB ${p.mean}</div>`+
+        `<div class="chart"></div>`;
+      pos.appendChild(panel);
+      columnChart(panel.querySelector('.chart'),
+        p.values.map(v=>({label:v.value, value:v.occ})),
+        {W:360, H:200, labelMax:true, softNonMax:true, labelEvery:5,
+         tipTitle:d=>('giá trị '+esc(d.label))});
+    }
   }
 
   renderFreq();
 
   // streaks (đếm chính xác độ dài; ít cột nên nhãn tất cả)
-  columnChart(document.getElementById('streakChart'),
-    g.streaks.map(s=>({label:s.length+' kỳ', value:s.occ})),
-    {W:400, H:230, labelAll:true, labelEvery:1,
-     tipTitle:d=>('chuỗi dài đúng '+esc(d.label))});
+  const streakEl = document.getElementById('streakChart');
+  if(streakEl){
+    columnChart(streakEl,
+      g.streaks.map(s=>({label:s.length+' kỳ', value:s.occ})),
+      {W:400, H:230, labelAll:true, labelEvery:1,
+       tipTitle:d=>('chuỗi dài đúng '+esc(d.label))});
+  }
 
   renderGap();
   renderTests();
@@ -1090,10 +1173,11 @@ function render(){
   renderAlgos();
 
   document.getElementById('footer').textContent =
-    'Nguồn: vietlott_data.db · tạo lúc ' + GENERATED;
+    'Nguồn: ' + SOURCE + ' · tạo lúc ' + GENERATED;
 }
 
 function renderGap(){
+  if(!document.getElementById('gapPanel')) return;
   const gp = DATA[current].gaps;
   const panel = document.getElementById('gapPanel');
   if(!gp){ panel.style.display='none'; return; }
@@ -1121,6 +1205,7 @@ function renderGap(){
 const argmax = arr => arr.reduce((bi,v,i,a)=> v>a[bi]?i:bi, 0);
 
 function renderTests(){
+  if(!document.getElementById('testPanel')) return;
   const t = DATA[current].tests;
   const panel = document.getElementById('testPanel');
   if(!t){ panel.style.display='none'; return; }
@@ -1144,6 +1229,7 @@ function renderTests(){
 }
 
 function renderBalance(){
+  if(!document.getElementById('balPanel')) return;
   const ex = DATA[current].extra;
   const panel = document.getElementById('balPanel');
   if(!ex){ panel.style.display='none'; return; }
@@ -1192,6 +1278,7 @@ function renderBalance(){
 }
 
 function renderGanHot(){
+  if(!document.getElementById('ganPanel')) return;
   const ex = DATA[current].extra;
   const panel = document.getElementById('ganPanel');
   if(!ex){ panel.style.display='none'; return; }
@@ -1209,6 +1296,7 @@ function renderGanHot(){
 }
 
 function renderPairs(){
+  if(!document.getElementById('pairPanel')) return;
   const ex = DATA[current].extra;
   const panel = document.getElementById('pairPanel');
   if(!ex){ panel.style.display='none'; return; }
@@ -1618,6 +1706,7 @@ function renderBacktest(){
 }
 
 function renderAlgos(){
+  if(!document.getElementById('algoPanel')) return;
   const algos = DATA[current].algos;
   const panel = document.getElementById('algoPanel');
   if(!algos){ panel.style.display='none'; return; }
@@ -1735,6 +1824,7 @@ function renderSim(){
 }
 
 function renderFreq(){
+  if(!document.getElementById('freqChart')) return;
   const g = DATA[current];
   let rows = g.frequency.map(f=>({
     label:f.number, value:f.count,
@@ -1765,7 +1855,8 @@ DATA.forEach((g,i)=>{
   b.onclick=()=>{ current=i; render(); };
   tabs.appendChild(b);
 });
-document.getElementById('freqSort').onclick = (e)=>{
+const freqSortBtn = document.getElementById('freqSort');
+if(freqSortBtn) freqSortBtn.onclick = (e)=>{
   freqByCount = !freqByCount;
   e.target.textContent = 'Sắp theo: ' + (freqByCount?'số lần':'số');
   renderFreq();
@@ -1795,29 +1886,56 @@ render();
 """
 
 
-def render_html(all_data: list[dict]) -> str:
+def render_html(
+    all_data: list[dict],
+    minimal: bool = False,
+    source: str = "vietlott_data.db",
+    title: str = "Thống kê Vietlott",
+    nav: str = "",
+) -> str:
     generated = datetime.now().strftime("%d/%m/%Y %H:%M")
+    html = HTML_TEMPLATE
+    if minimal:
+        # Trang rút gọn: bỏ khối "Phân bố theo vị trí" trở xuống.
+        html = re.sub(
+            r"<!--LOWER_START-->.*?<!--LOWER_END-->\s*", "", html, flags=re.S
+        )
     return (
-        HTML_TEMPLATE
+        html
         .replace("%%DATA%%", json.dumps(all_data, ensure_ascii=False))
         .replace("%%GENERATED%%", generated)
+        .replace("%%SOURCE%%", source)
+        .replace("%%TITLE%%", title)
+        .replace("%%NAV%%", nav)
     )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Sinh trang HTML thống kê Vietlott và mở trình duyệt."
+        description=(
+            "Sinh trang HTML thống kê Vietlott và mở trình duyệt. Mặc định tạo cả "
+            "trang Power 6/55 (đầy đủ) và Mega 6/45 (rút gọn)."
+        )
     )
-    parser.add_argument("--db", default=str(DB_PATH), help="Đường dẫn file SQLite.")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="Đường dẫn file SQLite (chỉ dùng khi --game là 1 loại hình cụ thể).",
+    )
     parser.add_argument(
         "--game",
         default="all",
-        help="power655, mega645, all (mặc định: mọi game có trong DB).",
+        help="power655, mega645, all (mặc định: cả hai trang).",
     )
     parser.add_argument(
         "--out",
-        default=str(DEFAULT_HTML_PATH),
-        help="Đường dẫn file HTML xuất ra.",
+        default=None,
+        help="Đường dẫn file HTML xuất ra (chỉ dùng khi --game là 1 loại hình).",
+    )
+    parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="Bỏ mục 'Phân bố theo vị trí' trở xuống (mega645 vốn luôn rút gọn).",
     )
     parser.add_argument(
         "--no-open",
@@ -1827,6 +1945,64 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_page_specs(args: argparse.Namespace) -> list[dict]:
+    """Danh sách trang cần sinh, dựa trên --game/--db/--out."""
+    game = args.game or "all"
+    specs: list[dict] = []
+
+    if game in ("power655", "all"):
+        db = args.db if (args.db and game == "power655") else str(DB_PATH)
+        out = (
+            args.out
+            if (args.out and game == "power655")
+            else str(DEFAULT_HTML_PATH)
+        )
+        specs.append({
+            "db": db,
+            "games": ["power655"],
+            "out": out,
+            "minimal": args.minimal,
+            "source": Path(db).name,
+            "title": "Thống kê Power 6/55",
+            "nav": '<a class="btn" href="stats_mega645.html" '
+                   'style="text-decoration:none">Mega 6/45 →</a>',
+        })
+
+    if game in ("mega645", "all"):
+        db = args.db if (args.db and game == "mega645") else str(MEGA_DB_PATH)
+        out = (
+            args.out
+            if (args.out and game == "mega645")
+            else str(MEGA_HTML_PATH)
+        )
+        specs.append({
+            "db": db,
+            "games": ["mega645"],
+            "out": out,
+            # Mega luôn rút gọn (bỏ mục "Phân bố theo vị trí" trở xuống).
+            "minimal": True,
+            "source": Path(db).name,
+            "title": "Thống kê Mega 6/45",
+            "nav": '<a class="btn" href="stats.html" '
+                   'style="text-decoration:none">← Power 6/55</a>',
+        })
+
+    return specs
+
+
+def build_page_data(
+    db_path: str, game_types: list[str], minimal: bool
+) -> list[dict]:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        if minimal:
+            return load_all_minimal(conn, db_path, game_types)
+        return load_all(conn, db_path, game_types)
+    finally:
+        conn.close()
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -1834,27 +2010,42 @@ def main() -> int:
         pass
 
     args = build_arg_parser().parse_args()
-    game_types = None if args.game in ("all", "") else [args.game]
-
     ensure_dirs()
-    conn = sqlite3.connect(str(args.db))
-    conn.row_factory = sqlite3.Row
-    try:
-        all_data = load_all(conn, args.db, game_types)
-    finally:
-        conn.close()
 
-    if not all_data:
-        print("Không có dữ liệu thống kê. Chạy number_stats.py trước.")
+    written: list[Path] = []
+    for spec in build_page_specs(args):
+        if not Path(spec["db"]).exists():
+            print(f"⚠ Không thấy DB {spec['db']} — bỏ qua {spec['games']}.")
+            continue
+        data = build_page_data(spec["db"], spec["games"], spec["minimal"])
+        if not data:
+            print(
+                f"⚠ Không có dữ liệu cho {spec['games']} trong {spec['db']} "
+                f"— bỏ qua (có thể cần chạy number_stats.py)."
+            )
+            continue
+        out = Path(spec["out"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            render_html(
+                data,
+                minimal=spec["minimal"],
+                source=spec["source"],
+                title=spec["title"],
+                nav=spec["nav"],
+            ),
+            encoding="utf-8",
+        )
+        print(f"Đã tạo: {out}")
+        written.append(out)
+
+    if not written:
+        print("Không tạo được trang nào. Kiểm tra dữ liệu / DB.")
         return 1
 
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render_html(all_data), encoding="utf-8")
-    print(f"Đã tạo: {out}")
-
     if not args.no_open:
-        webbrowser.open(out.resolve().as_uri())
+        for out in written:
+            webbrowser.open(out.resolve().as_uri())
     return 0
 
 

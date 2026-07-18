@@ -8,6 +8,9 @@ CÁCH DÙNG:
       xem gộp chung (mỗi file = 1 tài khoản, có cột "Tài khoản/Nguồn").
     - Kéo file .xlsx thả lên xem_ads.py (hoặc: python xem_ads.py "duong_dan.xlsx")
       -> nạp sẵn file đó (sinh report.html) rồi vẫn thêm file khác được trong web.
+    - python xem_ads.py --tao-shortcut
+      -> tạo shortcut "Xem Ads.lnk" (có icon) ra Desktop. Shortcut chỉ TRỎ tới file
+         .py này, nên mỗi lần sửa code ở đây thì lần chạy sau vẫn dùng bản mới.
 
 Giao diện (index.html) đọc Excel ngay trong trình duyệt bằng SheetJS.
 """
@@ -16,6 +19,7 @@ import sys
 import json
 import datetime
 import webbrowser
+import subprocess
 
 try:  # để in được tiếng Việt trên console Windows (cp1252)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -110,7 +114,104 @@ def sinh_html(headers, rows, nguon):
     return OUTPUT
 
 
+ICON = os.path.join(HERE, "xem_ads.ico")
+
+
+def _pythonw():
+    """Trả về pythonw.exe (chạy không hiện cửa sổ đen) của CHÍNH python đang chạy.
+
+    Dùng interpreter hiện tại (thường là venv) để shortcut có sẵn openpyxl/PIL.
+    """
+    exe = sys.executable
+    if os.path.basename(exe).lower().startswith("pythonw"):
+        return exe
+    cand = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    return cand if os.path.isfile(cand) else exe
+
+
+def _sinh_icon(path):
+    """Vẽ icon biểu đồ cột trắng trên nền xanh FB bằng PIL. Lỗi -> False."""
+    try:
+        from PIL import Image, ImageDraw
+    except Exception:
+        return False
+    s = 256
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([8, 8, s - 8, s - 8], radius=44, fill=(24, 119, 242, 255))
+    for x, top in ((48, 150), (108, 108), (168, 66)):  # 3 cột cao dần
+        d.rounded_rectangle([x, top, x + 40, 200], radius=8, fill=(255, 255, 255, 255))
+    try:
+        img.save(path, format="ICO",
+                 sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+        return True
+    except Exception:
+        return False
+
+
+def _tao_lnk_powershell(lnk, target, args, workdir, icon, desc):
+    """Dự phòng khi máy không có pywin32: tạo .lnk qua PowerShell + WScript.Shell."""
+    ps = (
+        "$s = New-Object -ComObject WScript.Shell; "
+        "$sc = $s.CreateShortcut($env:LNK); "
+        "$sc.TargetPath = $env:TGT; "
+        "$sc.Arguments = $env:ARG; "
+        "$sc.WorkingDirectory = $env:WRK; "
+        "$sc.Description = $env:DSC; "
+        "$sc.WindowStyle = 1; "
+        + ("$sc.IconLocation = $env:ICO; " if icon else "")
+        + "$sc.Save()"
+    )
+    env = dict(os.environ, LNK=lnk, TGT=target, ARG=args, WRK=workdir, DSC=desc)
+    if icon:
+        env["ICO"] = icon
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                   env=env, check=True)
+
+
+def tao_shortcut():
+    """Tạo 'Xem Ads.lnk' ra Desktop, trỏ tới file .py này (không copy code)."""
+    script = os.path.abspath(__file__)
+    target = _pythonw()
+    args = '"%s"' % script
+    icon = ICON if (os.path.isfile(ICON) or _sinh_icon(ICON)) else ""
+    desc = "Xem chỉ số quảng cáo Facebook (offline)"
+
+    try:  # ưu tiên pywin32 (đã có sẵn trong venv)
+        import win32com.client  # type: ignore
+        shell = win32com.client.Dispatch("WScript.Shell")
+        desktop = shell.SpecialFolders("Desktop")
+        lnk = os.path.join(desktop, "Xem Ads.lnk")
+        sc = shell.CreateShortcut(lnk)
+        sc.TargetPath = target
+        sc.Arguments = args
+        sc.WorkingDirectory = HERE
+        sc.Description = desc
+        sc.WindowStyle = 1
+        if icon:
+            sc.IconLocation = icon
+        sc.Save()
+    except ImportError:
+        # Không có pywin32 -> dùng PowerShell; lấy Desktop qua .NET.
+        import ctypes
+        from ctypes import wintypes
+        buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(0, 0, 0, 0, buf)  # CSIDL_DESKTOP=0
+        lnk = os.path.join(buf.value or os.path.expanduser("~/Desktop"), "Xem Ads.lnk")
+        _tao_lnk_powershell(lnk, target, args, HERE, icon, desc)
+
+    print("Đã tạo shortcut:", lnk)
+    print("  Trỏ tới     :", script, "(sửa code ở đây là áp dụng ngay)")
+    if icon:
+        print("  Icon        :", icon)
+
+
 def main():
+    # Tạo shortcut ra Desktop rồi thoát.
+    if len(sys.argv) > 1 and sys.argv[1].lstrip("-/").lower() in ("tao-shortcut", "shortcut"):
+        tao_shortcut()
+        return
+
     if not os.path.isfile(TEMPLATE):
         print("[Lỗi] Không tìm thấy index.html cạnh file này."); return
 
