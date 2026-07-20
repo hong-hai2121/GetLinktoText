@@ -20,10 +20,12 @@ import argparse
 import json
 import random
 import sqlite3
+import statistics
 import sys
+import time
 from datetime import datetime
 from itertools import combinations
-from math import comb
+from math import comb, sqrt
 from pathlib import Path
 
 import gap_stats
@@ -39,6 +41,86 @@ MODE_NAME = {
     "payout": "Tránh số đông",
 }
 DEFAULT_SETS = 1000
+
+
+# --------------------------------------------------------------------------- #
+# Mô hình "độ phổ biến" — ước lượng có bao nhiêu người CÙNG đánh một số / một bộ
+# --------------------------------------------------------------------------- #
+# Dùng cho chế độ "Tránh số đông" (payout): bốc theo NGHỊCH ĐẢO độ phổ biến.
+#
+# KHÔNG làm tăng xác suất trúng. Vietlott chia Jackpot cho những người cùng trúng,
+# nên bộ số ít người đánh chỉ giúp PHẢI CHIA ÍT HƠN khi đã trúng.
+#
+# Cơ sở: nghiên cứu hành vi chọn số (Cambridge JDM, UPenn) cho thấy người chơi dồn
+# vào ngày sinh 1–31, tháng 1–12, và né số tận cùng 0/9.
+# CẢNH BÁO: các hệ số theo đuôi 8/6/4 là GIẢ ĐỊNH thói quen VN (phát/lộc/tử),
+# KHÔNG lấy từ nghiên cứu — Vietlott không công bố dữ liệu vé bán ra nên không thể
+# kiểm chứng. Sửa ở đây nếu bạn có số liệu thật.
+#
+# ĐỒNG BỘ: bản JS trong stats_web.py (popOfNumber/popOfSet/isCrowdedSet) phải giống
+# hệt các hệ số dưới đây, nếu không bảng xếp hạng DB sẽ lệch với trang web.
+POP_BIRTHDAY = 1.60      # x <= 31: ngày sinh — yếu tố mạnh nhất
+POP_MONTH = 1.25         # x <= 12: thêm nữa vì còn là tháng
+POP_TAIL = {0: 0.85, 9: 0.85, 8: 1.15, 6: 1.08, 4: 0.92}
+POP_SET_ALL_BIRTHDAY = 2.2   # cả 6 số <= 31
+POP_SET_CONSECUTIVE = 1.25   # mỗi cặp liên tiếp
+POP_SET_ARITHMETIC = 3.0     # cấp số cộng đều (1-8-15-22-29-36)
+POP_SET_ONE_DECADE = 1.8     # cả 6 số cùng một hàng chục
+POP_SET_SAME_TAIL = 1.5      # >= 4 số cùng đuôi
+# Chỉ chỉnh trọng số từng số là KHÔNG ĐỦ: ràng buộc "điển hình" (passes) bóp chặt
+# tới mức chế độ payout gần như trùng với balanced. Nên bốc thêm ở MỨC BỘ: sinh
+# POP_TOURNAMENT bộ ứng viên rồi giữ bộ ít phổ biến nhất.
+POP_WEIGHT_EXP = 1.5         # làm sắc trọng số nghịch đảo: (1/pop)^exp
+POP_TOURNAMENT = 5           # số ứng viên mỗi lần bốc, giữ bộ pop thấp nhất
+
+
+def pop_of_number(x: int) -> float:
+    """Độ phổ biến của 1 số: >1 = nhiều người đánh, <1 = ít người đánh."""
+    p = 1.0
+    if x <= 31:
+        p *= POP_BIRTHDAY
+    if x <= 12:
+        p *= POP_MONTH
+    p *= POP_TAIL.get(x % 10, 1.0)
+    if x == 13:
+        p *= 0.90
+    return p
+
+
+def _is_arithmetic(s: list[int]) -> bool:
+    step = s[1] - s[0]
+    return step > 0 and all(s[i] - s[i - 1] == step for i in range(1, len(s)))
+
+
+def pop_of_set(s: list[int]) -> float:
+    """Độ phổ biến của cả bộ: trung bình từng số, nhân thêm phạt các dạng hay gặp."""
+    p = sum(pop_of_number(x) for x in s) / len(s)
+    if all(x <= 31 for x in s):
+        p *= POP_SET_ALL_BIRTHDAY
+    cons = sum(1 for i in range(len(s) - 1) if s[i + 1] == s[i] + 1)
+    if cons:
+        p *= POP_SET_CONSECUTIVE ** cons
+    if _is_arithmetic(s):
+        p *= POP_SET_ARITHMETIC
+    if len({(x - 1) // 10 for x in s}) == 1:
+        p *= POP_SET_ONE_DECADE
+    tails: dict[int, int] = {}
+    for x in s:
+        tails[x % 10] = tails.get(x % 10, 0) + 1
+    if max(tails.values()) >= 4:
+        p *= POP_SET_SAME_TAIL
+    return p
+
+
+def is_crowded_set(s: list[int]) -> bool:
+    """Dạng bộ đông người đánh nhất — chế độ payout loại thẳng."""
+    if all(x <= 31 for x in s):
+        return True
+    if _is_arithmetic(s):
+        return True
+    if len({(x - 1) // 10 for x in s}) == 1:
+        return True
+    return False
 
 
 # --------------------------------------------------------------------------- #
@@ -75,7 +157,59 @@ def init_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_predsets_batch ON prediction_sets(batch_id)"
     )
+    # Kết quả đã chấm, chỉ giữ SỐ ĐẾM theo mức trùng (c0..c6) — không giữ từng vé.
+    # 1 batch 5000 vé thu lại còn 5 dòng. prediction_sets chỉ còn dùng để CHỜ chấm:
+    # sinh trước khi kỳ mới về (bằng chứng đã chốt), chấm xong là xoá.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prediction_stats (
+            batch_id INTEGER NOT NULL,
+            method   TEXT    NOT NULL,
+            n_sets   INTEGER NOT NULL,
+            c0 INTEGER NOT NULL DEFAULT 0,
+            c1 INTEGER NOT NULL DEFAULT 0,
+            c2 INTEGER NOT NULL DEFAULT 0,
+            c3 INTEGER NOT NULL DEFAULT 0,
+            c4 INTEGER NOT NULL DEFAULT 0,
+            c5 INTEGER NOT NULL DEFAULT 0,
+            c6 INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (batch_id, method)
+        )
+        """
+    )
     conn.commit()
+
+
+_CCOLS = "c0,c1,c2,c3,c4,c5,c6"
+
+
+def _write_stats(
+    conn: sqlite3.Connection, batch_id: int, counts: dict[str, list[int]]
+) -> None:
+    """Ghi phân bố số trùng của 1 batch rồi vứt các vé chi tiết đi."""
+    conn.executemany(
+        f"INSERT OR REPLACE INTO prediction_stats (batch_id, method, n_sets, {_CCOLS}) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(batch_id, m, sum(c), *c) for m, c in counts.items()],
+    )
+    conn.execute("DELETE FROM prediction_sets WHERE batch_id=?", (batch_id,))
+
+
+def _derive(row: sqlite3.Row) -> dict:
+    """Từ c0..c6 suy ra các số liệu mà bảng xếp hạng cần."""
+    c = [row[f"c{k}"] for k in range(7)]
+    n = row["n_sets"] or sum(c)
+    total = sum(k * c[k] for k in range(7))
+    best = max((k for k in range(7) if c[k]), default=0)
+    return {
+        "n": n, "dist": c, "sum": total,
+        "avg": (total / n) if n else 0.0,
+        "hit3": c[3] + c[4] + c[5] + c[6],
+        "hit4": c[4] + c[5] + c[6],
+        "hit5": c[5] + c[6],
+        "hit6": c[6],
+        "best": best,
+    }
 
 
 def _connect(db_path: Path | str) -> sqlite3.Connection:
@@ -175,7 +309,8 @@ def _make_generator(method: str, prof: dict):
         if method == "gan":
             return gap[x] + 1
         if method == "payout":
-            return 3 if x > 31 else 1
+            # càng ít người đánh càng dễ được bốc
+            return (1.0 / pop_of_number(x)) ** POP_WEIGHT_EXP
         return 1  # balanced (và seed cho pairs)
 
     def sample_weighted() -> list[int]:
@@ -233,7 +368,24 @@ def _make_generator(method: str, prof: dict):
         s.sort()
         return s
 
-    return gen_pair if method == "pairs" else sample_weighted
+    base = gen_pair if method == "pairs" else sample_weighted
+    if method != "payout":
+        return base
+
+    def gen_unpopular() -> list[int]:
+        """Bốc POP_TOURNAMENT bộ, giữ bộ ít người đánh nhất."""
+        best: list[int] | None = None
+        best_pop = 0.0
+        for _ in range(POP_TOURNAMENT):
+            s = base()
+            if len(s) != 6:
+                continue
+            p = pop_of_set(s)
+            if best is None or p < best_pop:
+                best, best_pop = s, p
+        return best if best is not None else base()
+
+    return gen_unpopular
 
 
 def passes(s: list[int], prof: dict) -> bool:
@@ -262,22 +414,33 @@ def generate_sets(method: str, prof: dict, k: int) -> list[list[int]]:
     out: list[list[int]] = []
     seen: set[tuple[int, ...]] = set()
     budget = k * 200
+    # Chế độ "tránh số đông" loại thêm các dạng bộ đông người đánh (toàn ngày sinh,
+    # cấp số cộng, cùng một hàng chục) — bỏ ở pha 3 để luôn đủ số lượng.
+    crowded = is_crowded_set if method == "payout" else (lambda s: False)
+
+    # Chống "cày không ra": chế độ pairs bốc tham lam nên số bộ DUY NHẤT nó sinh
+    # được có hạn (~vài nghìn). Khi k lớn, pha 1 sẽ quay vòng vô ích rất lâu —
+    # đếm số lần liên tiếp không ra bộ mới để thoát sớm sang pha 2.
+    stall, stall_max = 0, 20000
 
     tries = 0
-    while len(out) < k and tries < budget:  # pha 1: qua ràng buộc + không trùng
+    while len(out) < k and tries < budget and stall < stall_max:  # pha 1: qua ràng buộc + không trùng
         tries += 1
         s = gen()
-        if len(s) != 6 or not passes(s, prof):
+        if len(s) != 6 or not passes(s, prof) or crowded(s):
+            stall += 1
             continue
         key = tuple(s)
         if key in seen:
+            stall += 1
             continue
         seen.add(key)
         out.append(s)
+        stall = 0
     while len(out) < k and tries < budget * 2:  # pha 2: qua ràng buộc, cho trùng
         tries += 1
         s = gen()
-        if len(s) == 6 and passes(s, prof):
+        if len(s) == 6 and passes(s, prof) and not crowded(s):
             out.append(s)
     while len(out) < k and tries < budget * 3:  # pha 3: nới ràng buộc để đủ số lượng
         tries += 1
@@ -301,7 +464,12 @@ def generate(
     try:
         draws = gap_stats.fetch_draws(db_path, game_type=game_type)
         if len(draws) < 10:
-            return {"ok": False, "msg": f"Chưa đủ dữ liệu ({len(draws)} kỳ) để tạo dự đoán."}
+            return {
+                "ok": False,
+                "reason": "no_data",
+                "draws": len(draws),
+                "msg": f"Chưa đủ dữ liệu ({len(draws)} kỳ) để tạo dự đoán.",
+            }
         n = gap_stats.resolve_n(None, game_type)
 
         latest = _latest_draw(conn, game_type)
@@ -315,6 +483,10 @@ def generate(
         if existing and not force:
             return {
                 "ok": False,
+                "reason": "exists",
+                "batch_id": existing["id"],
+                "status": existing["status"],
+                "after_period": after_period,
                 "msg": (
                     f"Đã có dự đoán cho kỳ sau {after_period} (batch #{existing['id']}, "
                     f"{existing['status']}). Dùng --force nếu muốn tạo thêm."
@@ -374,17 +546,15 @@ def evaluate(db_path: Path | str, game_type: str | None = None) -> dict:
                 still_pending += 1
                 continue
             win = set(_row_numbers(target))
-            sets = conn.execute(
-                "SELECT id, numbers FROM prediction_sets WHERE batch_id=?",
+            counts: dict[str, list[int]] = {}
+            for r in conn.execute(
+                "SELECT method, numbers FROM prediction_sets WHERE batch_id=?",
                 (b["id"],),
-            ).fetchall()
-            updates = []
-            for r in sets:
+            ):
                 nums = [int(x) for x in r["numbers"].split(",")]
-                updates.append((sum(1 for x in nums if x in win), r["id"]))
-            conn.executemany(
-                "UPDATE prediction_sets SET matched=? WHERE id=?", updates
-            )
+                hit = sum(1 for x in nums if x in win)
+                counts.setdefault(r["method"], [0] * 7)[hit] += 1
+            _write_stats(conn, b["id"], counts)
             conn.execute(
                 """
                 UPDATE prediction_batches
@@ -402,6 +572,185 @@ def evaluate(db_path: Path | str, game_type: str | None = None) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Chạy lại lịch sử (backfill / walk-forward)
+# --------------------------------------------------------------------------- #
+def _fetch_draws_chrono(conn: sqlite3.Connection, game_type: str) -> list[dict]:
+    """Toàn bộ kỳ theo thứ tự CŨ -> MỚI, kèm kỳ/ngày (fetch_draws chỉ trả số)."""
+    rows = conn.execute(
+        """
+        SELECT draw_period, draw_date, num1, num2, num3, num4, num5, num6
+        FROM draw_results
+        WHERE game_type = ?
+        ORDER BY draw_date ASC, draw_period ASC
+        """,
+        (game_type,),
+    ).fetchall()
+    return [
+        {"period": r["draw_period"], "date": r["draw_date"], "nums": _row_numbers(r)}
+        for r in rows
+    ]
+
+
+def backfill(
+    db_path: Path | str,
+    game_type: str = "power655",
+    periods: int = 300,
+    n_sets: int = DEFAULT_SETS,
+    progress=None,
+) -> dict:
+    """Dựng bảng xếp hạng ngay từ lịch sử thay vì chờ từng kỳ mới về.
+
+    Với mỗi kỳ trong `periods` kỳ gần nhất: tính hồ sơ thống kê CHỈ từ các kỳ TRƯỚC
+    nó, sinh n_sets bộ mỗi chế độ, rồi chấm với chính kỳ đó. Không kỳ nào được nhìn
+    thấy kết quả của mình -> vẫn trung thực như chạy thật, chỉ nhanh hơn.
+
+    Idempotent: kỳ nào đã có batch (theo after_period) thì bỏ qua.
+    """
+    conn = _connect(db_path)
+    try:
+        chrono = _fetch_draws_chrono(conn, game_type)
+        total = len(chrono)
+        if total < 60:
+            return {"ok": False, "msg": f"Chỉ có {total} kỳ, không đủ để chạy lại."}
+        # chừa tối thiểu 50 kỳ làm lịch sử gốc cho kỳ đầu tiên được chấm
+        periods = max(1, min(periods, total - 50))
+        n = gap_stats.resolve_n(None, game_type)
+        start = total - periods
+
+        existing = {
+            r[0]
+            for r in conn.execute(
+                "SELECT after_period FROM prediction_batches WHERE game_type=?",
+                (game_type,),
+            )
+        }
+
+        done = skipped = 0
+        for i in range(start, total):
+            target, anchor = chrono[i], chrono[i - 1]
+            if anchor["period"] in existing:
+                skipped += 1
+                continue
+            hist = [d["nums"] for d in reversed(chrono[:i])]  # mới -> cũ
+            prof = compute_profile(hist, n)
+            win = set(target["nums"])
+
+            cur = conn.execute(
+                """
+                INSERT INTO prediction_batches
+                    (game_type, generated_at, after_period, after_date, n_sets,
+                     target_period, target_date, target_numbers, status)
+                VALUES (?,?,?,?,?,?,?,?, 'scored')
+                """,
+                (game_type, datetime.now().isoformat(timespec="seconds"),
+                 anchor["period"], anchor["date"], n_sets,
+                 target["period"], target["date"], json.dumps(sorted(win))),
+            )
+            batch_id = cur.lastrowid
+            # Chấm ngay trong bộ nhớ, chỉ ghi phân bố xuống DB.
+            counts: dict[str, list[int]] = {}
+            for method in METHODS:
+                c = [0] * 7
+                for s in generate_sets(method, prof, n_sets):
+                    c[sum(1 for x in s if x in win)] += 1
+                counts[method] = c
+            _write_stats(conn, batch_id, counts)
+            conn.commit()
+            done += 1
+            if progress:
+                progress(done, periods, target)
+
+        return {"ok": True, "done": done, "skipped": skipped, "periods": periods}
+    finally:
+        conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Móc nối tự động với crawl.py (cập nhật lịch sử)
+# --------------------------------------------------------------------------- #
+def auto_generate(
+    db_path: Path | str, game_types: list[str], n_sets: int = DEFAULT_SETS
+) -> list[str]:
+    """Gọi TRƯỚC khi cào: chốt 1000 bộ/chế độ dựa trên lịch sử hiện có.
+
+    Quan trọng: phải chạy trước khi kỳ mới được ghi vào DB thì bộ số mới thật sự
+    "mù" với kết quả sắp về. Nếu kỳ hiện tại đã có batch chờ thì giữ nguyên, không
+    tạo chồng — cào nhiều lần trong cùng một kỳ vẫn chỉ có 1 batch.
+    """
+    # Chi tra ve chuoi ASCII: crawl.py in ra console Windows (cp1252) nen chu co
+    # dau se lam vo tien trinh cao.
+    msgs = []
+    for game_type in game_types:
+        try:
+            res = generate(db_path, game_type, n_sets)
+        except Exception as exc:  # noqa: BLE001
+            msgs.append(f"{game_type}: khong tao duoc du doan ({type(exc).__name__}: {exc})")
+            continue
+        if res.get("ok"):
+            msgs.append(
+                f"{game_type}: da chot batch #{res['batch_id']} "
+                f"({res['n_sets']} bo x {len(METHODS)} che do) sau ky {res['after_period']}"
+            )
+        elif res.get("reason") == "exists":
+            msgs.append(
+                f"{game_type}: giu batch #{res['batch_id']} da chot cho ky sau "
+                f"{res['after_period']} ({res['status']}), khong tao chong"
+            )
+        elif res.get("reason") == "no_data":
+            msgs.append(
+                f"{game_type}: chua du du lieu ({res['draws']} ky) de chot bo so"
+            )
+        else:
+            msgs.append(f"{game_type}: bo qua")
+    return msgs
+
+
+def compact(db_path: Path | str) -> dict:
+    """Gom các batch ĐÃ CHẤM còn giữ vé chi tiết thành prediction_stats rồi xoá vé.
+
+    Dùng cho DB tạo bằng bản cũ (lưu từng vé). Batch đang 'pending' được giữ nguyên
+    vì vé của nó còn cần để chấm khi kỳ mới về.
+    """
+    conn = _connect(db_path)
+    try:
+        todo = [
+            r[0]
+            for r in conn.execute(
+                """
+                SELECT DISTINCT ps.batch_id
+                FROM prediction_sets ps
+                JOIN prediction_batches b ON b.id = ps.batch_id
+                WHERE b.status='scored'
+                """
+            )
+        ]
+        before = conn.execute("SELECT COUNT(*) FROM prediction_sets").fetchone()[0]
+        for batch_id in todo:
+            counts: dict[str, list[int]] = {}
+            for r in conn.execute(
+                "SELECT method, matched FROM prediction_sets WHERE batch_id=?",
+                (batch_id,),
+            ):
+                m = r["matched"]
+                if m is None or not (0 <= m <= 6):
+                    continue
+                counts.setdefault(r["method"], [0] * 7)[m] += 1
+            if counts:
+                _write_stats(conn, batch_id, counts)
+        conn.commit()
+        after = conn.execute("SELECT COUNT(*) FROM prediction_sets").fetchone()[0]
+        conn.execute("VACUUM")
+        return {"batches": len(todo), "rows_before": before, "rows_after": after}
+    finally:
+        conn.close()
+
+
+def auto_evaluate(db_path: Path | str) -> dict:
+    """Gọi SAU khi cào: chấm mọi batch đang chờ mà kỳ kế tiếp đã có kết quả thật."""
+    return evaluate(db_path)
+
+
+# --------------------------------------------------------------------------- #
 # Bảng xếp hạng
 # --------------------------------------------------------------------------- #
 def _baseline(n: int) -> dict:
@@ -412,6 +761,8 @@ def _baseline(n: int) -> dict:
     return {
         "avg": round(avg, 3),
         "hit3_rate": round(sum(prob[m] for m in range(3, 7)) * 100, 3),
+        # tỉ lệ % lý thuyết cho từng mức trùng 0..6 — để đối chiếu với thực tế
+        "pct": [round(prob[m] * 100, 4) for m in range(7)],
     }
 
 
@@ -428,32 +779,74 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             (game_type,),
         ).fetchone()[0]
 
-        agg = {
-            r["method"]: r
-            for r in conn.execute(
-                """
-                SELECT ps.method AS method,
-                       COUNT(*) AS sets,
-                       AVG(ps.matched) AS avg,
-                       SUM(ps.matched>=3) AS hit3,
-                       SUM(ps.matched>=4) AS hit4,
-                       SUM(ps.matched>=5) AS hit5,
-                       SUM(ps.matched>=6) AS hit6,
-                       MAX(ps.matched) AS best
-                FROM prediction_sets ps
-                JOIN prediction_batches b ON b.id = ps.batch_id
-                WHERE b.game_type=? AND b.status='scored'
-                GROUP BY ps.method
-                """,
-                (game_type,),
+        # Mọi số liệu đều suy ra từ prediction_stats (c0..c6) — không cần vé chi tiết.
+        agg: dict[str, dict] = {}
+        per_batch: dict[int, dict[str, float]] = {}
+        dist: dict[str, list[int]] = {k: [0] * 7 for k in METHODS}
+        for row in conn.execute(
+            f"""
+            SELECT ps.batch_id AS bid, ps.method AS method, ps.n_sets AS n_sets, {_CCOLS}
+            FROM prediction_stats ps
+            JOIN prediction_batches b ON b.id = ps.batch_id
+            WHERE b.game_type=? AND b.status='scored'
+            """,
+            (game_type,),
+        ):
+            d = _derive(row)
+            m = row["method"]
+            per_batch.setdefault(row["bid"], {})[m] = d["avg"]
+            a = agg.setdefault(
+                m, {"sets": 0, "sum": 0, "hit3": 0, "hit4": 0, "hit5": 0, "hit6": 0, "best": 0}
             )
-        }
+            a["sets"] += d["n"]
+            a["sum"] += d["sum"]
+            for k in ("hit3", "hit4", "hit5", "hit6"):
+                a[k] += d[k]
+            a["best"] = max(a["best"], d["best"])
+            if m in dist:
+                for k in range(7):
+                    dist[m][k] += d["dist"][k]
+        for a in agg.values():
+            a["avg"] = a["sum"] / a["sets"] if a["sets"] else 0.0
+
+        wins = {key: 0.0 for key in METHODS}
+        for per in per_batch.values():
+            if not per:
+                continue
+            top = max(per.values())
+            winners = [k for k, v in per.items() if v == top]
+            for k in winners:
+                wins[k] = wins.get(k, 0.0) + 1.0 / len(winners)
+
+        # Kiểm định: mỗi KỲ là 1 quan sát độc lập (1000 vé trong cùng kỳ dùng chung
+        # một kết quả nên KHÔNG độc lập với nhau — coi 300.000 vé là 300.000 quan sát
+        # sẽ thổi phồng ý nghĩa thống kê lên hàng chục lần).
+        # t = (TB thực − kỳ vọng lý thuyết) / sai số chuẩn giữa các kỳ.
+        base_avg = 6 * 6 / n
+        stats_by_method: dict[str, dict] = {}
+        for key in METHODS:
+            vals = [p[key] for p in per_batch.values() if key in p]
+            if len(vals) < 3:
+                continue
+            mean = sum(vals) / len(vals)
+            sd = statistics.stdev(vals)
+            se = sd / sqrt(len(vals)) if sd > 0 else 0.0
+            t = (mean - base_avg) / se if se > 0 else 0.0
+            stats_by_method[key] = {
+                "sd": round(sd, 4),
+                "t": round(t, 2),
+                "periods": len(vals),
+                # ngưỡng 2.58 (p<0.01) thay vì 1.96: đang so 5 chế độ cùng lúc nên
+                # phải chặt hơn, không thì cứ 20 lần thử là có 1 cái "trúng" do may.
+                "beats_random": abs(t) > 2.58,
+            }
 
         methods = []
         for key in METHODS:
             r = agg.get(key)
             if not r or not r["sets"]:
-                methods.append({"key": key, "name": MODE_NAME[key], "sets": 0})
+                methods.append({"key": key, "name": MODE_NAME[key], "sets": 0,
+                                "wins": 0})
                 continue
             sets = r["sets"]
             methods.append({
@@ -465,6 +858,9 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
                 "hit5": r["hit5"], "hit6": r["hit6"],
                 "hit3_rate": round(r["hit3"] / sets * 100, 2),
                 "best": r["best"],
+                "wins": round(wins.get(key, 0.0), 2),
+                "dist": dist[key],
+                **stats_by_method.get(key, {}),
             })
         # xếp hạng: chế độ có dữ liệu, TB trùng cao lên trước
         methods.sort(key=lambda m: (m["sets"] == 0, -(m.get("avg") or 0)))
@@ -475,17 +871,12 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             SELECT id, target_period, target_date, target_numbers
             FROM prediction_batches
             WHERE game_type=? AND status='scored'
-            ORDER BY target_date DESC, id DESC LIMIT 8
+            ORDER BY target_date DESC, id DESC LIMIT 30
             """,
             (game_type,),
         ):
             per = {
-                row["method"]: round(row["avg"], 3)
-                for row in conn.execute(
-                    "SELECT method, AVG(matched) AS avg FROM prediction_sets "
-                    "WHERE batch_id=? GROUP BY method",
-                    (b["id"],),
-                )
+                m: round(v, 3) for m, v in per_batch.get(b["id"], {}).items()
             }
             recent.append({
                 "period": b["target_period"],
@@ -517,13 +908,14 @@ def _print_board(db_path: Path | str, game_type: str) -> None:
     print(f"Đã chấm {sb['scored_batches']} kỳ · đang chờ {sb['pending']} kỳ")
     print(f"Ngẫu nhiên lý thuyết: TB {sb['baseline']['avg']} số trùng/vé · "
           f"≥3 số {sb['baseline']['hit3_rate']}%\n")
-    print(f"{'Chế độ':<20}{'Vé':>8}{'TB':>8}{'≥3':>7}{'≥4':>6}{'≥5':>5}{'6':>4}{'Tốt':>5}")
-    print("-" * 63)
+    print(f"{'Chế độ':<20}{'Vé':>8}{'TB':>8}{'Thắng kỳ':>10}"
+          f"{'≥3':>7}{'≥4':>6}{'≥5':>5}{'6':>4}{'Tốt':>5}")
+    print("-" * 73)
     for m in sb["methods"]:
         if not m.get("sets"):
             print(f"{m['name']:<20}{'—':>8}{'(chưa có dữ liệu)':>40}")
             continue
-        print(f"{m['name']:<20}{m['sets']:>8}{m['avg']:>8.3f}"
+        print(f"{m['name']:<20}{m['sets']:>8}{m['avg']:>8.3f}{m['wins']:>10}"
               f"{m['hit3']:>7}{m['hit4']:>6}{m['hit5']:>5}{m['hit6']:>4}{m['best']:>5}")
     print()
 
@@ -545,6 +937,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     b = sub.add_parser("board", help="In bảng xếp hạng.")
     b.add_argument("--game", default="power655")
+
+    bf = sub.add_parser(
+        "backfill",
+        help="Chạy lại N kỳ lịch sử gần nhất để có bảng xếp hạng ngay (không chờ kỳ mới).",
+    )
+    bf.add_argument("--game", default="power655")
+    bf.add_argument("--periods", type=int, default=300, help="Số kỳ gần nhất (mặc định 300).")
+    bf.add_argument("-n", "--sets", type=int, default=DEFAULT_SETS)
+
+    sub.add_parser(
+        "compact",
+        help="Gom vé chi tiết của các kỳ đã chấm thành số liệu rồi xoá vé (thu nhỏ DB).",
+    )
     return p
 
 
@@ -575,6 +980,32 @@ def main() -> int:
         print(f"Đã chấm {ev['scored']} kỳ · còn {ev['still_pending']} kỳ đang chờ kết quả.")
         return 0
     if args.cmd == "board":
+        _print_board(args.db, args.game)
+        return 0
+    if args.cmd == "compact":
+        res = compact(args.db)
+        print(f"Đã gom {res['batches']} kỳ · vé chi tiết {res['rows_before']:,} → "
+              f"{res['rows_after']:,} dòng.")
+        return 0
+    if args.cmd == "backfill":
+        t0 = time.time()
+
+        def show(done: int, total: int, target: dict) -> None:
+            if done == 1 or done % 10 == 0 or done == total:
+                el = time.time() - t0
+                eta = el / done * (total - done)
+                print(f"  [{done}/{total}] kỳ {target['period']} ({target['date']}) "
+                      f"· đã {el/60:.1f} phút · còn ~{eta/60:.1f} phút", flush=True)
+
+        print(f"Chạy lại {args.periods} kỳ gần nhất, {args.sets} bộ/chế độ "
+              f"({args.sets*len(METHODS):,} vé/kỳ)…", flush=True)
+        res = backfill(args.db, args.game, args.periods, args.sets, progress=show)
+        if not res["ok"]:
+            print(res["msg"])
+            return 1
+        print(f"\nXong: chấm {res['done']} kỳ"
+              + (f", bỏ qua {res['skipped']} kỳ đã có sẵn" if res["skipped"] else "")
+              + f" · tổng {time.time()-t0:.0f}s.")
         _print_board(args.db, args.game)
         return 0
     return 1

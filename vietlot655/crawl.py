@@ -1139,6 +1139,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "already exists in the database."
         ),
     )
+    parser.add_argument(
+        "--predict-sets",
+        type=int,
+        default=1000,
+        help=(
+            "So bo so moi che do se chot TRUOC khi cao (backtest 5 giai thuat). "
+            "Dat 0 de tat."
+        ),
+    )
+    parser.add_argument(
+        "--no-predict",
+        dest="predict",
+        action="store_false",
+        default=True,
+        help="Khong chot bo so du doan va khong cham diem khi cao.",
+    )
     return parser
 
 
@@ -1161,6 +1177,27 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     try:
         conn = init_db(Path(args.db))
+
+        # Truoc khi cao: chot san 1000 bo/che do dua tren lich su HIEN CO.
+        # Phai lam truoc khi ky moi duoc ghi vao DB, nhu vay bo so hoan toan "mu"
+        # voi ket qua sap ve -> diem cham sau nay moi trung thuc.
+        if args.predict and args.predict_sets > 0:
+            try:
+                from predict_track import auto_generate
+
+                for message in auto_generate(
+                    Path(args.db),
+                    [config.game_type for config in selected_game_configs(args)],
+                    args.predict_sets,
+                ):
+                    print(f"Du doan: {message}", flush=True)
+            except Exception as predict_exc:  # noqa: BLE001
+                print(
+                    f"Canh bao: khong chot duoc bo so du doan: "
+                    f"{type(predict_exc).__name__}: {predict_exc}",
+                    flush=True,
+                )
+
         for config in selected_game_configs(args):
             game_args = build_game_args(args, config)
             print(
@@ -1222,6 +1259,32 @@ def main(argv: Iterable[str] | None = None) -> int:
                         f"{type(stats_exc).__name__}: {stats_exc}",
                         flush=True,
                     )
+
+                # Cao xong -> ky moi da nam trong DB, cham diem cac batch dang cho.
+                # Ket qua tich luy vao prediction_sets.matched de xep hang che do.
+                if args.predict:
+                    try:
+                        from predict_track import auto_evaluate
+
+                        result = auto_evaluate(Path(args.db))
+                        if result["scored"]:
+                            print(
+                                f"Da cham diem {result['scored']} ky du doan "
+                                f"(con {result['still_pending']} ky dang cho ket qua).",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                f"Chua co ky moi de cham diem "
+                                f"({result['still_pending']} ky dang cho ket qua).",
+                                flush=True,
+                            )
+                    except Exception as predict_exc:  # noqa: BLE001
+                        print(
+                            f"Canh bao: khong cham diem duoc du doan: "
+                            f"{type(predict_exc).__name__}: {predict_exc}",
+                            flush=True,
+                        )
             else:
                 save_file_log_only(
                     status=status,

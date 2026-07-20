@@ -502,6 +502,23 @@ def compute_algo_picks(
     ]
 
 
+def compute_track(db_path: Path | str, game_type: str) -> dict | None:
+    """Bảng xếp hạng 5 giải thuật trên KẾT QUẢ THẬT đã tích luỹ trong DB.
+
+    Bộ số được crawl.py chốt trước mỗi lần cập nhật lịch sử (bảng
+    prediction_batches / prediction_sets), rồi chấm điểm khi kỳ mới về. Ở đây chỉ
+    đọc ra — có gọi evaluate() một lần cho chắc, phòng khi DB được cập nhật bằng
+    đường khác. Thiếu bảng / lỗi thì trả None và trang vẫn chạy bình thường.
+    """
+    try:
+        import predict_track
+
+        predict_track.evaluate(db_path, game_type)
+        return predict_track.load_scoreboard(db_path, game_type)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def load_game_data(
     conn: sqlite3.Connection, db_path: Path | str, game_type: str
 ) -> dict:
@@ -583,7 +600,8 @@ def load_game_data(
                 "max": s["max_value"],
                 "mode": s["mode_value"],
                 "mean": round(s["mean_value"], 2),
-                "values": values_by_pos.get(pos, []),
+                # "values" (phân bố đầy đủ từng vị trí) đã bỏ: mục hiển thị không còn,
+                # chỉ min/max còn được sugEngine dùng làm ràng buộc sinh số.
             }
         )
 
@@ -597,6 +615,7 @@ def load_game_data(
         "extra": compute_extra_stats(db_path, game_type),
         "algos": compute_algo_picks(db_path, game_type),
         "tests": compute_tests(db_path, game_type),
+        "track": compute_track(db_path, game_type),
     }
 
 
@@ -668,6 +687,7 @@ def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
         "extra": extra,
         "algos": None,
         "tests": None,
+        "track": compute_track(db_path, game_type),
     }
 
 
@@ -764,6 +784,7 @@ HTML_TEMPLATE = r"""<!doctype html>
   .sugnote li{margin:3px 0}
   .sugnote b{color:var(--text)}
   .sugnote .wl{color:var(--warn);display:block;margin-top:8px}
+  #trackBody .wl{color:var(--warn);display:block;margin-top:8px}
   .sugctl{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;margin-bottom:8px}
   .sugctl label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
   .sugctl select,.sugctl input{background:var(--surface);border:1px solid var(--border);
@@ -809,7 +830,7 @@ HTML_TEMPLATE = r"""<!doctype html>
   .wset .chip{width:24px;height:24px;font-size:11px}
   .chip.win{background:var(--good)}
   .wmore{align-self:center;color:var(--muted);font-size:11.5px}
-  #btSets{width:100%;min-height:120px;max-height:280px;margin-top:6px;resize:vertical;
+  #btSets,#sugSets{width:100%;min-height:120px;max-height:280px;margin-top:6px;resize:vertical;
     background:var(--surface);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;
     font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
@@ -879,14 +900,17 @@ HTML_TEMPLATE = r"""<!doctype html>
           <option value="payout">Tránh số đông</option>
         </select>
       </label>
-      <label>Số bộ
-        <select id="sugCount"><option>3</option><option selected>5</option><option>10</option></select>
-      </label>
+      <label>Số bộ<input id="sugCount" type="text" inputmode="numeric" value="5"
+        style="width:78px" title="1–5000 · trên 20 bộ là chế độ bội số"></label>
       <label>Khoá số<input id="sugLock" type="text" inputmode="numeric" placeholder="vd: 7 22"></label>
       <label>Loại số<input id="sugExcl" type="text" inputmode="numeric" placeholder="vd: 13"></label>
       <button class="btn" id="genBtn" type="button">🎲 Tạo</button>
     </div>
     <div class="pc warn" id="sugMsg"></div>
+    <div class="pc" id="sugStat"></div>
+    <details id="sugSetsWrap" style="margin-top:6px"><summary>Xem &amp; chép toàn bộ bội số</summary>
+      <textarea id="sugSets" readonly placeholder="Nhập số bộ &gt; 20 rồi bấm Tạo"></textarea>
+    </details>
     <div class="sugwrap">
       <div class="sugleft"><div id="suggestList"></div></div>
       <div class="sugnote" id="sugNote"></div>
@@ -910,6 +934,12 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div id="btBody"></div>
   </div>
 
+  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">dữ liệu thật, tích luỹ trong DB · mỗi lần cập nhật lịch sử: chốt 1000 bộ/giải thuật TRƯỚC, kỳ mới về thì tự chấm</span></h2>
+  <div class="panel" id="trackPanel" style="max-width:1000px">
+    <div class="pc" id="trackStatus"></div>
+    <div id="trackBody"></div>
+  </div>
+
   <h2>Mô phỏng: cần tạo bao nhiêu bộ để trúng? <span class="hint">nhập 6 số kết quả — máy tạo vé ngẫu nhiên liên tục tới khi trùng</span></h2>
   <div class="panel" id="simPanel" style="max-width:680px">
     <div class="simrow">
@@ -924,9 +954,6 @@ HTML_TEMPLATE = r"""<!doctype html>
   </div>
 
   <!--LOWER_START-->
-  <h2>Phân bố theo vị trí <span class="hint">mỗi kỳ sort tăng dần x1 ≤ … ≤ x6 · giá trị nào hay là xN</span></h2>
-  <div class="grid6" id="positions"></div>
-
   <h2>Tần suất từng số <span class="hint">số lần mỗi số đã về</span>
     <button class="btn" id="freqSort" type="button" style="margin-left:10px">Sắp theo: số</button>
   </h2>
@@ -1132,24 +1159,9 @@ function render(){
     mk('Số về nhiều nhất', hot ? (hot.number+' · '+hot.count+' lần') : '—') +
     mk('Lâu chưa về nhất', cold ? (cold.number+' · '+cold.gap+' kỳ') : '—');
 
-  // positions x1..x6 (bỏ ở trang rút gọn -> #positions có thể không tồn tại)
-  const pos = document.getElementById('positions');
-  if(pos){
-    pos.innerHTML = '';
-    for(const p of g.positions){
-      const panel = document.createElement('div');
-      panel.className = 'panel';
-      panel.innerHTML =
-        `<div class="pt">${esc(p.name)}</div>`+
-        `<div class="pc">dao động ${p.min}–${p.max} · hay gặp ${p.mode} · TB ${p.mean}</div>`+
-        `<div class="chart"></div>`;
-      pos.appendChild(panel);
-      columnChart(panel.querySelector('.chart'),
-        p.values.map(v=>({label:v.value, value:v.occ})),
-        {W:360, H:200, labelMax:true, softNonMax:true, labelEvery:5,
-         tipTitle:d=>('giá trị '+esc(d.label))});
-    }
-  }
+  // Mục "Phân bố theo vị trí" đã bỏ khỏi trang. Dữ liệu g.positions VẪN được giữ
+  // trong payload vì sugEngine dùng min/max từng vị trí làm ràng buộc sinh số —
+  // bỏ đi thì bộ số trên web sẽ khác với predict_track.py sinh cho DB.
 
   renderFreq();
 
@@ -1169,6 +1181,7 @@ function render(){
   renderPairs();
   renderSuggest();
   renderBacktest();
+  renderTrack();
   renderSim();
   renderAlgos();
 
@@ -1317,12 +1330,66 @@ function sugInputs(){
   const parse = id => (document.getElementById(id).value.match(/\d+/g)||[]).map(Number);
   return {
     mode: document.getElementById('sugMode').value,
-    count: parseInt(document.getElementById('sugCount').value,10)||5,
+    count: Math.max(1, Math.min(parseInt(document.getElementById('sugCount').value,10)||5, 5000)),
     lock: parse('sugLock'),
     excl: parse('sugExcl'),
   };
 }
 function overlap(a,b){ let c=0; for(const x of a) if(b.includes(x)) c++; return c; }
+
+// --- Mô hình "độ phổ biến": ước lượng bao nhiêu người CÙNG đánh một số / một bộ ---
+// Dùng cho chế độ "Tránh số đông": bốc theo NGHỊCH ĐẢO độ phổ biến.
+// KHÔNG tăng xác suất trúng — Vietlott chia Jackpot cho những người cùng trúng, nên
+// bộ ít người đánh chỉ giúp PHẢI CHIA ÍT HƠN khi đã trúng.
+// Cơ sở: nghiên cứu hành vi chọn số (Cambridge JDM, UPenn) — người chơi dồn vào ngày
+// sinh 1–31, tháng 1–12, né số tận cùng 0/9. Hệ số theo đuôi 8/6/4 là GIẢ ĐỊNH thói
+// quen VN (phát/lộc/tử), không lấy từ nghiên cứu và không kiểm chứng được.
+// ĐỒNG BỘ: phải giống hệt pop_of_number/pop_of_set/is_crowded_set trong predict_track.py,
+// nếu không bảng xếp hạng đọc từ DB sẽ lệch với backtest chạy trên trang này.
+const POP_TAIL = {0:0.85, 9:0.85, 8:1.15, 6:1.08, 4:0.92};
+const POP_WEIGHT_EXP = 1.5, POP_TOURNAMENT = 5;
+function popOfNumber(x){
+  let p = 1;
+  if(x <= 31) p *= 1.60;               // ngày sinh — yếu tố mạnh nhất
+  if(x <= 12) p *= 1.25;               // tháng
+  p *= (POP_TAIL[x % 10] || 1);
+  if(x === 13) p *= 0.90;
+  return p;
+}
+function popIsArith(s){
+  const step = s[1]-s[0];
+  if(step <= 0) return false;
+  for(let i=1;i<s.length;i++) if(s[i]-s[i-1] !== step) return false;
+  return true;
+}
+function popOfSet(s){
+  let p = s.reduce((a,x)=>a+popOfNumber(x),0)/s.length;
+  if(s.every(x=>x<=31)) p *= 2.2;                        // bộ "toàn ngày sinh"
+  let cons=0; for(let i=0;i<s.length-1;i++) if(s[i+1]===s[i]+1) cons++;
+  if(cons) p *= Math.pow(1.25, cons);
+  if(popIsArith(s)) p *= 3.0;                            // cấp số cộng đều
+  if(new Set(s.map(x=>Math.floor((x-1)/10))).size === 1) p *= 1.8;
+  const tail={}; s.forEach(x=>{ tail[x%10]=(tail[x%10]||0)+1; });
+  if(Math.max.apply(null,Object.values(tail)) >= 4) p *= 1.5;
+  return p;
+}
+function isCrowdedSet(s){
+  if(s.every(x=>x<=31)) return true;
+  if(popIsArith(s)) return true;
+  if(new Set(s.map(x=>Math.floor((x-1)/10))).size === 1) return true;
+  return false;
+}
+// Bốc POP_TOURNAMENT bộ, giữ bộ ít người đánh nhất. Chỉ chỉnh trọng số từng số là
+// KHÔNG đủ — ràng buộc "điển hình" bóp tới mức payout gần trùng balanced.
+function popTournament(gen){
+  let best=null, bestP=0;
+  for(let i=0;i<POP_TOURNAMENT;i++){
+    const s=gen(); if(!s || s.length<6) continue;
+    const p=popOfSet(s);
+    if(best===null || p<bestP){ best=s; bestP=p; }
+  }
+  return best || gen();
+}
 
 function sugEngine(){
   const g = DATA[current], ex = g.extra, n = ex.n;
@@ -1367,17 +1434,24 @@ function sugEngine(){
   const weightOf = x => exclSet.has(x)?0:
     mode==='hot' ? (freq[x]?freq[x].count:0)+1 :
     mode==='gan' ? (freq[x]?freq[x].gap:0)+1 :
-    mode==='payout' ? (x>31?3:1) : 1;
+    mode==='payout' ? Math.pow(1/popOfNumber(x), POP_WEIGHT_EXP) : 1;
+  // Trọng số từng số KHÔNG đổi giữa các lần bốc -> tính sẵn 1 lần. Trước đây dựng lại
+  // mảng + gọi weightOf (có Math.pow ở chế độ payout) cho mỗi lần bốc, khiến sinh bội
+  // số 5000 bộ mất ~12s và đơ trình duyệt.
+  const W0 = new Float64Array(n+1);
+  for(let x=1;x<=n;x++) W0[x] = exclSet.has(x) ? 0 : weightOf(x);
   function sampleWeighted(){
-    const chosen=[...locked], used=new Set(chosen);
+    const chosen=[...locked], used=new Uint8Array(n+1);
+    for(const x of chosen) used[x]=1;
     while(chosen.length<6){
-      let tot=0; const w=new Array(n+1).fill(0);
-      for(let x=1;x<=n;x++){ if(used.has(x)||exclSet.has(x)) continue; w[x]=weightOf(x); tot+=w[x]; }
-      if(tot<=0){ const rem=[]; for(let x=1;x<=n;x++) if(!used.has(x)&&!exclSet.has(x)) rem.push(x);
-        if(!rem.length) break; const p=rem[Math.random()*rem.length|0]; chosen.push(p); used.add(p); continue; }
-      let r=Math.random()*tot, acc=0, pick=1;
-      for(let x=1;x<=n;x++){ acc+=w[x]; if(acc>=r){pick=x;break;} }
-      chosen.push(pick); used.add(pick);
+      let tot=0; for(let x=1;x<=n;x++) if(!used[x]) tot+=W0[x];
+      if(tot<=0){ const rem=[]; for(let x=1;x<=n;x++) if(!used[x]&&!exclSet.has(x)) rem.push(x);
+        if(!rem.length) break; const p=rem[Math.random()*rem.length|0]; chosen.push(p); used[p]=1; continue; }
+      let r=Math.random()*tot, acc=0, pick=-1;
+      for(let x=1;x<=n;x++){ if(used[x]) continue; acc+=W0[x]; if(acc>=r){pick=x;break;} }
+      if(pick<0){ for(let x=n;x>=1;x--) if(!used[x]&&W0[x]>0){ pick=x; break; } }
+      if(pick<0) break;
+      chosen.push(pick); used[pick]=1;
     }
     return chosen.sort((a,b)=>a-b);
   }
@@ -1398,26 +1472,48 @@ function sugEngine(){
     }
     return s.sort((a,b)=>a-b);
   }
-  const gen = mode==='pairs'? genPair : sampleWeighted;
+  const rawGen = mode==='pairs'? genPair : sampleWeighted;
+  // payout: bốc ở mức BỘ (giữ bộ ít người đánh nhất) + loại thẳng dạng đụng hàng nặng.
+  const gen = mode==='payout' ? (()=>popTournament(rawGen)) : rawGen;
+  const crowded = mode==='payout' ? isCrowdedSet : (()=>false);
 
-  const pool=[], seen=new Set(); let relaxed=false;
-  for(let t=0;t<9000 && pool.length<count*10; t++){
-    const s=gen(); if(s.length<6) continue;
-    const key=s.join(','); if(seen.has(key)) continue;
-    const m=score(s); if(!passes(m)) continue;
-    seen.add(key); pool.push(m);
+  // Bội số: ngân sách phải co giãn theo count, nếu không xin 1000 bộ sẽ chỉ ra vài chục.
+  const bulk = count > 20;
+  const poolTarget = bulk ? Math.ceil(count*1.4) : count*10;
+  const tries1 = Math.max(9000, count*40), tries2 = Math.max(4000, count*20);
+  // Chống "cày không ra": chế độ pairs bốc tham lam nên số bộ DUY NHẤT có hạn
+  // (~1.6k với 6/55); hết bộ mới thì thoát sớm thay vì quay vòng vô ích.
+  const STALL_MAX = 4000;
+
+  const pool=[], seen=new Set(); let relaxed=false, stall=0;
+  for(let t=0;t<tries1 && pool.length<poolTarget && stall<STALL_MAX; t++){
+    const s=gen(); if(!s||s.length<6){ stall++; continue; }
+    const key=s.join(','); if(seen.has(key)){ stall++; continue; }
+    if(crowded(s)){ stall++; continue; }
+    const m=score(s); if(!passes(m)){ stall++; continue; }
+    seen.add(key); pool.push(m); stall=0;
   }
-  if(pool.length<count){ relaxed=true;
-    for(let t=0;t<4000 && pool.length<count*6; t++){
-      const s=gen(); if(s.length<6) continue; const key=s.join(',');
-      if(seen.has(key)) continue; seen.add(key); pool.push(score(s));
+  if(pool.length<count){ relaxed=true; stall=0;
+    for(let t=0;t<tries2 && pool.length<count && stall<STALL_MAX; t++){
+      const s=gen(); if(!s||s.length<6){ stall++; continue; }
+      const key=s.join(',');
+      if(seen.has(key)){ stall++; continue; }
+      seen.add(key); pool.push(score(s)); stall=0;
     }
   }
   pool.sort((a,b)=>b.score-a.score);
-  const out=[];
-  for(const c of pool){ if(out.every(o=>overlap(o.set,c.set)<=4)){ out.push(c); if(out.length>=count) break; } }
-  for(let i=0;out.length<count&&i<pool.length;i++) if(!out.includes(pool[i])) out.push(pool[i]);
-  return {out:out.slice(0,count), relaxed, mode, locked, excl:[...exclSet]};
+  let out;
+  if(bulk){
+    // Với bội số, ràng buộc "khác nhau ≥2 số" là O(n²) và gần như bất khả thi —
+    // chỉ cần các bộ không trùng lặp (đã lọc bằng `seen`).
+    out = pool.slice(0, count);
+  }else{
+    out=[];
+    for(const c of pool){ if(out.every(o=>overlap(o.set,c.set)<=4)){ out.push(c); if(out.length>=count) break; } }
+    for(let i=0;out.length<count&&i<pool.length;i++) if(!out.includes(pool[i])) out.push(pool[i]);
+    out = out.slice(0,count);
+  }
+  return {out, relaxed, mode, locked, excl:[...exclSet], bulk, asked:count};
 }
 
 const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
@@ -1427,18 +1523,47 @@ function renderSuggest(){
   const panel = document.getElementById('sugPanel');
   if(!ex){ panel.style.display='none'; return; }
   panel.style.display='';
+  document.getElementById('sugCount').value = sugInputs().count;   // ghim lại 1–5000
   const res = sugEngine();
+  const SHOW = 50;                       // bội số: chỉ vẽ chip 50 bộ đầu cho nhẹ DOM
   let html='';
-  res.out.forEach((c,i)=>{
+  res.out.slice(0,SHOW).forEach((c,i)=>{
     html += '<div class="setrow"><span class="lbl">#'+(i+1)+'</span>'+
       c.set.map(x=>'<span class="chip'+(res.locked.includes(x)?' lock':'')+'">'+x+'</span>').join('')+
       '<span class="setmeta">điểm <b>'+c.score+'</b> · tổng '+c.sum+' · '+c.odd+' lẻ · '+
-      c.low+' thấp · '+c.cons+' liên tiếp · lặp '+c.rep+'</span></div>';
+      c.low+' thấp · '+c.cons+' liên tiếp · lặp '+c.rep+
+      ' · phổ biến <b>'+popOfSet(c.set).toFixed(2)+'</b></span></div>';
   });
+  if(res.out.length>SHOW)
+    html += '<div class="pc">… và '+(res.out.length-SHOW).toLocaleString('vi')+
+      ' bộ nữa — xem đủ ở ô "Xem &amp; chép toàn bộ bội số" phía trên.</div>';
   document.getElementById('suggestList').innerHTML = html ||
     '<div class="pc">Không tạo được bộ nào với khoá/loại số hiện tại.</div>';
+
+  // Ô văn bản + thống kê chỉ có ý nghĩa ở chế độ bội số.
+  const wrap = document.getElementById('sugSetsWrap');
+  const ta = document.getElementById('sugSets');
+  const stat = document.getElementById('sugStat');
+  if(res.bulk){
+    wrap.style.display='';
+    ta.value = res.out.map(c=>c.set.join(' ')).join('\n');
+    const uniq = new Set(res.out.map(c=>c.set.join(','))).size;
+    const pops = res.out.map(c=>popOfSet(c.set));
+    const avgPop = pops.reduce((a,b)=>a+b,0)/(pops.length||1);
+    const avgScore = res.out.reduce((a,c)=>a+c.score,0)/(res.out.length||1);
+    stat.innerHTML = 'Đã tạo <b>'+res.out.length.toLocaleString('vi')+'</b> bộ'+
+      (uniq<res.out.length ? ' (chỉ <b>'+uniq.toLocaleString('vi')+'</b> bộ khác nhau — '+
+        'chế độ này không bốc thêm được bộ mới)' : ' · tất cả khác nhau')+
+      ' · điểm điển hình TB <b>'+avgScore.toFixed(0)+'</b>'+
+      ' · độ phổ biến TB <b>'+avgPop.toFixed(2)+'</b> (thấp = ít người đánh trùng)'+
+      ' · tổng tiền <b>'+(res.out.length*10000).toLocaleString('vi')+'đ</b> nếu mua hết.';
+  }else{
+    wrap.style.display='none'; ta.value=''; stat.innerHTML='';
+  }
+
   document.getElementById('sugMsg').textContent = res.relaxed
-    ? '⚠ Ràng buộc quá chặt (khoá số?) — đã nới lỏng để đủ '+res.out.length+' bộ.' : '';
+    ? '⚠ Không đủ bộ qua ràng buộc (khoá số? số bộ quá lớn?) — đã nới lỏng để đủ '
+      +res.out.length+'/'+res.asked+' bộ.' : '';
 
   document.getElementById('sugNote').innerHTML =
     '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
@@ -1450,8 +1575,17 @@ function renderSuggest(){
     '<div style="margin-top:6px"><b>Chế độ '+MODE_NAME[res.mode]+':</b> '+
     ({balanced:'bốc đều, chỉ cần điển hình.',hot:'thiên số về nhiều.',
       gan:'thiên số lâu chưa về.',pairs:'ghép theo cặp hay đi cùng.',
-      payout:'ưu tiên số &gt;31, ít người đánh → nếu trúng ít bị chia giải.'}[res.mode])+'</div>'+
-    '<span class="wl">⚠ Không chế độ nào tăng xác suất trúng. "Tránh số đông" chỉ tối ưu tiền nhận khi trúng.</span>';
+      payout:'né số nhiều người đánh (ngày sinh 1–31, tháng 1–12, đuôi 8/6), '+
+             'ưu tiên đuôi 0/9 và số &gt;31; loại bộ toàn ngày sinh, cấp số cộng, '+
+             'cùng một hàng chục. Mỗi lần bốc '+POP_TOURNAMENT+' bộ rồi giữ bộ ít người đánh nhất.'
+    }[res.mode])+'</div>'+
+    (res.mode==='payout'
+      ? '<div style="margin-top:6px"><b>Độ phổ biến</b> = ước lượng mức đông người cùng đánh '+
+        '(1,0 ≈ trung bình; thấp hơn là tốt). Dựa trên nghiên cứu hành vi chọn số; phần '+
+        'đuôi 8/6/4 là <b>giả định thói quen VN</b>, Vietlott không công bố dữ liệu vé bán '+
+        'ra nên không kiểm chứng được.</div>' : '')+
+    '<span class="wl">⚠ Không chế độ nào tăng xác suất trúng. "Tránh số đông" KHÔNG giúp dễ '+
+    'trúng hơn — chỉ giảm khả năng phải chia giải với người khác khi đã trúng.</span>';
 }
 
 // --- So sánh 5 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
@@ -1468,7 +1602,7 @@ function btBuildGen(){
     for(let x=1;x<=n;x++) w[x] =
       mode==='hot'    ? (freq[x]?freq[x].count:0)+1 :
       mode==='gan'    ? (freq[x]?freq[x].gap:0)+1 :
-      mode==='payout' ? (x>31?3:1) : 1;
+      mode==='payout' ? Math.pow(1/popOfNumber(x), POP_WEIGHT_EXP) : 1;
     return w;
   }
   const W = {balanced:wArr('balanced'), hot:wArr('hot'), gan:wArr('gan'), payout:wArr('payout')};
@@ -1503,7 +1637,16 @@ function btBuildGen(){
     }
     return s.sort((a,b)=>a-b);
   }
-  const gen = mode => mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
+  // payout dùng cùng mô hình độ phổ biến như "Bộ số gợi ý": bốc ở mức BỘ rồi loại
+  // dạng đụng hàng nặng — để bội số backtest khớp với bội số đem đi chơi thật.
+  const gen = mode => {
+    if(mode === 'payout'){
+      let s, guard = 0;
+      do { s = popTournament(()=>sampleWeighted(W.payout)); } while(isCrowdedSet(s) && ++guard < 20);
+      return s;
+    }
+    return mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
+  };
   return {n, gen};
 }
 
@@ -1703,6 +1846,137 @@ function renderBacktest(){
     status.innerHTML = 'Chưa có bội số nào được lưu. Bấm <b>Tạo &amp; lưu</b> để tạo &amp; lưu bội số cho từng giải thuật '+
       '(lần sau mở lại vẫn còn để So sánh).';
   }
+}
+
+// --- Xếp hạng giải thuật trên KẾT QUẢ THẬT (đọc từ DB, do crawl.py chấm) ---
+function renderTrack(){
+  const panel = document.getElementById('trackPanel');
+  if(!panel) return;
+  const tr = DATA[current].track;
+  if(!tr){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const status = document.getElementById('trackStatus');
+  const body   = document.getElementById('trackBody');
+
+  if(!tr.scored_batches){
+    status.innerHTML = tr.pending
+      ? 'Đã chốt sẵn <b>'+tr.pending+'</b> kỳ bộ số, đang chờ kết quả. Khi kỳ tiếp theo về '+
+        'và bạn chạy <b>cập nhật lịch sử</b>, hệ thống tự chấm rồi bảng xếp hạng hiện ra đây.'
+      : 'Chưa có dữ liệu. Lần chạy <b>cập nhật lịch sử</b> (crawl.py) tới sẽ tự chốt '+
+        '1000 bộ/giải thuật cho kỳ sắp về, rồi tự chấm khi có kết quả.';
+    body.innerHTML='';
+    return;
+  }
+
+  // Cột mỗi giải thuật — tr.methods đã xếp sẵn theo TB trùng giảm dần.
+  const withData = tr.methods.filter(m=>m.sets);
+  const bestAvg  = Math.max.apply(null, withData.map(m=>m.avg));
+  const bestWins = Math.max.apply(null, withData.map(m=>m.wins));
+  let cols='';
+  tr.methods.forEach(m=>{
+    if(!m.sets){
+      cols += '<div class="btcol"><div class="nm"><span>'+esc(m.name)+'</span></div>'+
+        '<div class="k" style="margin-top:8px">chưa có dữ liệu</div></div>';
+      return;
+    }
+    const lead = m.avg === bestAvg;
+    cols += '<div class="btcol'+(lead?' lead':'')+'">'+
+      '<div class="nm"><span>'+esc(m.name)+'</span>'+(lead?'<span class="star">★</span>':'')+'</div>'+
+      '<div class="k">TB trùng / vé</div>'+
+      '<div class="big">'+m.avg.toFixed(3)+'</div>'+
+      '<div class="k" style="margin-top:4px">Thắng kỳ: <b>'+m.wins+
+        '</b>/'+tr.scored_batches+(m.wins===bestWins&&bestWins>0?' 🏆':'')+'</div>'+
+      '<div class="k">≥3: <b>'+m.hit3+'</b> · ≥4: <b>'+m.hit4+
+        '</b> · ≥5: <b>'+m.hit5+'</b> · 6: <b>'+m.hit6+'</b></div>'+
+      '<div class="k">Tốt nhất <b>'+m.best+'</b> số · '+m.sets.toLocaleString('vi')+' vé</div>'+
+      (m.t===undefined ? '' :
+        '<div class="k" style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'+
+        'Dao động giữa các kỳ <b>±'+m.sd.toFixed(3)+'</b><br>t = <b>'+m.t.toFixed(2)+'</b> · '+
+        (m.beats_random
+          ? '<span style="color:var(--good)">lệch khỏi ngẫu nhiên</span>'
+          : '<span style="color:var(--muted)">không khác ngẫu nhiên</span>')+'</div>')+
+    '</div>';
+  });
+
+  // Phân bố số trùng 0..6: so 5 chế độ với nhau VÀ với tỉ lệ lý thuyết. Đây là
+  // bảng trả lời thẳng "có chế độ nào lệch khỏi ngẫu nhiên không".
+  let distTbl='';
+  if(withData.length && withData[0].dist){
+    let head='<tr><th>Trùng</th><th>Lý thuyết</th>';
+    withData.forEach(m=> head += '<th>'+esc(m.name)+'</th>');
+    head += '</tr>';
+    let rows='';
+    for(let k=6;k>=0;k--){
+      const th = tr.baseline.pct ? tr.baseline.pct[k] : null;
+      rows += '<tr><td><b>'+k+' số</b></td><td style="color:var(--muted)">'+
+        (th===null?'—':(th<0.01? th.toFixed(4) : th.toFixed(2))+'%')+'</td>';
+      withData.forEach(m=>{
+        const c = m.dist[k], pct = m.sets ? c/m.sets*100 : 0;
+        // lệch so với lý thuyết: chỉ tô khi mức đó đủ vé để có ý nghĩa
+        const dev = (th!==null && th>0 && c>=20) ? (pct-th)/th : 0;
+        const col = dev>0.15 ? 'var(--good)' : dev<-0.15 ? 'var(--warn)' : '';
+        rows += '<td'+(col?' style="color:'+col+'"':'')+'>'+
+          c.toLocaleString('vi')+
+          '<div style="color:var(--muted);font-size:11px">'+
+          (pct<0.01 && c>0 ? pct.toFixed(4) : pct.toFixed(2))+'%</div></td>';
+      });
+      rows += '</tr>';
+    }
+    distTbl = '<details open style="margin-top:12px"><summary>Phân bố số trùng của '+
+      (tr.scored_batches*1).toLocaleString('vi')+' kỳ (số vé đạt từng mức · so với lý thuyết)</summary>'+
+      '<table><thead>'+head+'</thead><tbody>'+rows+'</tbody></table>'+
+      '<div class="pc" style="margin-top:6px">Cột <b>Lý thuyết</b> là tỉ lệ của vé bốc '+
+      'ngẫu nhiên hoàn toàn. Nếu một chế độ thật sự "đoán" được thì cột của nó phải cao '+
+      'hơn hẳn ở các mức 3–6 số một cách bền vững qua nhiều kỳ.</div></details>';
+  }
+
+  // Lịch sử từng kỳ: TB trùng của mỗi giải thuật, tô đậm giải thuật thắng kỳ đó.
+  let hist='';
+  if(tr.recent && tr.recent.length){
+    const keys = tr.methods.map(m=>m.key), names = {};
+    tr.methods.forEach(m=>names[m.key]=m.name);
+    let head = '<tr><th>Kỳ</th><th>Kết quả</th>';
+    keys.forEach(k=> head += '<th>'+esc(names[k])+'</th>');
+    head += '</tr>';
+    let rows='';
+    tr.recent.forEach(r=>{
+      const vals = keys.map(k=> (r.per_method && r.per_method[k]!=null) ? r.per_method[k] : null);
+      const top  = Math.max.apply(null, vals.filter(v=>v!=null));
+      rows += '<tr><td>'+esc(r.period||'—')+'<div style="color:var(--muted);font-size:11px">'+
+        esc(r.date||'')+'</div></td><td>'+(r.result||[]).join(' ')+'</td>'+
+        vals.map(v=> v==null ? '<td>—</td>'
+          : '<td'+(v===top?' style="font-weight:650;color:var(--good)"':'')+'>'+
+            v.toFixed(3)+'</td>').join('')+'</tr>';
+    });
+    hist = '<details style="margin-top:12px"><summary>TB trùng từng kỳ — '+
+      tr.recent.length+' kỳ gần nhất (giải thuật thắng kỳ tô xanh)</summary>'+
+      '<table><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></details>';
+  }
+
+  // Kết luận thẳng: có chế độ nào thật sự vượt ngẫu nhiên không.
+  const beat = withData.filter(m=>m.beats_random);
+  const verdict = !withData.length || withData[0].t===undefined ? ''
+    : beat.length
+      ? '<div class="banner" style="margin-top:10px">⚑ <b>'+
+        beat.map(m=>esc(m.name)).join(', ')+'</b> đang lệch khỏi ngẫu nhiên (t vượt 2,58). '+
+        'Đáng xem tiếp — nhưng hãy chạy thêm kỳ trước khi tin, và kiểm tra xem có lỗi '+
+        'rò rỉ kết quả trong cách sinh số không.</div>'
+      : '<div class="banner" style="margin-top:10px">✓ Sau <b>'+tr.scored_batches+
+        '</b> kỳ: <b>không chế độ nào</b> vượt ngẫu nhiên. Chế độ dẫn đầu bảng chỉ đang '+
+        'gặp may — chênh lệch nằm trong sai số. Đúng như lý thuyết: kỳ vọng mỗi vé luôn '+
+        'là 6×6/'+DATA[current].extra.n+' = <b>'+tr.baseline.avg+'</b> số trùng, '+
+        '<b>bất kể chọn số nào</b>.</div>';
+
+  status.innerHTML = 'Đã chấm <b>'+tr.scored_batches+'</b> kỳ thật'+
+    (tr.pending?' · đang chờ <b>'+tr.pending+'</b> kỳ':'')+
+    ' · ngẫu nhiên lý thuyết TB <b>'+tr.baseline.avg+'</b> số trùng/vé.';
+  body.innerHTML = '<div class="btgrid">'+cols+'</div>'+ verdict + distTbl + hist +
+    '<div class="pc" style="margin-top:10px">Khác với bảng ở trên (bộ số lưu trong trình duyệt), '+
+    'bảng này dùng <b>bộ số đã chốt trong DB trước khi kỳ mới về</b> nên không thể "nhìn trước kết quả". '+
+    '<b>TB trùng/vé</b> = trung bình số trùng trên toàn bộ vé đã chấm; <b>Thắng kỳ</b> = số kỳ giải thuật đó '+
+    'có TB cao nhất (hoà thì chia đôi). '+
+    '<span class="wl">⚠ Cần vài chục kỳ chênh lệch mới có ý nghĩa — ít kỳ thì thứ hạng chủ yếu là nhiễu, '+
+    'và không giải thuật nào làm tăng xác suất trúng.</span></div>';
 }
 
 function renderAlgos(){

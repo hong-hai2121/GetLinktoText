@@ -73,6 +73,7 @@
   .sugnote li{margin:3px 0}
   .sugnote b{color:var(--text)}
   .sugnote .wl{color:var(--warn);display:block;margin-top:8px}
+  #trackBody .wl{color:var(--warn);display:block;margin-top:8px}
   .sugctl{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;margin-bottom:8px}
   .sugctl label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
   .sugctl select,.sugctl input{background:var(--surface);border:1px solid var(--border);
@@ -118,7 +119,7 @@
   .wset .chip{width:24px;height:24px;font-size:11px}
   .chip.win{background:var(--good)}
   .wmore{align-self:center;color:var(--muted);font-size:11.5px}
-  #btSets{width:100%;min-height:120px;max-height:280px;margin-top:6px;resize:vertical;
+  #btSets,#sugSets{width:100%;min-height:120px;max-height:280px;margin-top:6px;resize:vertical;
     background:var(--surface);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;
     font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
@@ -188,14 +189,17 @@
           <option value="payout">Tránh số đông</option>
         </select>
       </label>
-      <label>Số bộ
-        <select id="sugCount"><option>3</option><option selected>5</option><option>10</option></select>
-      </label>
+      <label>Số bộ<input id="sugCount" type="text" inputmode="numeric" value="5"
+        style="width:78px" title="1–5000 · trên 20 bộ là chế độ bội số"></label>
       <label>Khoá số<input id="sugLock" type="text" inputmode="numeric" placeholder="vd: 7 22"></label>
       <label>Loại số<input id="sugExcl" type="text" inputmode="numeric" placeholder="vd: 13"></label>
       <button class="btn" id="genBtn" type="button">🎲 Tạo</button>
     </div>
     <div class="pc warn" id="sugMsg"></div>
+    <div class="pc" id="sugStat"></div>
+    <details id="sugSetsWrap" style="margin-top:6px"><summary>Xem &amp; chép toàn bộ bội số</summary>
+      <textarea id="sugSets" readonly placeholder="Nhập số bộ &gt; 20 rồi bấm Tạo"></textarea>
+    </details>
     <div class="sugwrap">
       <div class="sugleft"><div id="suggestList"></div></div>
       <div class="sugnote" id="sugNote"></div>
@@ -219,6 +223,12 @@
     <div id="btBody"></div>
   </div>
 
+  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">dữ liệu thật, tích luỹ trong DB · mỗi lần cập nhật lịch sử: chốt 1000 bộ/giải thuật TRƯỚC, kỳ mới về thì tự chấm</span></h2>
+  <div class="panel" id="trackPanel" style="max-width:1000px">
+    <div class="pc" id="trackStatus"></div>
+    <div id="trackBody"></div>
+  </div>
+
   <h2>Mô phỏng: cần tạo bao nhiêu bộ để trúng? <span class="hint">nhập 6 số kết quả — máy tạo vé ngẫu nhiên liên tục tới khi trùng</span></h2>
   <div class="panel" id="simPanel" style="max-width:680px">
     <div class="simrow">
@@ -233,9 +243,6 @@
   </div>
 
   <!--LOWER_START-->
-  <h2>Phân bố theo vị trí <span class="hint">mỗi kỳ sort tăng dần x1 ≤ … ≤ x6 · giá trị nào hay là xN</span></h2>
-  <div class="grid6" id="positions"></div>
-
   <h2>Tần suất từng số <span class="hint">số lần mỗi số đã về</span>
     <button class="btn" id="freqSort" type="button" style="margin-left:10px">Sắp theo: số</button>
   </h2>
@@ -300,8 +307,8 @@
 <div id="tip"></div>
 
 <script>
-const DATA = [{"game_type": "power655", "total_draws": 1372, "positions": [{"position": 1, "name": "x1 · nhỏ nhất", "min": 1, "max": 37, "mode": 1, "mean": 8.22, "values": [{"value": 1, "occ": 155}, {"value": 2, "occ": 116}, {"value": 3, "occ": 131}, {"value": 4, "occ": 99}, {"value": 5, "occ": 104}, {"value": 6, "occ": 77}, {"value": 7, "occ": 68}, {"value": 8, "occ": 80}, {"value": 9, "occ": 70}, {"value": 10, "occ": 54}, {"value": 11, "occ": 53}, {"value": 12, "occ": 61}, {"value": 13, "occ": 47}, {"value": 14, "occ": 38}, {"value": 15, "occ": 27}, {"value": 16, "occ": 30}, {"value": 17, "occ": 20}, {"value": 18, "occ": 26}, {"value": 19, "occ": 21}, {"value": 20, "occ": 16}, {"value": 21, "occ": 12}, {"value": 22, "occ": 18}, {"value": 23, "occ": 13}, {"value": 24, "occ": 7}, {"value": 25, "occ": 3}, {"value": 26, "occ": 4}, {"value": 27, "occ": 5}, {"value": 28, "occ": 1}, {"value": 29, "occ": 4}, {"value": 30, "occ": 3}, {"value": 31, "occ": 3}, {"value": 32, "occ": 1}, {"value": 33, "occ": 2}, {"value": 34, "occ": 2}, {"value": 35, "occ": 0}, {"value": 36, "occ": 0}, {"value": 37, "occ": 1}]}, {"position": 2, "name": "x2", "min": 2, "max": 47, "mode": 11, "mean": 16.25, "values": [{"value": 2, "occ": 17}, {"value": 3, "occ": 24}, {"value": 4, "occ": 22}, {"value": 5, "occ": 42}, {"value": 6, "occ": 43}, {"value": 7, "occ": 50}, {"value": 8, "occ": 64}, {"value": 9, "occ": 66}, {"value": 10, "occ": 65}, {"value": 11, "occ": 81}, {"value": 12, "occ": 58}, {"value": 13, "occ": 61}, {"value": 14, "occ": 59}, {"value": 15, "occ": 55}, {"value": 16, "occ": 55}, {"value": 17, "occ": 57}, {"value": 18, "occ": 59}, {"value": 19, "occ": 48}, {"value": 20, "occ": 48}, {"value": 21, "occ": 40}, {"value": 22, "occ": 45}, {"value": 23, "occ": 44}, {"value": 24, "occ": 41}, {"value": 25, "occ": 33}, {"value": 26, "occ": 22}, {"value": 27, "occ": 22}, {"value": 28, "occ": 20}, {"value": 29, "occ": 15}, {"value": 30, "occ": 16}, {"value": 31, "occ": 23}, {"value": 32, "occ": 16}, {"value": 33, "occ": 12}, {"value": 34, "occ": 12}, {"value": 35, "occ": 7}, {"value": 36, "occ": 11}, {"value": 37, "occ": 3}, {"value": 38, "occ": 5}, {"value": 39, "occ": 4}, {"value": 40, "occ": 2}, {"value": 41, "occ": 2}, {"value": 42, "occ": 0}, {"value": 43, "occ": 1}, {"value": 44, "occ": 0}, {"value": 45, "occ": 0}, {"value": 46, "occ": 1}, {"value": 47, "occ": 1}]}, {"position": 3, "name": "x3", "min": 3, "max": 51, "mode": 29, "mean": 24.5, "values": [{"value": 3, "occ": 3}, {"value": 4, "occ": 2}, {"value": 5, "occ": 4}, {"value": 6, "occ": 11}, {"value": 7, "occ": 14}, {"value": 8, "occ": 18}, {"value": 9, "occ": 19}, {"value": 10, "occ": 21}, {"value": 11, "occ": 21}, {"value": 12, "occ": 34}, {"value": 13, "occ": 26}, {"value": 14, "occ": 35}, {"value": 15, "occ": 39}, {"value": 16, "occ": 46}, {"value": 17, "occ": 39}, {"value": 18, "occ": 42}, {"value": 19, "occ": 56}, {"value": 20, "occ": 50}, {"value": 21, "occ": 56}, {"value": 22, "occ": 61}, {"value": 23, "occ": 52}, {"value": 24, "occ": 60}, {"value": 25, "occ": 44}, {"value": 26, "occ": 51}, {"value": 27, "occ": 41}, {"value": 28, "occ": 43}, {"value": 29, "occ": 64}, {"value": 30, "occ": 34}, {"value": 31, "occ": 46}, {"value": 32, "occ": 59}, {"value": 33, "occ": 48}, {"value": 34, "occ": 32}, {"value": 35, "occ": 29}, {"value": 36, "occ": 32}, {"value": 37, "occ": 17}, {"value": 38, "occ": 28}, {"value": 39, "occ": 19}, {"value": 40, "occ": 14}, {"value": 41, "occ": 15}, {"value": 42, "occ": 15}, {"value": 43, "occ": 4}, {"value": 44, "occ": 5}, {"value": 45, "occ": 12}, {"value": 46, "occ": 2}, {"value": 47, "occ": 2}, {"value": 48, "occ": 3}, {"value": 49, "occ": 1}, {"value": 50, "occ": 2}, {"value": 51, "occ": 1}]}, {"position": 4, "name": "x4", "min": 7, "max": 52, "mode": 34, "mean": 32.38, "values": [{"value": 7, "occ": 1}, {"value": 8, "occ": 3}, {"value": 9, "occ": 1}, {"value": 10, "occ": 3}, {"value": 11, "occ": 2}, {"value": 12, "occ": 2}, {"value": 13, "occ": 16}, {"value": 14, "occ": 7}, {"value": 15, "occ": 10}, {"value": 16, "occ": 13}, {"value": 17, "occ": 21}, {"value": 18, "occ": 23}, {"value": 19, "occ": 17}, {"value": 20, "occ": 33}, {"value": 21, "occ": 34}, {"value": 22, "occ": 41}, {"value": 23, "occ": 37}, {"value": 24, "occ": 35}, {"value": 25, "occ": 41}, {"value": 26, "occ": 43}, {"value": 27, "occ": 40}, {"value": 28, "occ": 48}, {"value": 29, "occ": 50}, {"value": 30, "occ": 52}, {"value": 31, "occ": 48}, {"value": 32, "occ": 54}, {"value": 33, "occ": 45}, {"value": 34, "occ": 64}, {"value": 35, "occ": 45}, {"value": 36, "occ": 46}, {"value": 37, "occ": 61}, {"value": 38, "occ": 38}, {"value": 39, "occ": 47}, {"value": 40, "occ": 44}, {"value": 41, "occ": 55}, {"value": 42, "occ": 46}, {"value": 43, "occ": 54}, {"value": 44, "occ": 30}, {"value": 45, "occ": 27}, {"value": 46, "occ": 26}, {"value": 47, "occ": 22}, {"value": 48, "occ": 16}, {"value": 49, "occ": 7}, {"value": 50, "occ": 8}, {"value": 51, "occ": 11}, {"value": 52, "occ": 5}]}, {"position": 5, "name": "x5", "min": 9, "max": 54, "mode": 47, "mean": 40.35, "values": [{"value": 9, "occ": 1}, {"value": 10, "occ": 0}, {"value": 11, "occ": 0}, {"value": 12, "occ": 0}, {"value": 13, "occ": 1}, {"value": 14, "occ": 2}, {"value": 15, "occ": 1}, {"value": 16, "occ": 1}, {"value": 17, "occ": 3}, {"value": 18, "occ": 4}, {"value": 19, "occ": 3}, {"value": 20, "occ": 5}, {"value": 21, "occ": 6}, {"value": 22, "occ": 9}, {"value": 23, "occ": 10}, {"value": 24, "occ": 10}, {"value": 25, "occ": 17}, {"value": 26, "occ": 21}, {"value": 27, "occ": 22}, {"value": 28, "occ": 11}, {"value": 29, "occ": 28}, {"value": 30, "occ": 32}, {"value": 31, "occ": 26}, {"value": 32, "occ": 29}, {"value": 33, "occ": 42}, {"value": 34, "occ": 48}, {"value": 35, "occ": 43}, {"value": 36, "occ": 37}, {"value": 37, "occ": 39}, {"value": 38, "occ": 56}, {"value": 39, "occ": 60}, {"value": 40, "occ": 60}, {"value": 41, "occ": 66}, {"value": 42, "occ": 58}, {"value": 43, "occ": 63}, {"value": 44, "occ": 65}, {"value": 45, "occ": 63}, {"value": 46, "occ": 67}, {"value": 47, "occ": 69}, {"value": 48, "occ": 58}, {"value": 49, "occ": 59}, {"value": 50, "occ": 47}, {"value": 51, "occ": 50}, {"value": 52, "occ": 41}, {"value": 53, "occ": 28}, {"value": 54, "occ": 11}]}, {"position": 6, "name": "x6 · lớn nhất", "min": 17, "max": 55, "mode": 55, "mean": 47.95, "values": [{"value": 17, "occ": 1}, {"value": 18, "occ": 0}, {"value": 19, "occ": 1}, {"value": 20, "occ": 2}, {"value": 21, "occ": 1}, {"value": 22, "occ": 1}, {"value": 23, "occ": 3}, {"value": 24, "occ": 1}, {"value": 25, "occ": 0}, {"value": 26, "occ": 5}, {"value": 27, "occ": 6}, {"value": 28, "occ": 3}, {"value": 29, "occ": 5}, {"value": 30, "occ": 7}, {"value": 31, "occ": 4}, {"value": 32, "occ": 7}, {"value": 33, "occ": 9}, {"value": 34, "occ": 10}, {"value": 35, "occ": 15}, {"value": 36, "occ": 14}, {"value": 37, "occ": 9}, {"value": 38, "occ": 19}, {"value": 39, "occ": 19}, {"value": 40, "occ": 35}, {"value": 41, "occ": 34}, {"value": 42, "occ": 37}, {"value": 43, "occ": 42}, {"value": 44, "occ": 56}, {"value": 45, "occ": 41}, {"value": 46, "occ": 56}, {"value": 47, "occ": 62}, {"value": 48, "occ": 82}, {"value": 49, "occ": 81}, {"value": 50, "occ": 82}, {"value": 51, "occ": 107}, {"value": 52, "occ": 103}, {"value": 53, "occ": 134}, {"value": 54, "occ": 127}, {"value": 55, "occ": 151}]}], "frequency": [{"number": 1, "count": 155, "current_streak": 0, "max_streak": 2, "gap": 9}, {"number": 2, "count": 133, "current_streak": 0, "max_streak": 3, "gap": 3}, {"number": 3, "count": 158, "current_streak": 0, "max_streak": 3, "gap": 9}, {"number": 4, "count": 123, "current_streak": 0, "max_streak": 3, "gap": 4}, {"number": 5, "count": 150, "current_streak": 0, "max_streak": 3, "gap": 6}, {"number": 6, "count": 131, "current_streak": 0, "max_streak": 2, "gap": 4}, {"number": 7, "count": 133, "current_streak": 0, "max_streak": 3, "gap": 8}, {"number": 8, "count": 165, "current_streak": 0, "max_streak": 3, "gap": 9}, {"number": 9, "count": 157, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 10, "count": 143, "current_streak": 0, "max_streak": 2, "gap": 1}, {"number": 11, "count": 157, "current_streak": 0, "max_streak": 3, "gap": 6}, {"number": 12, "count": 155, "current_streak": 0, "max_streak": 2, "gap": 25}, {"number": 13, "count": 151, "current_streak": 0, "max_streak": 4, "gap": 5}, {"number": 14, "count": 141, "current_streak": 0, "max_streak": 2, "gap": 3}, {"number": 15, "count": 132, "current_streak": 0, "max_streak": 3, "gap": 5}, {"number": 16, "count": 145, "current_streak": 0, "max_streak": 2, "gap": 8}, {"number": 17, "count": 141, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 18, "count": 154, "current_streak": 0, "max_streak": 2, "gap": 5}, {"number": 19, "count": 146, "current_streak": 1, "max_streak": 3, "gap": 0}, {"number": 20, "count": 154, "current_streak": 1, "max_streak": 3, "gap": 0}, {"number": 21, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 8}, {"number": 22, "count": 175, "current_streak": 0, "max_streak": 4, "gap": 7}, {"number": 23, "count": 159, "current_streak": 0, "max_streak": 2, "gap": 5}, {"number": 24, "count": 154, "current_streak": 0, "max_streak": 3, "gap": 1}, {"number": 25, "count": 138, "current_streak": 0, "max_streak": 4, "gap": 4}, {"number": 26, "count": 146, "current_streak": 0, "max_streak": 4, "gap": 11}, {"number": 27, "count": 136, "current_streak": 0, "max_streak": 2, "gap": 16}, {"number": 28, "count": 126, "current_streak": 0, "max_streak": 2, "gap": 6}, {"number": 29, "count": 166, "current_streak": 0, "max_streak": 3, "gap": 18}, {"number": 30, "count": 144, "current_streak": 0, "max_streak": 4, "gap": 1}, {"number": 31, "count": 150, "current_streak": 0, "max_streak": 3, "gap": 5}, {"number": 32, "count": 166, "current_streak": 0, "max_streak": 3, "gap": 4}, {"number": 33, "count": 158, "current_streak": 1, "max_streak": 2, "gap": 0}, {"number": 34, "count": 168, "current_streak": 0, "max_streak": 3, "gap": 6}, {"number": 35, "count": 139, "current_streak": 0, "max_streak": 3, "gap": 1}, {"number": 36, "count": 140, "current_streak": 0, "max_streak": 3, "gap": 14}, {"number": 37, "count": 130, "current_streak": 0, "max_streak": 3, "gap": 17}, {"number": 38, "count": 146, "current_streak": 0, "max_streak": 3, "gap": 10}, {"number": 39, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 17}, {"number": 40, "count": 155, "current_streak": 0, "max_streak": 5, "gap": 10}, {"number": 41, "count": 172, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 42, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 43, "count": 164, "current_streak": 0, "max_streak": 4, "gap": 5}, {"number": 44, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 4}, {"number": 45, "count": 143, "current_streak": 2, "max_streak": 2, "gap": 0}, {"number": 46, "count": 152, "current_streak": 0, "max_streak": 3, "gap": 10}, {"number": 47, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 14}, {"number": 48, "count": 159, "current_streak": 1, "max_streak": 2, "gap": 0}, {"number": 49, "count": 148, "current_streak": 0, "max_streak": 3, "gap": 3}, {"number": 50, "count": 139, "current_streak": 0, "max_streak": 2, "gap": 30}, {"number": 51, "count": 169, "current_streak": 0, "max_streak": 3, "gap": 1}, {"number": 52, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 8}, {"number": 53, "count": 162, "current_streak": 1, "max_streak": 4, "gap": 0}, {"number": 54, "count": 138, "current_streak": 0, "max_streak": 3, "gap": 44}, {"number": 55, "count": 151, "current_streak": 0, "max_streak": 3, "gap": 9}], "streaks": [{"length": 1, "occ": 6529}, {"length": 2, "occ": 703}, {"length": 3, "occ": 88}, {"length": 4, "occ": 7}, {"length": 5, "occ": 1}], "gaps": {"N": 1372, "expected_gap": 8.0, "expected_range": 40.0, "per_position": [{"label": "g1 (x1→x2)", "mean": 8.036, "std": 6.554}, {"label": "g2 (x2→x3)", "mean": 8.25, "std": 6.589}, {"label": "g3 (x3→x4)", "mean": 7.878, "std": 6.291}, {"label": "g4 (x4→x5)", "mean": 7.966, "std": 6.362}, {"label": "g5 (x5→x6)", "mean": 7.604, "std": 6.157}], "gbar": 7.9469, "gstd": 6.396, "range_bar": 39.735, "range_std": 8.502, "range_min": 13, "range_max": 54, "rel_diff": 0.66, "ok": true}, "extra": {"total": 1372, "n": 55, "low_max": 27, "recent_n": 30, "latest": [19, 20, 33, 45, 48, 53], "sum": {"bins": [{"label": "45", "range": "45–59", "occ": 2}, {"label": "60", "range": "60–74", "occ": 6}, {"label": "75", "range": "75–89", "occ": 16}, {"label": "90", "range": "90–104", "occ": 41}, {"label": "105", "range": "105–119", "occ": 65}, {"label": "120", "range": "120–134", "occ": 110}, {"label": "135", "range": "135–149", "occ": 168}, {"label": "150", "range": "150–164", "occ": 197}, {"label": "165", "range": "165–179", "occ": 208}, {"label": "180", "range": "180–194", "occ": 190}, {"label": "195", "range": "195–209", "occ": 163}, {"label": "210", "range": "210–224", "occ": 116}, {"label": "225", "range": "225–239", "occ": 57}, {"label": "240", "range": "240–254", "occ": 23}, {"label": "255", "range": "255–269", "occ": 7}, {"label": "270", "range": "270–284", "occ": 2}, {"label": "285", "range": "285–299", "occ": 1}], "mean": 169.7, "p10": 121, "p90": 217, "min": 52, "max": 288}, "odd": [8, 89, 342, 458, 323, 132, 20], "low": [17, 134, 376, 422, 307, 95, 21], "decade": [{"label": "1-9", "occ": 1305}, {"label": "10-19", "occ": 1465}, {"label": "20-29", "occ": 1503}, {"label": "30-39", "occ": 1490}, {"label": "40-49", "occ": 1561}, {"label": "50-55", "occ": 908}], "consecutive": [{"label": "0", "occ": 772}, {"label": "1", "occ": 491}, {"label": "2", "occ": 92}, {"label": "3", "occ": 17}], "with_consec": 600, "last_digit": [{"label": "0", "occ": 735}, {"label": "1", "occ": 952}, {"label": "2", "occ": 934}, {"label": "3", "occ": 952}, {"label": "4", "occ": 880}, {"label": "5", "occ": 853}, {"label": "6", "occ": 714}, {"label": "7", "occ": 696}, {"label": "8", "occ": 750}, {"label": "9", "occ": 766}], "repeat_prev": [{"label": "0", "occ": 673}, {"label": "1", "occ": 514}, {"label": "2", "occ": 163}, {"label": "3", "occ": 20}, {"label": "4", "occ": 1}, {"label": "5", "occ": 0}, {"label": "6", "occ": 0}], "repeat_mean": 0.66, "exp_rest": 9.2, "overdue": [{"number": 54, "gap": 44, "rest": 9.7}, {"number": 50, "gap": 30, "rest": 9.7}, {"number": 12, "gap": 25, "rest": 8.7}, {"number": 29, "gap": 18, "rest": 8.1}, {"number": 37, "gap": 17, "rest": 10.4}, {"number": 39, "gap": 17, "rest": 9.1}, {"number": 27, "gap": 16, "rest": 10.0}, {"number": 36, "gap": 14, "rest": 9.7}, {"number": 47, "gap": 14, "rest": 8.7}, {"number": 26, "gap": 11, "rest": 9.3}, {"number": 38, "gap": 10, "rest": 9.4}, {"number": 40, "gap": 10, "rest": 8.8}], "hot": [{"number": 8, "count": 7}, {"number": 1, "count": 6}, {"number": 28, "count": 6}, {"number": 2, "count": 5}, {"number": 16, "count": 5}, {"number": 20, "count": 5}, {"number": 23, "count": 5}, {"number": 32, "count": 5}, {"number": 39, "count": 5}, {"number": 3, "count": 4}, {"number": 5, "count": 4}, {"number": 11, "count": 4}], "pairs": [{"a": 3, "b": 41, "count": 28}, {"a": 11, "b": 22, "count": 28}, {"a": 22, "b": 43, "count": 26}, {"a": 8, "b": 34, "count": 25}, {"a": 8, "b": 39, "count": 25}, {"a": 9, "b": 54, "count": 25}, {"a": 18, "b": 22, "count": 25}, {"a": 32, "b": 33, "count": 25}, {"a": 38, "b": 55, "count": 25}, {"a": 39, "b": 53, "count": 25}, {"a": 42, "b": 51, "count": 25}, {"a": 12, "b": 44, "count": 24}, {"a": 12, "b": 48, "count": 24}, {"a": 12, "b": 52, "count": 24}, {"a": 22, "b": 47, "count": 24}], "exp_pair": 13.9, "cooc": [[0, 17, 17, 12, 15, 12, 16, 16, 14, 13, 14, 10, 14, 17, 10, 8, 12, 14, 9, 22, 17, 15, 17, 16, 15, 15, 12, 14, 12, 14, 13, 6, 11, 20, 13, 12, 13, 17, 10, 19, 15, 17, 19, 21, 15, 16, 12, 18, 14, 18, 17, 8, 15, 11, 16], [17, 0, 13, 7, 12, 15, 13, 15, 9, 13, 12, 8, 16, 13, 15, 13, 14, 9, 17, 15, 14, 13, 15, 11, 11, 13, 16, 9, 9, 15, 13, 15, 15, 16, 15, 10, 7, 15, 12, 6, 15, 13, 7, 10, 11, 13, 11, 11, 6, 14, 12, 13, 10, 11, 12], [17, 13, 0, 7, 12, 14, 14, 13, 23, 15, 15, 17, 12, 18, 18, 14, 11, 11, 14, 13, 16, 14, 13, 10, 18, 16, 7, 7, 14, 14, 15, 16, 18, 20, 16, 15, 15, 13, 14, 18, 28, 13, 13, 21, 12, 12, 14, 13, 17, 13, 14, 15, 10, 20, 15], [12, 7, 7, 0, 11, 16, 14, 17, 7, 10, 7, 13, 11, 12, 12, 12, 12, 15, 11, 13, 9, 14, 10, 12, 14, 11, 10, 6, 9, 16, 11, 13, 9, 9, 16, 7, 8, 10, 12, 15, 15, 14, 8, 17, 12, 9, 14, 8, 10, 13, 11, 11, 13, 7, 13], [15, 12, 12, 11, 0, 8, 14, 16, 16, 15, 22, 12, 10, 13, 8, 13, 16, 14, 15, 17, 11, 18, 11, 15, 9, 13, 15, 14, 18, 15, 14, 14, 9, 15, 11, 11, 19, 11, 16, 15, 8, 22, 21, 14, 18, 16, 15, 12, 17, 13, 14, 10, 16, 13, 8], [12, 15, 14, 16, 8, 0, 10, 17, 11, 18, 6, 7, 13, 7, 9, 17, 14, 13, 9, 10, 12, 12, 12, 12, 11, 11, 14, 7, 18, 14, 12, 15, 13, 20, 11, 7, 10, 14, 13, 11, 16, 5, 13, 14, 8, 11, 12, 14, 14, 11, 14, 10, 13, 10, 15], [16, 13, 14, 14, 14, 10, 0, 15, 13, 12, 12, 11, 19, 5, 6, 10, 15, 14, 10, 8, 13, 20, 11, 10, 7, 19, 7, 11, 18, 13, 18, 16, 10, 10, 12, 10, 12, 14, 8, 9, 10, 17, 15, 11, 10, 12, 12, 11, 11, 10, 17, 11, 12, 12, 15], [16, 15, 13, 17, 16, 17, 15, 0, 18, 10, 14, 13, 12, 8, 10, 16, 15, 15, 19, 21, 15, 15, 17, 20, 14, 10, 15, 13, 10, 12, 10, 15, 12, 25, 17, 21, 16, 16, 25, 12, 16, 17, 20, 21, 11, 12, 21, 14, 16, 18, 18, 12, 13, 12, 14], [14, 9, 23, 7, 16, 11, 13, 18, 0, 10, 9, 15, 22, 8, 15, 18, 16, 13, 14, 21, 22, 20, 20, 10, 14, 19, 11, 10, 9, 9, 14, 14, 18, 17, 11, 14, 11, 10, 14, 11, 17, 13, 18, 20, 14, 11, 9, 12, 16, 21, 15, 13, 19, 25, 12], [13, 13, 15, 10, 15, 18, 12, 10, 10, 0, 18, 10, 12, 11, 13, 15, 18, 9, 18, 13, 10, 10, 16, 13, 15, 13, 13, 10, 23, 17, 10, 16, 8, 15, 11, 12, 12, 16, 7, 16, 15, 10, 11, 15, 11, 12, 14, 21, 10, 13, 16, 13, 12, 14, 12], [14, 12, 15, 7, 22, 6, 12, 14, 9, 18, 0, 16, 15, 22, 15, 13, 14, 13, 13, 15, 15, 28, 13, 18, 12, 21, 12, 17, 14, 13, 17, 20, 14, 22, 13, 6, 10, 14, 8, 16, 17, 17, 18, 12, 11, 16, 14, 20, 10, 9, 18, 12, 14, 15, 14], [10, 8, 17, 13, 12, 7, 11, 13, 15, 10, 16, 0, 9, 11, 10, 10, 8, 15, 15, 11, 14, 18, 15, 17, 20, 17, 12, 20, 18, 14, 12, 15, 23, 15, 8, 6, 9, 10, 19, 21, 16, 12, 18, 24, 10, 16, 16, 24, 8, 9, 23, 24, 20, 13, 18], [14, 16, 12, 11, 10, 13, 19, 12, 22, 12, 15, 9, 0, 13, 10, 11, 10, 20, 8, 11, 17, 14, 20, 11, 6, 14, 16, 15, 15, 21, 8, 19, 15, 11, 16, 18, 4, 14, 10, 17, 17, 19, 18, 15, 15, 11, 12, 15, 16, 9, 12, 15, 18, 16, 18], [17, 13, 18, 12, 13, 7, 5, 8, 8, 11, 22, 11, 13, 0, 16, 7, 14, 15, 13, 11, 14, 13, 18, 13, 8, 15, 20, 10, 16, 10, 11, 13, 15, 11, 16, 12, 14, 12, 7, 15, 16, 10, 15, 15, 10, 13, 19, 13, 20, 14, 12, 10, 15, 11, 15], [10, 15, 18, 12, 8, 9, 6, 10, 15, 13, 15, 10, 10, 16, 0, 13, 7, 15, 11, 10, 18, 14, 16, 14, 15, 17, 12, 9, 16, 9, 16, 17, 12, 15, 11, 8, 8, 8, 9, 13, 11, 12, 17, 12, 15, 12, 8, 17, 13, 8, 13, 9, 13, 10, 10], [8, 13, 14, 12, 13, 17, 10, 16, 18, 15, 13, 10, 11, 7, 13, 0, 19, 13, 11, 13, 12, 17, 14, 9, 10, 14, 13, 12, 23, 21, 12, 13, 19, 16, 10, 11, 17, 15, 19, 14, 14, 15, 19, 11, 7, 13, 13, 11, 13, 9, 20, 15, 9, 7, 12], [12, 14, 11, 12, 16, 14, 15, 15, 16, 18, 14, 8, 10, 14, 7, 19, 0, 10, 11, 14, 13, 12, 11, 15, 13, 10, 14, 13, 12, 11, 18, 9, 13, 16, 12, 12, 12, 13, 14, 16, 19, 15, 7, 11, 9, 16, 9, 13, 16, 16, 16, 15, 16, 8, 10], [14, 9, 11, 15, 14, 13, 14, 15, 13, 9, 13, 15, 20, 15, 15, 13, 10, 0, 10, 21, 13, 25, 11, 14, 16, 15, 13, 13, 18, 15, 12, 20, 13, 15, 17, 9, 11, 10, 13, 16, 19, 10, 18, 15, 14, 19, 14, 12, 19, 17, 14, 13, 19, 11, 8], [9, 17, 14, 11, 15, 9, 10, 19, 14, 18, 13, 15, 8, 13, 11, 11, 11, 10, 0, 18, 13, 12, 15, 13, 12, 7, 11, 14, 16, 16, 14, 14, 11, 23, 12, 13, 9, 13, 16, 13, 17, 19, 15, 14, 14, 16, 17, 14, 12, 6, 18, 8, 17, 16, 14], [22, 15, 13, 13, 17, 10, 8, 21, 21, 13, 15, 11, 11, 11, 10, 13, 14, 21, 18, 0, 15, 15, 10, 18, 12, 14, 21, 12, 12, 12, 14, 11, 18, 15, 8, 22, 10, 14, 13, 10, 20, 11, 16, 13, 15, 10, 18, 9, 14, 12, 23, 16, 17, 13, 10], [17, 14, 16, 9, 11, 12, 13, 15, 22, 10, 15, 14, 17, 14, 18, 12, 13, 13, 13, 15, 0, 12, 16, 18, 10, 21, 10, 7, 15, 15, 15, 15, 13, 13, 11, 10, 9, 11, 12, 19, 20, 12, 14, 14, 5, 11, 11, 18, 11, 15, 18, 19, 19, 7, 16], [15, 13, 14, 14, 18, 12, 20, 15, 20, 10, 28, 18, 14, 13, 14, 17, 12, 25, 12, 15, 12, 0, 13, 11, 20, 15, 12, 18, 17, 15, 17, 20, 16, 15, 15, 6, 16, 20, 19, 20, 15, 15, 26, 16, 10, 20, 24, 21, 18, 10, 21, 13, 19, 17, 14], [17, 15, 13, 10, 11, 12, 11, 17, 20, 16, 13, 15, 20, 18, 16, 14, 11, 11, 15, 10, 16, 13, 0, 11, 19, 12, 15, 14, 19, 13, 13, 12, 15, 15, 14, 14, 15, 17, 12, 7, 14, 18, 19, 23, 17, 17, 12, 19, 16, 10, 18, 19, 12, 19, 11], [16, 11, 10, 12, 15, 12, 10, 20, 10, 13, 18, 17, 11, 13, 14, 9, 15, 14, 13, 18, 18, 11, 11, 0, 11, 15, 18, 9, 16, 18, 11, 13, 17, 23, 16, 10, 7, 14, 17, 16, 23, 13, 17, 17, 15, 12, 15, 19, 15, 10, 16, 12, 17, 12, 15], [15, 11, 18, 14, 9, 11, 7, 14, 14, 15, 12, 20, 6, 8, 15, 10, 13, 16, 12, 12, 10, 20, 19, 11, 0, 15, 13, 9, 14, 12, 9, 18, 12, 7, 11, 8, 12, 11, 23, 15, 12, 10, 9, 13, 12, 15, 13, 15, 10, 11, 17, 13, 13, 14, 12], [15, 13, 16, 11, 13, 11, 19, 10, 19, 13, 21, 17, 14, 15, 17, 14, 10, 15, 7, 14, 21, 15, 12, 15, 15, 0, 10, 12, 19, 5, 12, 11, 12, 10, 14, 16, 14, 15, 6, 11, 17, 13, 15, 16, 13, 13, 18, 9, 7, 10, 19, 9, 10, 17, 15], [12, 16, 7, 10, 15, 14, 7, 15, 11, 13, 12, 12, 16, 20, 12, 13, 14, 13, 11, 21, 10, 12, 15, 18, 13, 10, 0, 4, 12, 7, 8, 10, 8, 14, 12, 13, 13, 17, 12, 12, 8, 13, 16, 11, 16, 16, 17, 14, 10, 13, 14, 12, 11, 13, 12], [14, 9, 7, 6, 14, 7, 11, 13, 10, 10, 17, 20, 15, 10, 9, 12, 13, 13, 14, 12, 7, 18, 14, 9, 9, 12, 4, 0, 18, 17, 5, 11, 19, 13, 11, 7, 8, 7, 17, 15, 10, 13, 8, 17, 10, 10, 12, 7, 11, 15, 6, 15, 15, 16, 8], [12, 9, 14, 9, 18, 18, 18, 10, 9, 23, 14, 18, 15, 16, 16, 23, 12, 18, 16, 12, 15, 17, 19, 16, 14, 19, 12, 18, 0, 20, 19, 17, 19, 19, 15, 15, 17, 12, 18, 11, 22, 14, 10, 11, 14, 17, 16, 11, 12, 15, 15, 16, 17, 15, 13], [14, 15, 14, 16, 15, 14, 13, 12, 9, 17, 13, 14, 21, 10, 9, 21, 11, 15, 16, 12, 15, 15, 13, 18, 12, 5, 7, 17, 20, 0, 10, 12, 11, 14, 15, 14, 5, 13, 15, 18, 12, 6, 13, 15, 18, 8, 10, 10, 16, 17, 9, 13, 14, 10, 19], [13, 13, 15, 11, 14, 12, 18, 10, 14, 10, 17, 12, 8, 11, 16, 12, 18, 12, 14, 14, 15, 17, 13, 11, 9, 12, 8, 5, 19, 10, 0, 17, 13, 12, 16, 19, 19, 13, 17, 17, 16, 16, 18, 15, 14, 16, 17, 20, 16, 9, 9, 15, 15, 16, 12], [6, 15, 16, 13, 14, 15, 16, 15, 14, 16, 20, 15, 19, 13, 17, 13, 9, 20, 14, 11, 15, 20, 12, 13, 18, 11, 10, 11, 17, 12, 17, 0, 25, 16, 17, 17, 18, 11, 16, 18, 19, 19, 13, 17, 15, 17, 13, 24, 15, 9, 24, 21, 17, 11, 11], [11, 15, 18, 9, 9, 13, 10, 12, 18, 8, 14, 23, 15, 15, 12, 19, 13, 13, 11, 18, 13, 16, 15, 17, 12, 12, 8, 19, 19, 11, 13, 25, 0, 13, 12, 19, 13, 15, 13, 23, 19, 17, 19, 18, 15, 19, 11, 12, 11, 14, 14, 15, 20, 13, 9], [20, 16, 20, 9, 15, 20, 10, 25, 17, 15, 22, 15, 11, 11, 15, 16, 16, 15, 23, 15, 13, 15, 15, 23, 7, 10, 14, 13, 19, 14, 12, 16, 13, 0, 12, 13, 13, 13, 16, 17, 18, 21, 14, 19, 5, 20, 18, 15, 19, 15, 18, 14, 18, 16, 16], [13, 15, 16, 16, 11, 11, 12, 17, 11, 11, 13, 8, 16, 16, 11, 10, 12, 17, 12, 8, 11, 15, 14, 16, 11, 14, 12, 11, 15, 15, 16, 17, 12, 12, 0, 14, 7, 16, 7, 17, 17, 15, 16, 12, 16, 8, 14, 9, 12, 9, 11, 16, 8, 10, 14], [12, 10, 15, 7, 11, 7, 10, 21, 14, 12, 6, 6, 18, 12, 8, 11, 12, 9, 13, 22, 10, 6, 14, 10, 8, 16, 13, 7, 15, 14, 19, 17, 19, 13, 14, 0, 8, 17, 16, 14, 15, 17, 21, 16, 12, 14, 14, 12, 14, 18, 12, 11, 12, 14, 12], [13, 7, 15, 8, 19, 10, 12, 16, 11, 12, 10, 9, 4, 14, 8, 17, 12, 11, 9, 10, 9, 16, 15, 7, 12, 14, 13, 8, 17, 5, 19, 18, 13, 13, 7, 8, 0, 13, 15, 16, 10, 15, 11, 10, 16, 15, 12, 16, 16, 11, 12, 11, 7, 9, 14], [17, 15, 13, 10, 11, 14, 14, 16, 10, 16, 14, 10, 14, 12, 8, 15, 13, 10, 13, 14, 11, 20, 17, 14, 11, 15, 17, 7, 12, 13, 13, 11, 15, 13, 16, 17, 13, 0, 8, 14, 16, 16, 13, 13, 12, 8, 22, 16, 11, 11, 17, 10, 13, 11, 25], [10, 12, 14, 12, 16, 13, 8, 25, 14, 7, 8, 19, 10, 7, 9, 19, 14, 13, 16, 13, 12, 19, 12, 17, 23, 6, 12, 17, 18, 15, 17, 16, 13, 16, 7, 16, 15, 8, 0, 14, 16, 7, 11, 7, 15, 17, 15, 19, 14, 13, 15, 13, 25, 10, 16], [19, 6, 18, 15, 15, 11, 9, 12, 11, 16, 16, 21, 17, 15, 13, 14, 16, 16, 13, 10, 19, 20, 7, 16, 15, 11, 12, 15, 11, 18, 17, 18, 23, 17, 17, 14, 16, 14, 14, 0, 11, 14, 14, 12, 12, 17, 12, 19, 17, 11, 12, 13, 13, 11, 10], [15, 15, 28, 15, 8, 16, 10, 16, 17, 15, 17, 16, 17, 16, 11, 14, 19, 19, 17, 20, 20, 15, 14, 23, 12, 17, 8, 10, 22, 12, 16, 19, 19, 18, 17, 15, 10, 16, 16, 11, 0, 20, 15, 11, 19, 22, 19, 18, 13, 15, 14, 17, 19, 9, 18], [17, 13, 13, 14, 22, 5, 17, 17, 13, 10, 17, 12, 19, 10, 12, 15, 15, 10, 19, 11, 12, 15, 18, 13, 10, 13, 13, 13, 14, 6, 16, 19, 17, 21, 15, 17, 15, 16, 7, 14, 20, 0, 15, 13, 8, 15, 18, 12, 15, 14, 25, 11, 13, 23, 13], [19, 7, 13, 8, 21, 13, 15, 20, 18, 11, 18, 18, 18, 15, 17, 19, 7, 18, 15, 16, 14, 26, 19, 17, 9, 15, 16, 8, 10, 13, 18, 13, 19, 14, 16, 21, 11, 13, 11, 14, 15, 15, 0, 18, 21, 10, 11, 20, 11, 14, 23, 10, 24, 13, 12], [21, 10, 21, 17, 14, 14, 11, 21, 20, 15, 12, 24, 15, 15, 12, 11, 11, 15, 14, 13, 14, 16, 23, 17, 13, 16, 11, 17, 11, 15, 15, 17, 18, 19, 12, 16, 10, 13, 7, 12, 11, 13, 18, 0, 10, 16, 13, 11, 17, 18, 11, 8, 14, 10, 12], [15, 11, 12, 12, 18, 8, 10, 11, 14, 11, 11, 10, 15, 10, 15, 7, 9, 14, 14, 15, 5, 10, 17, 15, 12, 13, 16, 10, 14, 18, 14, 15, 15, 5, 16, 12, 16, 12, 15, 12, 19, 8, 21, 10, 0, 12, 13, 16, 18, 18, 9, 21, 10, 16, 20], [16, 13, 12, 9, 16, 11, 12, 12, 11, 12, 16, 16, 11, 13, 12, 13, 16, 19, 16, 10, 11, 20, 17, 12, 15, 13, 16, 10, 17, 8, 16, 17, 19, 20, 8, 14, 15, 8, 17, 17, 22, 15, 10, 16, 12, 0, 13, 15, 16, 17, 14, 17, 9, 12, 16], [12, 11, 14, 14, 15, 12, 12, 21, 9, 14, 14, 16, 12, 19, 8, 13, 9, 14, 17, 18, 11, 24, 12, 15, 13, 18, 17, 12, 16, 10, 17, 13, 11, 18, 14, 14, 12, 22, 15, 12, 19, 18, 11, 13, 13, 13, 0, 17, 15, 13, 19, 17, 15, 12, 15], [18, 11, 13, 8, 12, 14, 11, 14, 12, 21, 20, 24, 15, 13, 17, 11, 13, 12, 14, 9, 18, 21, 19, 19, 15, 9, 14, 7, 11, 10, 20, 24, 12, 15, 9, 12, 16, 16, 19, 19, 18, 12, 20, 11, 16, 15, 17, 0, 16, 12, 14, 11, 20, 8, 18], [14, 6, 17, 10, 17, 14, 11, 16, 16, 10, 10, 8, 16, 20, 13, 13, 16, 19, 12, 14, 11, 18, 16, 15, 10, 7, 10, 11, 12, 16, 16, 15, 11, 19, 12, 14, 16, 11, 14, 17, 13, 15, 11, 17, 18, 16, 15, 16, 0, 6, 15, 12, 13, 14, 16], [18, 14, 13, 13, 13, 11, 10, 18, 21, 13, 9, 9, 9, 14, 8, 9, 16, 17, 6, 12, 15, 10, 10, 10, 11, 10, 13, 15, 15, 17, 9, 9, 14, 15, 9, 18, 11, 11, 13, 11, 15, 14, 14, 18, 18, 17, 13, 12, 6, 0, 12, 17, 16, 12, 12], [17, 12, 14, 11, 14, 14, 17, 18, 15, 16, 18, 23, 12, 12, 13, 20, 16, 14, 18, 23, 18, 21, 18, 16, 17, 19, 14, 6, 15, 9, 9, 24, 14, 18, 11, 12, 12, 17, 15, 12, 14, 25, 23, 11, 9, 14, 19, 14, 15, 12, 0, 20, 22, 10, 23], [8, 13, 15, 11, 10, 10, 11, 12, 13, 13, 12, 24, 15, 10, 9, 15, 15, 13, 8, 16, 19, 13, 19, 12, 13, 9, 12, 15, 16, 13, 15, 21, 15, 14, 16, 11, 11, 10, 13, 13, 17, 11, 10, 8, 21, 17, 17, 11, 12, 17, 20, 0, 21, 14, 16], [15, 10, 10, 13, 16, 13, 12, 13, 19, 12, 14, 20, 18, 15, 13, 9, 16, 19, 17, 17, 19, 19, 12, 17, 13, 10, 11, 15, 17, 14, 15, 17, 20, 18, 8, 12, 7, 13, 25, 13, 19, 13, 24, 14, 10, 9, 15, 20, 13, 16, 22, 21, 0, 10, 18], [11, 11, 20, 7, 13, 10, 12, 12, 25, 14, 15, 13, 16, 11, 10, 7, 8, 11, 16, 13, 7, 17, 19, 12, 14, 17, 13, 16, 15, 10, 16, 11, 13, 16, 10, 14, 9, 11, 10, 11, 9, 23, 13, 10, 16, 12, 12, 8, 14, 12, 10, 14, 10, 0, 11], [16, 12, 15, 13, 8, 15, 15, 14, 12, 12, 14, 18, 18, 15, 10, 12, 10, 8, 14, 10, 16, 14, 11, 15, 12, 15, 12, 8, 13, 19, 12, 11, 9, 16, 14, 12, 14, 25, 16, 10, 18, 13, 12, 12, 20, 16, 15, 18, 16, 12, 23, 16, 18, 11, 0]]}, "algos": [{"key": "hot", "group": "Tần suất & thời gian", "name": "Tần suất cao (số nóng)", "note": "6 số về nhiều nhất toàn lịch sử", "pick": [22, 41, 51, 34, 29, 32]}, {"key": "cold", "group": "Tần suất & thời gian", "name": "Tần suất thấp (số lạnh)", "note": "6 số về ít nhất toàn lịch sử", "pick": [4, 28, 37, 6, 15, 2]}, {"key": "weighted", "group": "Tần suất & thời gian", "name": "Tần suất có trọng số", "note": "ưu tiên kỳ gần (giảm dần 0.97^kỳ)", "pick": [53, 8, 16, 33, 28, 1]}, {"key": "ma", "group": "Tần suất & thời gian", "name": "Trung bình trượt", "note": "tỉ lệ về cao nhất trong 30 kỳ gần nhất", "pick": [8, 1, 28, 2, 16, 20]}, {"key": "gap", "group": "Tần suất & thời gian", "name": "Khoảng cách xuất hiện (số gan)", "note": "6 số lâu chưa về nhất", "pick": [54, 50, 12, 29, 37, 39]}, {"key": "bayes", "group": "Tần suất & thời gian", "name": "Xác suất Bayes", "note": "hậu nghiệm Beta(1,1) — tần suất làm mượt", "pick": [22, 41, 51, 34, 29, 32]}, {"key": "markov", "group": "Quan hệ cặp/nhóm", "name": "Chuỗi Markov (bậc 1)", "note": "từ 6 số kỳ mới nhất → số hay ra ở kỳ liền sau", "pick": [22, 47, 34, 8, 46, 51]}, {"key": "cooc", "group": "Quan hệ cặp/nhóm", "name": "Ma trận đồng xuất hiện", "note": "số đồng xuất hiện nhiều nhất với 6 số kỳ mới nhất", "pick": [43, 41, 32, 12, 39, 51]}, {"key": "pairs", "group": "Quan hệ cặp/nhóm", "name": "Cặp & nhóm số (tham lam)", "note": "khởi từ số nóng nhất, ghép dần theo cặp hay đi cùng", "pick": [11, 12, 22, 43, 51, 53]}, {"key": "itemset", "group": "Quan hệ cặp/nhóm", "name": "Apriori / FP-Growth", "note": "ghép từ cặp support cao nhất — 2 thuật toán cho cùng kết quả, chỉ khác tốc độ", "pick": [3, 9, 20, 21, 26, 41]}, {"key": "composite", "group": "Tổng hợp & ngẫu nhiên", "name": "Chấm điểm tổng hợp", "note": "cộng z-score: tần suất + phong độ + độ gan + đồng xuất hiện", "pick": [8, 41, 32, 39, 43, 1]}, {"key": "ga", "group": "Tổng hợp & ngẫu nhiên", "name": "Thuật toán di truyền", "note": "tiến hoá bộ số tối đa hoá 'độ điển hình' (cặp mạnh + cân đối)", "pick": [11, 12, 22, 29, 42, 51]}, {"key": "wrand", "group": "Tổng hợp & ngẫu nhiên", "name": "Ngẫu nhiên có trọng số", "note": "bốc 6 số, xác suất tỉ lệ thuận tần suất", "pick": [1, 24, 26, 37, 44, 51]}, {"key": "mc", "group": "Tổng hợp & ngẫu nhiên", "name": "Mô phỏng Monte Carlo", "note": "mọi số xấp xỉ đều → kết quả ~ bốc ngẫu nhiên", "pick": [1, 6, 8, 29, 38, 50]}], "tests": {"chi2": {"stat": 51.18, "df": 54, "expected": 149.7, "p": 0.5839, "ok": true}, "runs": {"runs": 690, "expected": 680.5, "z": 0.516, "n1": 678, "n2": 681, "ok": true}}}];
-const GENERATED = "18/07/2026 14:48";
+const DATA = [{"game_type": "power655", "total_draws": 1373, "positions": [{"position": 1, "name": "x1 · nhỏ nhất", "min": 1, "max": 37, "mode": 1, "mean": 8.23}, {"position": 2, "name": "x2", "min": 2, "max": 47, "mode": 11, "mean": 16.27}, {"position": 3, "name": "x3", "min": 3, "max": 51, "mode": 29, "mean": 24.52}, {"position": 4, "name": "x4", "min": 7, "max": 52, "mode": 34, "mean": 32.39}, {"position": 5, "name": "x5", "min": 9, "max": 54, "mode": 47, "mean": 40.36}, {"position": 6, "name": "x6 · lớn nhất", "min": 17, "max": 55, "mode": 55, "mean": 47.96}], "frequency": [{"number": 1, "count": 155, "current_streak": 0, "max_streak": 2, "gap": 10}, {"number": 2, "count": 133, "current_streak": 0, "max_streak": 3, "gap": 4}, {"number": 3, "count": 158, "current_streak": 0, "max_streak": 3, "gap": 10}, {"number": 4, "count": 123, "current_streak": 0, "max_streak": 3, "gap": 5}, {"number": 5, "count": 150, "current_streak": 0, "max_streak": 3, "gap": 7}, {"number": 6, "count": 131, "current_streak": 0, "max_streak": 2, "gap": 5}, {"number": 7, "count": 133, "current_streak": 0, "max_streak": 3, "gap": 9}, {"number": 8, "count": 165, "current_streak": 0, "max_streak": 3, "gap": 10}, {"number": 9, "count": 157, "current_streak": 0, "max_streak": 3, "gap": 3}, {"number": 10, "count": 143, "current_streak": 0, "max_streak": 2, "gap": 2}, {"number": 11, "count": 157, "current_streak": 0, "max_streak": 3, "gap": 7}, {"number": 12, "count": 155, "current_streak": 0, "max_streak": 2, "gap": 26}, {"number": 13, "count": 151, "current_streak": 0, "max_streak": 4, "gap": 6}, {"number": 14, "count": 141, "current_streak": 0, "max_streak": 2, "gap": 4}, {"number": 15, "count": 132, "current_streak": 0, "max_streak": 3, "gap": 6}, {"number": 16, "count": 145, "current_streak": 0, "max_streak": 2, "gap": 9}, {"number": 17, "count": 141, "current_streak": 0, "max_streak": 3, "gap": 3}, {"number": 18, "count": 154, "current_streak": 0, "max_streak": 2, "gap": 6}, {"number": 19, "count": 146, "current_streak": 0, "max_streak": 3, "gap": 1}, {"number": 20, "count": 154, "current_streak": 0, "max_streak": 3, "gap": 1}, {"number": 21, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 9}, {"number": 22, "count": 176, "current_streak": 1, "max_streak": 4, "gap": 0}, {"number": 23, "count": 159, "current_streak": 0, "max_streak": 2, "gap": 6}, {"number": 24, "count": 154, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 25, "count": 138, "current_streak": 0, "max_streak": 4, "gap": 5}, {"number": 26, "count": 146, "current_streak": 0, "max_streak": 4, "gap": 12}, {"number": 27, "count": 136, "current_streak": 0, "max_streak": 2, "gap": 17}, {"number": 28, "count": 126, "current_streak": 0, "max_streak": 2, "gap": 7}, {"number": 29, "count": 166, "current_streak": 0, "max_streak": 3, "gap": 19}, {"number": 30, "count": 144, "current_streak": 0, "max_streak": 4, "gap": 2}, {"number": 31, "count": 150, "current_streak": 0, "max_streak": 3, "gap": 6}, {"number": 32, "count": 166, "current_streak": 0, "max_streak": 3, "gap": 5}, {"number": 33, "count": 158, "current_streak": 0, "max_streak": 2, "gap": 1}, {"number": 34, "count": 168, "current_streak": 0, "max_streak": 3, "gap": 7}, {"number": 35, "count": 139, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 36, "count": 140, "current_streak": 0, "max_streak": 3, "gap": 15}, {"number": 37, "count": 130, "current_streak": 0, "max_streak": 3, "gap": 18}, {"number": 38, "count": 146, "current_streak": 0, "max_streak": 3, "gap": 11}, {"number": 39, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 18}, {"number": 40, "count": 155, "current_streak": 0, "max_streak": 5, "gap": 11}, {"number": 41, "count": 173, "current_streak": 1, "max_streak": 3, "gap": 0}, {"number": 42, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 3}, {"number": 43, "count": 164, "current_streak": 0, "max_streak": 4, "gap": 6}, {"number": 44, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 5}, {"number": 45, "count": 144, "current_streak": 3, "max_streak": 3, "gap": 0}, {"number": 46, "count": 152, "current_streak": 0, "max_streak": 3, "gap": 11}, {"number": 47, "count": 156, "current_streak": 0, "max_streak": 3, "gap": 15}, {"number": 48, "count": 160, "current_streak": 2, "max_streak": 2, "gap": 0}, {"number": 49, "count": 148, "current_streak": 0, "max_streak": 3, "gap": 4}, {"number": 50, "count": 139, "current_streak": 0, "max_streak": 2, "gap": 31}, {"number": 51, "count": 169, "current_streak": 0, "max_streak": 3, "gap": 2}, {"number": 52, "count": 149, "current_streak": 0, "max_streak": 3, "gap": 9}, {"number": 53, "count": 162, "current_streak": 0, "max_streak": 4, "gap": 1}, {"number": 54, "count": 139, "current_streak": 1, "max_streak": 3, "gap": 0}, {"number": 55, "count": 152, "current_streak": 1, "max_streak": 3, "gap": 0}], "streaks": [{"length": 1, "occ": 6532}, {"length": 2, "occ": 703}, {"length": 3, "occ": 89}, {"length": 4, "occ": 7}, {"length": 5, "occ": 1}], "gaps": {"N": 1373, "expected_gap": 8.0, "expected_range": 40.0, "per_position": [{"label": "g1 (x1→x2)", "mean": 8.044, "std": 6.559}, {"label": "g2 (x2→x3)", "mean": 8.247, "std": 6.587}, {"label": "g3 (x3→x4)", "mean": 7.874, "std": 6.29}, {"label": "g4 (x4→x5)", "mean": 7.965, "std": 6.36}, {"label": "g5 (x5→x6)", "mean": 7.599, "std": 6.157}], "gbar": 7.946, "gstd": 6.396, "range_bar": 39.73, "range_std": 8.501, "range_min": 13, "range_max": 54, "rel_diff": 0.68, "ok": true}, "extra": {"total": 1373, "n": 55, "low_max": 27, "recent_n": 30, "latest": [22, 41, 45, 48, 54, 55], "sum": {"bins": [{"label": "45", "range": "45–59", "occ": 2}, {"label": "60", "range": "60–74", "occ": 6}, {"label": "75", "range": "75–89", "occ": 16}, {"label": "90", "range": "90–104", "occ": 41}, {"label": "105", "range": "105–119", "occ": 65}, {"label": "120", "range": "120–134", "occ": 110}, {"label": "135", "range": "135–149", "occ": 168}, {"label": "150", "range": "150–164", "occ": 197}, {"label": "165", "range": "165–179", "occ": 208}, {"label": "180", "range": "180–194", "occ": 190}, {"label": "195", "range": "195–209", "occ": 163}, {"label": "210", "range": "210–224", "occ": 116}, {"label": "225", "range": "225–239", "occ": 57}, {"label": "240", "range": "240–254", "occ": 23}, {"label": "255", "range": "255–269", "occ": 8}, {"label": "270", "range": "270–284", "occ": 2}, {"label": "285", "range": "285–299", "occ": 1}], "mean": 169.7, "p10": 121, "p90": 217, "min": 52, "max": 288}, "odd": [8, 89, 342, 459, 323, 132, 20], "low": [17, 135, 376, 422, 307, 95, 21], "decade": [{"label": "1-9", "occ": 1305}, {"label": "10-19", "occ": 1465}, {"label": "20-29", "occ": 1504}, {"label": "30-39", "occ": 1490}, {"label": "40-49", "occ": 1564}, {"label": "50-55", "occ": 910}], "consecutive": [{"label": "0", "occ": 772}, {"label": "1", "occ": 492}, {"label": "2", "occ": 92}, {"label": "3", "occ": 17}], "with_consec": 601, "last_digit": [{"label": "0", "occ": 735}, {"label": "1", "occ": 953}, {"label": "2", "occ": 935}, {"label": "3", "occ": 952}, {"label": "4", "occ": 881}, {"label": "5", "occ": 855}, {"label": "6", "occ": 714}, {"label": "7", "occ": 696}, {"label": "8", "occ": 751}, {"label": "9", "occ": 766}], "repeat_prev": [{"label": "0", "occ": 673}, {"label": "1", "occ": 514}, {"label": "2", "occ": 164}, {"label": "3", "occ": 20}, {"label": "4", "occ": 1}, {"label": "5", "occ": 0}, {"label": "6", "occ": 0}], "repeat_mean": 0.66, "exp_rest": 9.2, "overdue": [{"number": 50, "gap": 31, "rest": 9.7}, {"number": 12, "gap": 26, "rest": 8.7}, {"number": 29, "gap": 19, "rest": 8.1}, {"number": 37, "gap": 18, "rest": 10.4}, {"number": 39, "gap": 18, "rest": 9.1}, {"number": 27, "gap": 17, "rest": 10.0}, {"number": 36, "gap": 15, "rest": 9.7}, {"number": 47, "gap": 15, "rest": 8.7}, {"number": 26, "gap": 12, "rest": 9.3}, {"number": 38, "gap": 11, "rest": 9.4}, {"number": 40, "gap": 11, "rest": 8.8}, {"number": 46, "gap": 11, "rest": 9.0}], "hot": [{"number": 8, "count": 7}, {"number": 1, "count": 6}, {"number": 28, "count": 6}, {"number": 2, "count": 5}, {"number": 16, "count": 5}, {"number": 20, "count": 5}, {"number": 23, "count": 5}, {"number": 39, "count": 5}, {"number": 41, "count": 5}, {"number": 48, "count": 5}, {"number": 5, "count": 4}, {"number": 11, "count": 4}], "pairs": [{"a": 3, "b": 41, "count": 28}, {"a": 11, "b": 22, "count": 28}, {"a": 22, "b": 43, "count": 26}, {"a": 8, "b": 34, "count": 25}, {"a": 8, "b": 39, "count": 25}, {"a": 9, "b": 54, "count": 25}, {"a": 18, "b": 22, "count": 25}, {"a": 32, "b": 33, "count": 25}, {"a": 38, "b": 55, "count": 25}, {"a": 39, "b": 53, "count": 25}, {"a": 42, "b": 51, "count": 25}, {"a": 12, "b": 44, "count": 24}, {"a": 12, "b": 48, "count": 24}, {"a": 12, "b": 52, "count": 24}, {"a": 22, "b": 47, "count": 24}], "exp_pair": 13.9, "cooc": [[0, 17, 17, 12, 15, 12, 16, 16, 14, 13, 14, 10, 14, 17, 10, 8, 12, 14, 9, 22, 17, 15, 17, 16, 15, 15, 12, 14, 12, 14, 13, 6, 11, 20, 13, 12, 13, 17, 10, 19, 15, 17, 19, 21, 15, 16, 12, 18, 14, 18, 17, 8, 15, 11, 16], [17, 0, 13, 7, 12, 15, 13, 15, 9, 13, 12, 8, 16, 13, 15, 13, 14, 9, 17, 15, 14, 13, 15, 11, 11, 13, 16, 9, 9, 15, 13, 15, 15, 16, 15, 10, 7, 15, 12, 6, 15, 13, 7, 10, 11, 13, 11, 11, 6, 14, 12, 13, 10, 11, 12], [17, 13, 0, 7, 12, 14, 14, 13, 23, 15, 15, 17, 12, 18, 18, 14, 11, 11, 14, 13, 16, 14, 13, 10, 18, 16, 7, 7, 14, 14, 15, 16, 18, 20, 16, 15, 15, 13, 14, 18, 28, 13, 13, 21, 12, 12, 14, 13, 17, 13, 14, 15, 10, 20, 15], [12, 7, 7, 0, 11, 16, 14, 17, 7, 10, 7, 13, 11, 12, 12, 12, 12, 15, 11, 13, 9, 14, 10, 12, 14, 11, 10, 6, 9, 16, 11, 13, 9, 9, 16, 7, 8, 10, 12, 15, 15, 14, 8, 17, 12, 9, 14, 8, 10, 13, 11, 11, 13, 7, 13], [15, 12, 12, 11, 0, 8, 14, 16, 16, 15, 22, 12, 10, 13, 8, 13, 16, 14, 15, 17, 11, 18, 11, 15, 9, 13, 15, 14, 18, 15, 14, 14, 9, 15, 11, 11, 19, 11, 16, 15, 8, 22, 21, 14, 18, 16, 15, 12, 17, 13, 14, 10, 16, 13, 8], [12, 15, 14, 16, 8, 0, 10, 17, 11, 18, 6, 7, 13, 7, 9, 17, 14, 13, 9, 10, 12, 12, 12, 12, 11, 11, 14, 7, 18, 14, 12, 15, 13, 20, 11, 7, 10, 14, 13, 11, 16, 5, 13, 14, 8, 11, 12, 14, 14, 11, 14, 10, 13, 10, 15], [16, 13, 14, 14, 14, 10, 0, 15, 13, 12, 12, 11, 19, 5, 6, 10, 15, 14, 10, 8, 13, 20, 11, 10, 7, 19, 7, 11, 18, 13, 18, 16, 10, 10, 12, 10, 12, 14, 8, 9, 10, 17, 15, 11, 10, 12, 12, 11, 11, 10, 17, 11, 12, 12, 15], [16, 15, 13, 17, 16, 17, 15, 0, 18, 10, 14, 13, 12, 8, 10, 16, 15, 15, 19, 21, 15, 15, 17, 20, 14, 10, 15, 13, 10, 12, 10, 15, 12, 25, 17, 21, 16, 16, 25, 12, 16, 17, 20, 21, 11, 12, 21, 14, 16, 18, 18, 12, 13, 12, 14], [14, 9, 23, 7, 16, 11, 13, 18, 0, 10, 9, 15, 22, 8, 15, 18, 16, 13, 14, 21, 22, 20, 20, 10, 14, 19, 11, 10, 9, 9, 14, 14, 18, 17, 11, 14, 11, 10, 14, 11, 17, 13, 18, 20, 14, 11, 9, 12, 16, 21, 15, 13, 19, 25, 12], [13, 13, 15, 10, 15, 18, 12, 10, 10, 0, 18, 10, 12, 11, 13, 15, 18, 9, 18, 13, 10, 10, 16, 13, 15, 13, 13, 10, 23, 17, 10, 16, 8, 15, 11, 12, 12, 16, 7, 16, 15, 10, 11, 15, 11, 12, 14, 21, 10, 13, 16, 13, 12, 14, 12], [14, 12, 15, 7, 22, 6, 12, 14, 9, 18, 0, 16, 15, 22, 15, 13, 14, 13, 13, 15, 15, 28, 13, 18, 12, 21, 12, 17, 14, 13, 17, 20, 14, 22, 13, 6, 10, 14, 8, 16, 17, 17, 18, 12, 11, 16, 14, 20, 10, 9, 18, 12, 14, 15, 14], [10, 8, 17, 13, 12, 7, 11, 13, 15, 10, 16, 0, 9, 11, 10, 10, 8, 15, 15, 11, 14, 18, 15, 17, 20, 17, 12, 20, 18, 14, 12, 15, 23, 15, 8, 6, 9, 10, 19, 21, 16, 12, 18, 24, 10, 16, 16, 24, 8, 9, 23, 24, 20, 13, 18], [14, 16, 12, 11, 10, 13, 19, 12, 22, 12, 15, 9, 0, 13, 10, 11, 10, 20, 8, 11, 17, 14, 20, 11, 6, 14, 16, 15, 15, 21, 8, 19, 15, 11, 16, 18, 4, 14, 10, 17, 17, 19, 18, 15, 15, 11, 12, 15, 16, 9, 12, 15, 18, 16, 18], [17, 13, 18, 12, 13, 7, 5, 8, 8, 11, 22, 11, 13, 0, 16, 7, 14, 15, 13, 11, 14, 13, 18, 13, 8, 15, 20, 10, 16, 10, 11, 13, 15, 11, 16, 12, 14, 12, 7, 15, 16, 10, 15, 15, 10, 13, 19, 13, 20, 14, 12, 10, 15, 11, 15], [10, 15, 18, 12, 8, 9, 6, 10, 15, 13, 15, 10, 10, 16, 0, 13, 7, 15, 11, 10, 18, 14, 16, 14, 15, 17, 12, 9, 16, 9, 16, 17, 12, 15, 11, 8, 8, 8, 9, 13, 11, 12, 17, 12, 15, 12, 8, 17, 13, 8, 13, 9, 13, 10, 10], [8, 13, 14, 12, 13, 17, 10, 16, 18, 15, 13, 10, 11, 7, 13, 0, 19, 13, 11, 13, 12, 17, 14, 9, 10, 14, 13, 12, 23, 21, 12, 13, 19, 16, 10, 11, 17, 15, 19, 14, 14, 15, 19, 11, 7, 13, 13, 11, 13, 9, 20, 15, 9, 7, 12], [12, 14, 11, 12, 16, 14, 15, 15, 16, 18, 14, 8, 10, 14, 7, 19, 0, 10, 11, 14, 13, 12, 11, 15, 13, 10, 14, 13, 12, 11, 18, 9, 13, 16, 12, 12, 12, 13, 14, 16, 19, 15, 7, 11, 9, 16, 9, 13, 16, 16, 16, 15, 16, 8, 10], [14, 9, 11, 15, 14, 13, 14, 15, 13, 9, 13, 15, 20, 15, 15, 13, 10, 0, 10, 21, 13, 25, 11, 14, 16, 15, 13, 13, 18, 15, 12, 20, 13, 15, 17, 9, 11, 10, 13, 16, 19, 10, 18, 15, 14, 19, 14, 12, 19, 17, 14, 13, 19, 11, 8], [9, 17, 14, 11, 15, 9, 10, 19, 14, 18, 13, 15, 8, 13, 11, 11, 11, 10, 0, 18, 13, 12, 15, 13, 12, 7, 11, 14, 16, 16, 14, 14, 11, 23, 12, 13, 9, 13, 16, 13, 17, 19, 15, 14, 14, 16, 17, 14, 12, 6, 18, 8, 17, 16, 14], [22, 15, 13, 13, 17, 10, 8, 21, 21, 13, 15, 11, 11, 11, 10, 13, 14, 21, 18, 0, 15, 15, 10, 18, 12, 14, 21, 12, 12, 12, 14, 11, 18, 15, 8, 22, 10, 14, 13, 10, 20, 11, 16, 13, 15, 10, 18, 9, 14, 12, 23, 16, 17, 13, 10], [17, 14, 16, 9, 11, 12, 13, 15, 22, 10, 15, 14, 17, 14, 18, 12, 13, 13, 13, 15, 0, 12, 16, 18, 10, 21, 10, 7, 15, 15, 15, 15, 13, 13, 11, 10, 9, 11, 12, 19, 20, 12, 14, 14, 5, 11, 11, 18, 11, 15, 18, 19, 19, 7, 16], [15, 13, 14, 14, 18, 12, 20, 15, 20, 10, 28, 18, 14, 13, 14, 17, 12, 25, 12, 15, 12, 0, 13, 11, 20, 15, 12, 18, 17, 15, 17, 20, 16, 15, 15, 6, 16, 20, 19, 20, 16, 15, 26, 16, 11, 20, 24, 22, 18, 10, 21, 13, 19, 18, 15], [17, 15, 13, 10, 11, 12, 11, 17, 20, 16, 13, 15, 20, 18, 16, 14, 11, 11, 15, 10, 16, 13, 0, 11, 19, 12, 15, 14, 19, 13, 13, 12, 15, 15, 14, 14, 15, 17, 12, 7, 14, 18, 19, 23, 17, 17, 12, 19, 16, 10, 18, 19, 12, 19, 11], [16, 11, 10, 12, 15, 12, 10, 20, 10, 13, 18, 17, 11, 13, 14, 9, 15, 14, 13, 18, 18, 11, 11, 0, 11, 15, 18, 9, 16, 18, 11, 13, 17, 23, 16, 10, 7, 14, 17, 16, 23, 13, 17, 17, 15, 12, 15, 19, 15, 10, 16, 12, 17, 12, 15], [15, 11, 18, 14, 9, 11, 7, 14, 14, 15, 12, 20, 6, 8, 15, 10, 13, 16, 12, 12, 10, 20, 19, 11, 0, 15, 13, 9, 14, 12, 9, 18, 12, 7, 11, 8, 12, 11, 23, 15, 12, 10, 9, 13, 12, 15, 13, 15, 10, 11, 17, 13, 13, 14, 12], [15, 13, 16, 11, 13, 11, 19, 10, 19, 13, 21, 17, 14, 15, 17, 14, 10, 15, 7, 14, 21, 15, 12, 15, 15, 0, 10, 12, 19, 5, 12, 11, 12, 10, 14, 16, 14, 15, 6, 11, 17, 13, 15, 16, 13, 13, 18, 9, 7, 10, 19, 9, 10, 17, 15], [12, 16, 7, 10, 15, 14, 7, 15, 11, 13, 12, 12, 16, 20, 12, 13, 14, 13, 11, 21, 10, 12, 15, 18, 13, 10, 0, 4, 12, 7, 8, 10, 8, 14, 12, 13, 13, 17, 12, 12, 8, 13, 16, 11, 16, 16, 17, 14, 10, 13, 14, 12, 11, 13, 12], [14, 9, 7, 6, 14, 7, 11, 13, 10, 10, 17, 20, 15, 10, 9, 12, 13, 13, 14, 12, 7, 18, 14, 9, 9, 12, 4, 0, 18, 17, 5, 11, 19, 13, 11, 7, 8, 7, 17, 15, 10, 13, 8, 17, 10, 10, 12, 7, 11, 15, 6, 15, 15, 16, 8], [12, 9, 14, 9, 18, 18, 18, 10, 9, 23, 14, 18, 15, 16, 16, 23, 12, 18, 16, 12, 15, 17, 19, 16, 14, 19, 12, 18, 0, 20, 19, 17, 19, 19, 15, 15, 17, 12, 18, 11, 22, 14, 10, 11, 14, 17, 16, 11, 12, 15, 15, 16, 17, 15, 13], [14, 15, 14, 16, 15, 14, 13, 12, 9, 17, 13, 14, 21, 10, 9, 21, 11, 15, 16, 12, 15, 15, 13, 18, 12, 5, 7, 17, 20, 0, 10, 12, 11, 14, 15, 14, 5, 13, 15, 18, 12, 6, 13, 15, 18, 8, 10, 10, 16, 17, 9, 13, 14, 10, 19], [13, 13, 15, 11, 14, 12, 18, 10, 14, 10, 17, 12, 8, 11, 16, 12, 18, 12, 14, 14, 15, 17, 13, 11, 9, 12, 8, 5, 19, 10, 0, 17, 13, 12, 16, 19, 19, 13, 17, 17, 16, 16, 18, 15, 14, 16, 17, 20, 16, 9, 9, 15, 15, 16, 12], [6, 15, 16, 13, 14, 15, 16, 15, 14, 16, 20, 15, 19, 13, 17, 13, 9, 20, 14, 11, 15, 20, 12, 13, 18, 11, 10, 11, 17, 12, 17, 0, 25, 16, 17, 17, 18, 11, 16, 18, 19, 19, 13, 17, 15, 17, 13, 24, 15, 9, 24, 21, 17, 11, 11], [11, 15, 18, 9, 9, 13, 10, 12, 18, 8, 14, 23, 15, 15, 12, 19, 13, 13, 11, 18, 13, 16, 15, 17, 12, 12, 8, 19, 19, 11, 13, 25, 0, 13, 12, 19, 13, 15, 13, 23, 19, 17, 19, 18, 15, 19, 11, 12, 11, 14, 14, 15, 20, 13, 9], [20, 16, 20, 9, 15, 20, 10, 25, 17, 15, 22, 15, 11, 11, 15, 16, 16, 15, 23, 15, 13, 15, 15, 23, 7, 10, 14, 13, 19, 14, 12, 16, 13, 0, 12, 13, 13, 13, 16, 17, 18, 21, 14, 19, 5, 20, 18, 15, 19, 15, 18, 14, 18, 16, 16], [13, 15, 16, 16, 11, 11, 12, 17, 11, 11, 13, 8, 16, 16, 11, 10, 12, 17, 12, 8, 11, 15, 14, 16, 11, 14, 12, 11, 15, 15, 16, 17, 12, 12, 0, 14, 7, 16, 7, 17, 17, 15, 16, 12, 16, 8, 14, 9, 12, 9, 11, 16, 8, 10, 14], [12, 10, 15, 7, 11, 7, 10, 21, 14, 12, 6, 6, 18, 12, 8, 11, 12, 9, 13, 22, 10, 6, 14, 10, 8, 16, 13, 7, 15, 14, 19, 17, 19, 13, 14, 0, 8, 17, 16, 14, 15, 17, 21, 16, 12, 14, 14, 12, 14, 18, 12, 11, 12, 14, 12], [13, 7, 15, 8, 19, 10, 12, 16, 11, 12, 10, 9, 4, 14, 8, 17, 12, 11, 9, 10, 9, 16, 15, 7, 12, 14, 13, 8, 17, 5, 19, 18, 13, 13, 7, 8, 0, 13, 15, 16, 10, 15, 11, 10, 16, 15, 12, 16, 16, 11, 12, 11, 7, 9, 14], [17, 15, 13, 10, 11, 14, 14, 16, 10, 16, 14, 10, 14, 12, 8, 15, 13, 10, 13, 14, 11, 20, 17, 14, 11, 15, 17, 7, 12, 13, 13, 11, 15, 13, 16, 17, 13, 0, 8, 14, 16, 16, 13, 13, 12, 8, 22, 16, 11, 11, 17, 10, 13, 11, 25], [10, 12, 14, 12, 16, 13, 8, 25, 14, 7, 8, 19, 10, 7, 9, 19, 14, 13, 16, 13, 12, 19, 12, 17, 23, 6, 12, 17, 18, 15, 17, 16, 13, 16, 7, 16, 15, 8, 0, 14, 16, 7, 11, 7, 15, 17, 15, 19, 14, 13, 15, 13, 25, 10, 16], [19, 6, 18, 15, 15, 11, 9, 12, 11, 16, 16, 21, 17, 15, 13, 14, 16, 16, 13, 10, 19, 20, 7, 16, 15, 11, 12, 15, 11, 18, 17, 18, 23, 17, 17, 14, 16, 14, 14, 0, 11, 14, 14, 12, 12, 17, 12, 19, 17, 11, 12, 13, 13, 11, 10], [15, 15, 28, 15, 8, 16, 10, 16, 17, 15, 17, 16, 17, 16, 11, 14, 19, 19, 17, 20, 20, 16, 14, 23, 12, 17, 8, 10, 22, 12, 16, 19, 19, 18, 17, 15, 10, 16, 16, 11, 0, 20, 15, 11, 20, 22, 19, 19, 13, 15, 14, 17, 19, 10, 19], [17, 13, 13, 14, 22, 5, 17, 17, 13, 10, 17, 12, 19, 10, 12, 15, 15, 10, 19, 11, 12, 15, 18, 13, 10, 13, 13, 13, 14, 6, 16, 19, 17, 21, 15, 17, 15, 16, 7, 14, 20, 0, 15, 13, 8, 15, 18, 12, 15, 14, 25, 11, 13, 23, 13], [19, 7, 13, 8, 21, 13, 15, 20, 18, 11, 18, 18, 18, 15, 17, 19, 7, 18, 15, 16, 14, 26, 19, 17, 9, 15, 16, 8, 10, 13, 18, 13, 19, 14, 16, 21, 11, 13, 11, 14, 15, 15, 0, 18, 21, 10, 11, 20, 11, 14, 23, 10, 24, 13, 12], [21, 10, 21, 17, 14, 14, 11, 21, 20, 15, 12, 24, 15, 15, 12, 11, 11, 15, 14, 13, 14, 16, 23, 17, 13, 16, 11, 17, 11, 15, 15, 17, 18, 19, 12, 16, 10, 13, 7, 12, 11, 13, 18, 0, 10, 16, 13, 11, 17, 18, 11, 8, 14, 10, 12], [15, 11, 12, 12, 18, 8, 10, 11, 14, 11, 11, 10, 15, 10, 15, 7, 9, 14, 14, 15, 5, 11, 17, 15, 12, 13, 16, 10, 14, 18, 14, 15, 15, 5, 16, 12, 16, 12, 15, 12, 20, 8, 21, 10, 0, 12, 13, 17, 18, 18, 9, 21, 10, 17, 21], [16, 13, 12, 9, 16, 11, 12, 12, 11, 12, 16, 16, 11, 13, 12, 13, 16, 19, 16, 10, 11, 20, 17, 12, 15, 13, 16, 10, 17, 8, 16, 17, 19, 20, 8, 14, 15, 8, 17, 17, 22, 15, 10, 16, 12, 0, 13, 15, 16, 17, 14, 17, 9, 12, 16], [12, 11, 14, 14, 15, 12, 12, 21, 9, 14, 14, 16, 12, 19, 8, 13, 9, 14, 17, 18, 11, 24, 12, 15, 13, 18, 17, 12, 16, 10, 17, 13, 11, 18, 14, 14, 12, 22, 15, 12, 19, 18, 11, 13, 13, 13, 0, 17, 15, 13, 19, 17, 15, 12, 15], [18, 11, 13, 8, 12, 14, 11, 14, 12, 21, 20, 24, 15, 13, 17, 11, 13, 12, 14, 9, 18, 22, 19, 19, 15, 9, 14, 7, 11, 10, 20, 24, 12, 15, 9, 12, 16, 16, 19, 19, 19, 12, 20, 11, 17, 15, 17, 0, 16, 12, 14, 11, 20, 9, 19], [14, 6, 17, 10, 17, 14, 11, 16, 16, 10, 10, 8, 16, 20, 13, 13, 16, 19, 12, 14, 11, 18, 16, 15, 10, 7, 10, 11, 12, 16, 16, 15, 11, 19, 12, 14, 16, 11, 14, 17, 13, 15, 11, 17, 18, 16, 15, 16, 0, 6, 15, 12, 13, 14, 16], [18, 14, 13, 13, 13, 11, 10, 18, 21, 13, 9, 9, 9, 14, 8, 9, 16, 17, 6, 12, 15, 10, 10, 10, 11, 10, 13, 15, 15, 17, 9, 9, 14, 15, 9, 18, 11, 11, 13, 11, 15, 14, 14, 18, 18, 17, 13, 12, 6, 0, 12, 17, 16, 12, 12], [17, 12, 14, 11, 14, 14, 17, 18, 15, 16, 18, 23, 12, 12, 13, 20, 16, 14, 18, 23, 18, 21, 18, 16, 17, 19, 14, 6, 15, 9, 9, 24, 14, 18, 11, 12, 12, 17, 15, 12, 14, 25, 23, 11, 9, 14, 19, 14, 15, 12, 0, 20, 22, 10, 23], [8, 13, 15, 11, 10, 10, 11, 12, 13, 13, 12, 24, 15, 10, 9, 15, 15, 13, 8, 16, 19, 13, 19, 12, 13, 9, 12, 15, 16, 13, 15, 21, 15, 14, 16, 11, 11, 10, 13, 13, 17, 11, 10, 8, 21, 17, 17, 11, 12, 17, 20, 0, 21, 14, 16], [15, 10, 10, 13, 16, 13, 12, 13, 19, 12, 14, 20, 18, 15, 13, 9, 16, 19, 17, 17, 19, 19, 12, 17, 13, 10, 11, 15, 17, 14, 15, 17, 20, 18, 8, 12, 7, 13, 25, 13, 19, 13, 24, 14, 10, 9, 15, 20, 13, 16, 22, 21, 0, 10, 18], [11, 11, 20, 7, 13, 10, 12, 12, 25, 14, 15, 13, 16, 11, 10, 7, 8, 11, 16, 13, 7, 18, 19, 12, 14, 17, 13, 16, 15, 10, 16, 11, 13, 16, 10, 14, 9, 11, 10, 11, 10, 23, 13, 10, 17, 12, 12, 9, 14, 12, 10, 14, 10, 0, 12], [16, 12, 15, 13, 8, 15, 15, 14, 12, 12, 14, 18, 18, 15, 10, 12, 10, 8, 14, 10, 16, 15, 11, 15, 12, 15, 12, 8, 13, 19, 12, 11, 9, 16, 14, 12, 14, 25, 16, 10, 19, 13, 12, 12, 21, 16, 15, 19, 16, 12, 23, 16, 18, 12, 0]]}, "algos": [{"key": "hot", "group": "Tần suất & thời gian", "name": "Tần suất cao (số nóng)", "note": "6 số về nhiều nhất toàn lịch sử", "pick": [22, 41, 51, 34, 29, 32]}, {"key": "cold", "group": "Tần suất & thời gian", "name": "Tần suất thấp (số lạnh)", "note": "6 số về ít nhất toàn lịch sử", "pick": [4, 28, 37, 6, 15, 2]}, {"key": "weighted", "group": "Tần suất & thời gian", "name": "Tần suất có trọng số", "note": "ưu tiên kỳ gần (giảm dần 0.97^kỳ)", "pick": [53, 8, 22, 16, 33, 41]}, {"key": "ma", "group": "Tần suất & thời gian", "name": "Trung bình trượt", "note": "tỉ lệ về cao nhất trong 30 kỳ gần nhất", "pick": [8, 1, 28, 2, 16, 20]}, {"key": "gap", "group": "Tần suất & thời gian", "name": "Khoảng cách xuất hiện (số gan)", "note": "6 số lâu chưa về nhất", "pick": [50, 12, 29, 37, 39, 27]}, {"key": "bayes", "group": "Tần suất & thời gian", "name": "Xác suất Bayes", "note": "hậu nghiệm Beta(1,1) — tần suất làm mượt", "pick": [22, 41, 51, 34, 29, 32]}, {"key": "markov", "group": "Quan hệ cặp/nhóm", "name": "Chuỗi Markov (bậc 1)", "note": "từ 6 số kỳ mới nhất → số hay ra ở kỳ liền sau", "pick": [44, 22, 18, 29, 33, 47]}, {"key": "cooc", "group": "Quan hệ cặp/nhóm", "name": "Ma trận đồng xuất hiện", "note": "số đồng xuất hiện nhiều nhất với 6 số kỳ mới nhất", "pick": [43, 11, 3, 9, 32, 38]}, {"key": "pairs", "group": "Quan hệ cặp/nhóm", "name": "Cặp & nhóm số (tham lam)", "note": "khởi từ số nóng nhất, ghép dần theo cặp hay đi cùng", "pick": [11, 22, 32, 43, 48, 51]}, {"key": "itemset", "group": "Quan hệ cặp/nhóm", "name": "Apriori / FP-Growth", "note": "ghép từ cặp support cao nhất — 2 thuật toán cho cùng kết quả, chỉ khác tốc độ", "pick": [3, 9, 20, 21, 26, 41]}, {"key": "composite", "group": "Tổng hợp & ngẫu nhiên", "name": "Chấm điểm tổng hợp", "note": "cộng z-score: tần suất + phong độ + độ gan + đồng xuất hiện", "pick": [8, 39, 1, 12, 11, 32]}, {"key": "ga", "group": "Tổng hợp & ngẫu nhiên", "name": "Thuật toán di truyền", "note": "tiến hoá bộ số tối đa hoá 'độ điển hình' (cặp mạnh + cân đối)", "pick": [18, 21, 22, 32, 33, 43]}, {"key": "wrand", "group": "Tổng hợp & ngẫu nhiên", "name": "Ngẫu nhiên có trọng số", "note": "bốc 6 số, xác suất tỉ lệ thuận tần suất", "pick": [1, 24, 26, 37, 44, 51]}, {"key": "mc", "group": "Tổng hợp & ngẫu nhiên", "name": "Mô phỏng Monte Carlo", "note": "mọi số xấp xỉ đều → kết quả ~ bốc ngẫu nhiên", "pick": [1, 6, 8, 29, 38, 50]}], "tests": {"chi2": {"stat": 51.71, "df": 54, "expected": 149.8, "p": 0.5632, "ok": true}, "runs": {"runs": 690, "expected": 681.0, "z": 0.488, "n1": 679, "n2": 681, "ok": true}}, "track": {"methods": [{"key": "pairs", "name": "Theo cặp hay đi cùng", "sets": 301000, "avg": 0.679, "hit3": 4657, "hit4": 236, "hit5": 5, "hit6": 0, "hit3_rate": 1.55, "best": 5, "wins": 104.0, "dist": [140995, 120464, 34884, 4421, 231, 5, 0], "sd": 0.2152, "t": 1.99, "periods": 301, "beats_random": false}, {"key": "gan", "name": "Thiên số gan", "sets": 301000, "avg": 0.659, "hit3": 4290, "hit4": 178, "hit5": 4, "hit6": 0, "hit3_rate": 1.43, "best": 5, "wins": 91.5, "dist": [145208, 117659, 33843, 4112, 174, 4, 0], "sd": 0.2389, "t": 0.33, "periods": 301, "beats_random": false}, {"key": "hot", "name": "Thiên số nóng", "sets": 301000, "avg": 0.658, "hit3": 4158, "hit4": 188, "hit5": 3, "hit6": 0, "hit3_rate": 1.38, "best": 5, "wins": 17.0, "dist": [144740, 118764, 33338, 3970, 185, 3, 0], "sd": 0.0296, "t": 2.12, "periods": 301, "beats_random": false}, {"key": "payout", "name": "Tránh số đông", "sets": 301000, "avg": 0.656, "hit3": 4172, "hit4": 187, "hit5": 2, "hit6": 0, "hit3_rate": 1.39, "best": 5, "wins": 63.0, "dist": [144978, 118847, 33003, 3985, 185, 2, 0], "sd": 0.1174, "t": 0.26, "periods": 301, "beats_random": false}, {"key": "balanced", "name": "Cân đối", "sets": 301000, "avg": 0.655, "hit3": 4024, "hit4": 197, "hit5": 2, "hit6": 0, "hit3_rate": 1.34, "best": 5, "wins": 25.5, "dist": [145181, 118658, 33137, 3827, 195, 2, 0], "sd": 0.0247, "t": 0.43, "periods": 301, "beats_random": false}], "baseline": {"avg": 0.655, "hit3_rate": 1.333, "pct": [48.2372, 39.4668, 10.963, 1.2711, 0.0608, 0.001, 0.0]}, "pending": 0, "scored_batches": 301, "recent": [{"period": "01373", "date": "2026-07-18", "result": [22, 41, 45, 48, 54, 55], "per_method": {"balanced": 0.661, "gan": 0.771, "hot": 0.625, "pairs": 0.968, "payout": 0.706}}, {"period": "01372", "date": "2026-07-16", "result": [19, 20, 33, 45, 48, 53], "per_method": {"balanced": 0.621, "gan": 0.561, "hot": 0.671, "pairs": 0.668, "payout": 0.835}}, {"period": "01371", "date": "2026-07-14", "result": [10, 24, 30, 35, 45, 51], "per_method": {"balanced": 0.665, "gan": 0.905, "hot": 0.655, "pairs": 0.648, "payout": 0.693}}, {"period": "01370", "date": "2026-07-11", "result": [9, 17, 20, 33, 41, 42], "per_method": {"balanced": 0.63, "gan": 0.333, "hot": 0.672, "pairs": 0.803, "payout": 0.779}}, {"period": "01369", "date": "2026-07-09", "result": [2, 9, 10, 14, 17, 49], "per_method": {"balanced": 0.646, "gan": 1.232, "hot": 0.604, "pairs": 0.357, "payout": 0.644}}, {"period": "01368", "date": "2026-07-07", "result": [4, 6, 25, 32, 33, 44], "per_method": {"balanced": 0.641, "gan": 0.797, "hot": 0.661, "pairs": 0.525, "payout": 0.684}}, {"period": "01367", "date": "2026-07-04", "result": [13, 15, 18, 23, 31, 43], "per_method": {"balanced": 0.64, "gan": 0.31, "hot": 0.679, "pairs": 0.687, "payout": 0.554}}, {"period": "01366", "date": "2026-07-02", "result": [5, 11, 28, 34, 41, 42], "per_method": {"balanced": 0.714, "gan": 0.644, "hot": 0.646, "pairs": 1.08, "payout": 0.576}}, {"period": "01365", "date": "2026-06-30", "result": [5, 13, 18, 22, 43, 44], "per_method": {"balanced": 0.649, "gan": 0.85, "hot": 0.707, "pairs": 1.045, "payout": 0.654}}, {"period": "01364", "date": "2026-06-27", "result": [7, 16, 21, 23, 28, 52], "per_method": {"balanced": 0.657, "gan": 0.43, "hot": 0.637, "pairs": 0.282, "payout": 0.435}}, {"period": "01363", "date": "2026-06-25", "result": [1, 3, 8, 15, 35, 55], "per_method": {"balanced": 0.63, "gan": 0.983, "hot": 0.686, "pairs": 0.584, "payout": 0.507}}, {"period": "01362", "date": "2026-06-23", "result": [1, 13, 28, 38, 40, 46], "per_method": {"balanced": 0.632, "gan": 0.665, "hot": 0.644, "pairs": 0.334, "payout": 0.629}}, {"period": "01361", "date": "2026-06-20", "result": [16, 23, 26, 30, 52, 53], "per_method": {"balanced": 0.66, "gan": 0.979, "hot": 0.709, "pairs": 0.481, "payout": 0.559}}, {"period": "01360", "date": "2026-06-18", "result": [1, 4, 14, 20, 46, 49], "per_method": {"balanced": 0.623, "gan": 0.629, "hot": 0.634, "pairs": 0.396, "payout": 0.749}}, {"period": "01359", "date": "2026-06-16", "result": [2, 4, 5, 7, 31, 40], "per_method": {"balanced": 0.656, "gan": 0.798, "hot": 0.635, "pairs": 0.275, "payout": 0.464}}, {"period": "01358", "date": "2026-06-13", "result": [2, 8, 19, 33, 36, 47], "per_method": {"balanced": 0.662, "gan": 0.692, "hot": 0.628, "pairs": 0.652, "payout": 0.646}}, {"period": "01357", "date": "2026-06-11", "result": [1, 8, 17, 24, 40, 48], "per_method": {"balanced": 0.655, "gan": 0.441, "hot": 0.681, "pairs": 0.743, "payout": 0.596}}, {"period": "01356", "date": "2026-06-09", "result": [6, 8, 18, 27, 32, 34], "per_method": {"balanced": 0.644, "gan": 0.651, "hot": 0.702, "pairs": 0.997, "payout": 0.555}}, {"period": "01355", "date": "2026-06-06", "result": [3, 11, 16, 37, 39, 41], "per_method": {"balanced": 0.65, "gan": 0.293, "hot": 0.667, "pairs": 0.889, "payout": 0.638}}, {"period": "01354", "date": "2026-06-04", "result": [23, 24, 28, 29, 39, 43], "per_method": {"balanced": 0.684, "gan": 0.821, "hot": 0.673, "pairs": 0.792, "payout": 0.641}}, {"period": "01353", "date": "2026-06-02", "result": [1, 3, 5, 16, 37, 51], "per_method": {"balanced": 0.595, "gan": 0.809, "hot": 0.671, "pairs": 0.728, "payout": 0.504}}, {"period": "01352", "date": "2026-05-30", "result": [2, 8, 20, 24, 25, 42], "per_method": {"balanced": 0.651, "gan": 0.773, "hot": 0.618, "pairs": 0.716, "payout": 0.613}}, {"period": "01351", "date": "2026-05-28", "result": [8, 11, 21, 25, 31, 53], "per_method": {"balanced": 0.652, "gan": 0.533, "hot": 0.627, "pairs": 0.815, "payout": 0.424}}, {"period": "01350", "date": "2026-05-26", "result": [1, 14, 15, 19, 23, 34], "per_method": {"balanced": 0.689, "gan": 1.055, "hot": 0.692, "pairs": 0.626, "payout": 0.741}}, {"period": "01349", "date": "2026-05-23", "result": [17, 21, 22, 27, 38, 49], "per_method": {"balanced": 0.671, "gan": 0.971, "hot": 0.676, "pairs": 0.66, "payout": 0.667}}, {"period": "01348", "date": "2026-05-21", "result": [16, 18, 20, 28, 32, 34], "per_method": {"balanced": 0.711, "gan": 0.847, "hot": 0.722, "pairs": 0.896, "payout": 0.671}}, {"period": "01347", "date": "2026-05-19", "result": [12, 39, 40, 45, 48, 53], "per_method": {"balanced": 0.647, "gan": 0.891, "hot": 0.647, "pairs": 0.707, "payout": 0.773}}, {"period": "01346", "date": "2026-05-16", "result": [8, 25, 32, 36, 39, 47], "per_method": {"balanced": 0.674, "gan": 0.523, "hot": 0.658, "pairs": 0.766, "payout": 0.736}}, {"period": "01345", "date": "2026-05-14", "result": [26, 28, 39, 41, 48, 55], "per_method": {"balanced": 0.621, "gan": 0.628, "hot": 0.684, "pairs": 0.629, "payout": 0.619}}, {"period": "01344", "date": "2026-05-12", "result": [2, 11, 22, 26, 31, 38], "per_method": {"balanced": 0.635, "gan": 1.104, "hot": 0.658, "pairs": 0.922, "payout": 0.38}}]}}];
+const GENERATED = "21/07/2026 01:15";
 const SOURCE = "vietlott_data.db";
 let current = 0, freqByCount = false;
 let simRunning = false, simTarget = null, simAttempts = 0, simHits = null;
@@ -441,24 +448,9 @@ function render(){
     mk('Số về nhiều nhất', hot ? (hot.number+' · '+hot.count+' lần') : '—') +
     mk('Lâu chưa về nhất', cold ? (cold.number+' · '+cold.gap+' kỳ') : '—');
 
-  // positions x1..x6 (bỏ ở trang rút gọn -> #positions có thể không tồn tại)
-  const pos = document.getElementById('positions');
-  if(pos){
-    pos.innerHTML = '';
-    for(const p of g.positions){
-      const panel = document.createElement('div');
-      panel.className = 'panel';
-      panel.innerHTML =
-        `<div class="pt">${esc(p.name)}</div>`+
-        `<div class="pc">dao động ${p.min}–${p.max} · hay gặp ${p.mode} · TB ${p.mean}</div>`+
-        `<div class="chart"></div>`;
-      pos.appendChild(panel);
-      columnChart(panel.querySelector('.chart'),
-        p.values.map(v=>({label:v.value, value:v.occ})),
-        {W:360, H:200, labelMax:true, softNonMax:true, labelEvery:5,
-         tipTitle:d=>('giá trị '+esc(d.label))});
-    }
-  }
+  // Mục "Phân bố theo vị trí" đã bỏ khỏi trang. Dữ liệu g.positions VẪN được giữ
+  // trong payload vì sugEngine dùng min/max từng vị trí làm ràng buộc sinh số —
+  // bỏ đi thì bộ số trên web sẽ khác với predict_track.py sinh cho DB.
 
   renderFreq();
 
@@ -478,6 +470,7 @@ function render(){
   renderPairs();
   renderSuggest();
   renderBacktest();
+  renderTrack();
   renderSim();
   renderAlgos();
 
@@ -626,12 +619,66 @@ function sugInputs(){
   const parse = id => (document.getElementById(id).value.match(/\d+/g)||[]).map(Number);
   return {
     mode: document.getElementById('sugMode').value,
-    count: parseInt(document.getElementById('sugCount').value,10)||5,
+    count: Math.max(1, Math.min(parseInt(document.getElementById('sugCount').value,10)||5, 5000)),
     lock: parse('sugLock'),
     excl: parse('sugExcl'),
   };
 }
 function overlap(a,b){ let c=0; for(const x of a) if(b.includes(x)) c++; return c; }
+
+// --- Mô hình "độ phổ biến": ước lượng bao nhiêu người CÙNG đánh một số / một bộ ---
+// Dùng cho chế độ "Tránh số đông": bốc theo NGHỊCH ĐẢO độ phổ biến.
+// KHÔNG tăng xác suất trúng — Vietlott chia Jackpot cho những người cùng trúng, nên
+// bộ ít người đánh chỉ giúp PHẢI CHIA ÍT HƠN khi đã trúng.
+// Cơ sở: nghiên cứu hành vi chọn số (Cambridge JDM, UPenn) — người chơi dồn vào ngày
+// sinh 1–31, tháng 1–12, né số tận cùng 0/9. Hệ số theo đuôi 8/6/4 là GIẢ ĐỊNH thói
+// quen VN (phát/lộc/tử), không lấy từ nghiên cứu và không kiểm chứng được.
+// ĐỒNG BỘ: phải giống hệt pop_of_number/pop_of_set/is_crowded_set trong predict_track.py,
+// nếu không bảng xếp hạng đọc từ DB sẽ lệch với backtest chạy trên trang này.
+const POP_TAIL = {0:0.85, 9:0.85, 8:1.15, 6:1.08, 4:0.92};
+const POP_WEIGHT_EXP = 1.5, POP_TOURNAMENT = 5;
+function popOfNumber(x){
+  let p = 1;
+  if(x <= 31) p *= 1.60;               // ngày sinh — yếu tố mạnh nhất
+  if(x <= 12) p *= 1.25;               // tháng
+  p *= (POP_TAIL[x % 10] || 1);
+  if(x === 13) p *= 0.90;
+  return p;
+}
+function popIsArith(s){
+  const step = s[1]-s[0];
+  if(step <= 0) return false;
+  for(let i=1;i<s.length;i++) if(s[i]-s[i-1] !== step) return false;
+  return true;
+}
+function popOfSet(s){
+  let p = s.reduce((a,x)=>a+popOfNumber(x),0)/s.length;
+  if(s.every(x=>x<=31)) p *= 2.2;                        // bộ "toàn ngày sinh"
+  let cons=0; for(let i=0;i<s.length-1;i++) if(s[i+1]===s[i]+1) cons++;
+  if(cons) p *= Math.pow(1.25, cons);
+  if(popIsArith(s)) p *= 3.0;                            // cấp số cộng đều
+  if(new Set(s.map(x=>Math.floor((x-1)/10))).size === 1) p *= 1.8;
+  const tail={}; s.forEach(x=>{ tail[x%10]=(tail[x%10]||0)+1; });
+  if(Math.max.apply(null,Object.values(tail)) >= 4) p *= 1.5;
+  return p;
+}
+function isCrowdedSet(s){
+  if(s.every(x=>x<=31)) return true;
+  if(popIsArith(s)) return true;
+  if(new Set(s.map(x=>Math.floor((x-1)/10))).size === 1) return true;
+  return false;
+}
+// Bốc POP_TOURNAMENT bộ, giữ bộ ít người đánh nhất. Chỉ chỉnh trọng số từng số là
+// KHÔNG đủ — ràng buộc "điển hình" bóp tới mức payout gần trùng balanced.
+function popTournament(gen){
+  let best=null, bestP=0;
+  for(let i=0;i<POP_TOURNAMENT;i++){
+    const s=gen(); if(!s || s.length<6) continue;
+    const p=popOfSet(s);
+    if(best===null || p<bestP){ best=s; bestP=p; }
+  }
+  return best || gen();
+}
 
 function sugEngine(){
   const g = DATA[current], ex = g.extra, n = ex.n;
@@ -676,17 +723,24 @@ function sugEngine(){
   const weightOf = x => exclSet.has(x)?0:
     mode==='hot' ? (freq[x]?freq[x].count:0)+1 :
     mode==='gan' ? (freq[x]?freq[x].gap:0)+1 :
-    mode==='payout' ? (x>31?3:1) : 1;
+    mode==='payout' ? Math.pow(1/popOfNumber(x), POP_WEIGHT_EXP) : 1;
+  // Trọng số từng số KHÔNG đổi giữa các lần bốc -> tính sẵn 1 lần. Trước đây dựng lại
+  // mảng + gọi weightOf (có Math.pow ở chế độ payout) cho mỗi lần bốc, khiến sinh bội
+  // số 5000 bộ mất ~12s và đơ trình duyệt.
+  const W0 = new Float64Array(n+1);
+  for(let x=1;x<=n;x++) W0[x] = exclSet.has(x) ? 0 : weightOf(x);
   function sampleWeighted(){
-    const chosen=[...locked], used=new Set(chosen);
+    const chosen=[...locked], used=new Uint8Array(n+1);
+    for(const x of chosen) used[x]=1;
     while(chosen.length<6){
-      let tot=0; const w=new Array(n+1).fill(0);
-      for(let x=1;x<=n;x++){ if(used.has(x)||exclSet.has(x)) continue; w[x]=weightOf(x); tot+=w[x]; }
-      if(tot<=0){ const rem=[]; for(let x=1;x<=n;x++) if(!used.has(x)&&!exclSet.has(x)) rem.push(x);
-        if(!rem.length) break; const p=rem[Math.random()*rem.length|0]; chosen.push(p); used.add(p); continue; }
-      let r=Math.random()*tot, acc=0, pick=1;
-      for(let x=1;x<=n;x++){ acc+=w[x]; if(acc>=r){pick=x;break;} }
-      chosen.push(pick); used.add(pick);
+      let tot=0; for(let x=1;x<=n;x++) if(!used[x]) tot+=W0[x];
+      if(tot<=0){ const rem=[]; for(let x=1;x<=n;x++) if(!used[x]&&!exclSet.has(x)) rem.push(x);
+        if(!rem.length) break; const p=rem[Math.random()*rem.length|0]; chosen.push(p); used[p]=1; continue; }
+      let r=Math.random()*tot, acc=0, pick=-1;
+      for(let x=1;x<=n;x++){ if(used[x]) continue; acc+=W0[x]; if(acc>=r){pick=x;break;} }
+      if(pick<0){ for(let x=n;x>=1;x--) if(!used[x]&&W0[x]>0){ pick=x; break; } }
+      if(pick<0) break;
+      chosen.push(pick); used[pick]=1;
     }
     return chosen.sort((a,b)=>a-b);
   }
@@ -707,26 +761,48 @@ function sugEngine(){
     }
     return s.sort((a,b)=>a-b);
   }
-  const gen = mode==='pairs'? genPair : sampleWeighted;
+  const rawGen = mode==='pairs'? genPair : sampleWeighted;
+  // payout: bốc ở mức BỘ (giữ bộ ít người đánh nhất) + loại thẳng dạng đụng hàng nặng.
+  const gen = mode==='payout' ? (()=>popTournament(rawGen)) : rawGen;
+  const crowded = mode==='payout' ? isCrowdedSet : (()=>false);
 
-  const pool=[], seen=new Set(); let relaxed=false;
-  for(let t=0;t<9000 && pool.length<count*10; t++){
-    const s=gen(); if(s.length<6) continue;
-    const key=s.join(','); if(seen.has(key)) continue;
-    const m=score(s); if(!passes(m)) continue;
-    seen.add(key); pool.push(m);
+  // Bội số: ngân sách phải co giãn theo count, nếu không xin 1000 bộ sẽ chỉ ra vài chục.
+  const bulk = count > 20;
+  const poolTarget = bulk ? Math.ceil(count*1.4) : count*10;
+  const tries1 = Math.max(9000, count*40), tries2 = Math.max(4000, count*20);
+  // Chống "cày không ra": chế độ pairs bốc tham lam nên số bộ DUY NHẤT có hạn
+  // (~1.6k với 6/55); hết bộ mới thì thoát sớm thay vì quay vòng vô ích.
+  const STALL_MAX = 4000;
+
+  const pool=[], seen=new Set(); let relaxed=false, stall=0;
+  for(let t=0;t<tries1 && pool.length<poolTarget && stall<STALL_MAX; t++){
+    const s=gen(); if(!s||s.length<6){ stall++; continue; }
+    const key=s.join(','); if(seen.has(key)){ stall++; continue; }
+    if(crowded(s)){ stall++; continue; }
+    const m=score(s); if(!passes(m)){ stall++; continue; }
+    seen.add(key); pool.push(m); stall=0;
   }
-  if(pool.length<count){ relaxed=true;
-    for(let t=0;t<4000 && pool.length<count*6; t++){
-      const s=gen(); if(s.length<6) continue; const key=s.join(',');
-      if(seen.has(key)) continue; seen.add(key); pool.push(score(s));
+  if(pool.length<count){ relaxed=true; stall=0;
+    for(let t=0;t<tries2 && pool.length<count && stall<STALL_MAX; t++){
+      const s=gen(); if(!s||s.length<6){ stall++; continue; }
+      const key=s.join(',');
+      if(seen.has(key)){ stall++; continue; }
+      seen.add(key); pool.push(score(s)); stall=0;
     }
   }
   pool.sort((a,b)=>b.score-a.score);
-  const out=[];
-  for(const c of pool){ if(out.every(o=>overlap(o.set,c.set)<=4)){ out.push(c); if(out.length>=count) break; } }
-  for(let i=0;out.length<count&&i<pool.length;i++) if(!out.includes(pool[i])) out.push(pool[i]);
-  return {out:out.slice(0,count), relaxed, mode, locked, excl:[...exclSet]};
+  let out;
+  if(bulk){
+    // Với bội số, ràng buộc "khác nhau ≥2 số" là O(n²) và gần như bất khả thi —
+    // chỉ cần các bộ không trùng lặp (đã lọc bằng `seen`).
+    out = pool.slice(0, count);
+  }else{
+    out=[];
+    for(const c of pool){ if(out.every(o=>overlap(o.set,c.set)<=4)){ out.push(c); if(out.length>=count) break; } }
+    for(let i=0;out.length<count&&i<pool.length;i++) if(!out.includes(pool[i])) out.push(pool[i]);
+    out = out.slice(0,count);
+  }
+  return {out, relaxed, mode, locked, excl:[...exclSet], bulk, asked:count};
 }
 
 const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
@@ -736,18 +812,47 @@ function renderSuggest(){
   const panel = document.getElementById('sugPanel');
   if(!ex){ panel.style.display='none'; return; }
   panel.style.display='';
+  document.getElementById('sugCount').value = sugInputs().count;   // ghim lại 1–5000
   const res = sugEngine();
+  const SHOW = 50;                       // bội số: chỉ vẽ chip 50 bộ đầu cho nhẹ DOM
   let html='';
-  res.out.forEach((c,i)=>{
+  res.out.slice(0,SHOW).forEach((c,i)=>{
     html += '<div class="setrow"><span class="lbl">#'+(i+1)+'</span>'+
       c.set.map(x=>'<span class="chip'+(res.locked.includes(x)?' lock':'')+'">'+x+'</span>').join('')+
       '<span class="setmeta">điểm <b>'+c.score+'</b> · tổng '+c.sum+' · '+c.odd+' lẻ · '+
-      c.low+' thấp · '+c.cons+' liên tiếp · lặp '+c.rep+'</span></div>';
+      c.low+' thấp · '+c.cons+' liên tiếp · lặp '+c.rep+
+      ' · phổ biến <b>'+popOfSet(c.set).toFixed(2)+'</b></span></div>';
   });
+  if(res.out.length>SHOW)
+    html += '<div class="pc">… và '+(res.out.length-SHOW).toLocaleString('vi')+
+      ' bộ nữa — xem đủ ở ô "Xem &amp; chép toàn bộ bội số" phía trên.</div>';
   document.getElementById('suggestList').innerHTML = html ||
     '<div class="pc">Không tạo được bộ nào với khoá/loại số hiện tại.</div>';
+
+  // Ô văn bản + thống kê chỉ có ý nghĩa ở chế độ bội số.
+  const wrap = document.getElementById('sugSetsWrap');
+  const ta = document.getElementById('sugSets');
+  const stat = document.getElementById('sugStat');
+  if(res.bulk){
+    wrap.style.display='';
+    ta.value = res.out.map(c=>c.set.join(' ')).join('\n');
+    const uniq = new Set(res.out.map(c=>c.set.join(','))).size;
+    const pops = res.out.map(c=>popOfSet(c.set));
+    const avgPop = pops.reduce((a,b)=>a+b,0)/(pops.length||1);
+    const avgScore = res.out.reduce((a,c)=>a+c.score,0)/(res.out.length||1);
+    stat.innerHTML = 'Đã tạo <b>'+res.out.length.toLocaleString('vi')+'</b> bộ'+
+      (uniq<res.out.length ? ' (chỉ <b>'+uniq.toLocaleString('vi')+'</b> bộ khác nhau — '+
+        'chế độ này không bốc thêm được bộ mới)' : ' · tất cả khác nhau')+
+      ' · điểm điển hình TB <b>'+avgScore.toFixed(0)+'</b>'+
+      ' · độ phổ biến TB <b>'+avgPop.toFixed(2)+'</b> (thấp = ít người đánh trùng)'+
+      ' · tổng tiền <b>'+(res.out.length*10000).toLocaleString('vi')+'đ</b> nếu mua hết.';
+  }else{
+    wrap.style.display='none'; ta.value=''; stat.innerHTML='';
+  }
+
   document.getElementById('sugMsg').textContent = res.relaxed
-    ? '⚠ Ràng buộc quá chặt (khoá số?) — đã nới lỏng để đủ '+res.out.length+' bộ.' : '';
+    ? '⚠ Không đủ bộ qua ràng buộc (khoá số? số bộ quá lớn?) — đã nới lỏng để đủ '
+      +res.out.length+'/'+res.asked+' bộ.' : '';
 
   document.getElementById('sugNote').innerHTML =
     '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
@@ -759,8 +864,17 @@ function renderSuggest(){
     '<div style="margin-top:6px"><b>Chế độ '+MODE_NAME[res.mode]+':</b> '+
     ({balanced:'bốc đều, chỉ cần điển hình.',hot:'thiên số về nhiều.',
       gan:'thiên số lâu chưa về.',pairs:'ghép theo cặp hay đi cùng.',
-      payout:'ưu tiên số &gt;31, ít người đánh → nếu trúng ít bị chia giải.'}[res.mode])+'</div>'+
-    '<span class="wl">⚠ Không chế độ nào tăng xác suất trúng. "Tránh số đông" chỉ tối ưu tiền nhận khi trúng.</span>';
+      payout:'né số nhiều người đánh (ngày sinh 1–31, tháng 1–12, đuôi 8/6), '+
+             'ưu tiên đuôi 0/9 và số &gt;31; loại bộ toàn ngày sinh, cấp số cộng, '+
+             'cùng một hàng chục. Mỗi lần bốc '+POP_TOURNAMENT+' bộ rồi giữ bộ ít người đánh nhất.'
+    }[res.mode])+'</div>'+
+    (res.mode==='payout'
+      ? '<div style="margin-top:6px"><b>Độ phổ biến</b> = ước lượng mức đông người cùng đánh '+
+        '(1,0 ≈ trung bình; thấp hơn là tốt). Dựa trên nghiên cứu hành vi chọn số; phần '+
+        'đuôi 8/6/4 là <b>giả định thói quen VN</b>, Vietlott không công bố dữ liệu vé bán '+
+        'ra nên không kiểm chứng được.</div>' : '')+
+    '<span class="wl">⚠ Không chế độ nào tăng xác suất trúng. "Tránh số đông" KHÔNG giúp dễ '+
+    'trúng hơn — chỉ giảm khả năng phải chia giải với người khác khi đã trúng.</span>';
 }
 
 // --- So sánh 5 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
@@ -777,7 +891,7 @@ function btBuildGen(){
     for(let x=1;x<=n;x++) w[x] =
       mode==='hot'    ? (freq[x]?freq[x].count:0)+1 :
       mode==='gan'    ? (freq[x]?freq[x].gap:0)+1 :
-      mode==='payout' ? (x>31?3:1) : 1;
+      mode==='payout' ? Math.pow(1/popOfNumber(x), POP_WEIGHT_EXP) : 1;
     return w;
   }
   const W = {balanced:wArr('balanced'), hot:wArr('hot'), gan:wArr('gan'), payout:wArr('payout')};
@@ -812,7 +926,16 @@ function btBuildGen(){
     }
     return s.sort((a,b)=>a-b);
   }
-  const gen = mode => mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
+  // payout dùng cùng mô hình độ phổ biến như "Bộ số gợi ý": bốc ở mức BỘ rồi loại
+  // dạng đụng hàng nặng — để bội số backtest khớp với bội số đem đi chơi thật.
+  const gen = mode => {
+    if(mode === 'payout'){
+      let s, guard = 0;
+      do { s = popTournament(()=>sampleWeighted(W.payout)); } while(isCrowdedSet(s) && ++guard < 20);
+      return s;
+    }
+    return mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
+  };
   return {n, gen};
 }
 
@@ -1012,6 +1135,137 @@ function renderBacktest(){
     status.innerHTML = 'Chưa có bội số nào được lưu. Bấm <b>Tạo &amp; lưu</b> để tạo &amp; lưu bội số cho từng giải thuật '+
       '(lần sau mở lại vẫn còn để So sánh).';
   }
+}
+
+// --- Xếp hạng giải thuật trên KẾT QUẢ THẬT (đọc từ DB, do crawl.py chấm) ---
+function renderTrack(){
+  const panel = document.getElementById('trackPanel');
+  if(!panel) return;
+  const tr = DATA[current].track;
+  if(!tr){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const status = document.getElementById('trackStatus');
+  const body   = document.getElementById('trackBody');
+
+  if(!tr.scored_batches){
+    status.innerHTML = tr.pending
+      ? 'Đã chốt sẵn <b>'+tr.pending+'</b> kỳ bộ số, đang chờ kết quả. Khi kỳ tiếp theo về '+
+        'và bạn chạy <b>cập nhật lịch sử</b>, hệ thống tự chấm rồi bảng xếp hạng hiện ra đây.'
+      : 'Chưa có dữ liệu. Lần chạy <b>cập nhật lịch sử</b> (crawl.py) tới sẽ tự chốt '+
+        '1000 bộ/giải thuật cho kỳ sắp về, rồi tự chấm khi có kết quả.';
+    body.innerHTML='';
+    return;
+  }
+
+  // Cột mỗi giải thuật — tr.methods đã xếp sẵn theo TB trùng giảm dần.
+  const withData = tr.methods.filter(m=>m.sets);
+  const bestAvg  = Math.max.apply(null, withData.map(m=>m.avg));
+  const bestWins = Math.max.apply(null, withData.map(m=>m.wins));
+  let cols='';
+  tr.methods.forEach(m=>{
+    if(!m.sets){
+      cols += '<div class="btcol"><div class="nm"><span>'+esc(m.name)+'</span></div>'+
+        '<div class="k" style="margin-top:8px">chưa có dữ liệu</div></div>';
+      return;
+    }
+    const lead = m.avg === bestAvg;
+    cols += '<div class="btcol'+(lead?' lead':'')+'">'+
+      '<div class="nm"><span>'+esc(m.name)+'</span>'+(lead?'<span class="star">★</span>':'')+'</div>'+
+      '<div class="k">TB trùng / vé</div>'+
+      '<div class="big">'+m.avg.toFixed(3)+'</div>'+
+      '<div class="k" style="margin-top:4px">Thắng kỳ: <b>'+m.wins+
+        '</b>/'+tr.scored_batches+(m.wins===bestWins&&bestWins>0?' 🏆':'')+'</div>'+
+      '<div class="k">≥3: <b>'+m.hit3+'</b> · ≥4: <b>'+m.hit4+
+        '</b> · ≥5: <b>'+m.hit5+'</b> · 6: <b>'+m.hit6+'</b></div>'+
+      '<div class="k">Tốt nhất <b>'+m.best+'</b> số · '+m.sets.toLocaleString('vi')+' vé</div>'+
+      (m.t===undefined ? '' :
+        '<div class="k" style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'+
+        'Dao động giữa các kỳ <b>±'+m.sd.toFixed(3)+'</b><br>t = <b>'+m.t.toFixed(2)+'</b> · '+
+        (m.beats_random
+          ? '<span style="color:var(--good)">lệch khỏi ngẫu nhiên</span>'
+          : '<span style="color:var(--muted)">không khác ngẫu nhiên</span>')+'</div>')+
+    '</div>';
+  });
+
+  // Phân bố số trùng 0..6: so 5 chế độ với nhau VÀ với tỉ lệ lý thuyết. Đây là
+  // bảng trả lời thẳng "có chế độ nào lệch khỏi ngẫu nhiên không".
+  let distTbl='';
+  if(withData.length && withData[0].dist){
+    let head='<tr><th>Trùng</th><th>Lý thuyết</th>';
+    withData.forEach(m=> head += '<th>'+esc(m.name)+'</th>');
+    head += '</tr>';
+    let rows='';
+    for(let k=6;k>=0;k--){
+      const th = tr.baseline.pct ? tr.baseline.pct[k] : null;
+      rows += '<tr><td><b>'+k+' số</b></td><td style="color:var(--muted)">'+
+        (th===null?'—':(th<0.01? th.toFixed(4) : th.toFixed(2))+'%')+'</td>';
+      withData.forEach(m=>{
+        const c = m.dist[k], pct = m.sets ? c/m.sets*100 : 0;
+        // lệch so với lý thuyết: chỉ tô khi mức đó đủ vé để có ý nghĩa
+        const dev = (th!==null && th>0 && c>=20) ? (pct-th)/th : 0;
+        const col = dev>0.15 ? 'var(--good)' : dev<-0.15 ? 'var(--warn)' : '';
+        rows += '<td'+(col?' style="color:'+col+'"':'')+'>'+
+          c.toLocaleString('vi')+
+          '<div style="color:var(--muted);font-size:11px">'+
+          (pct<0.01 && c>0 ? pct.toFixed(4) : pct.toFixed(2))+'%</div></td>';
+      });
+      rows += '</tr>';
+    }
+    distTbl = '<details open style="margin-top:12px"><summary>Phân bố số trùng của '+
+      (tr.scored_batches*1).toLocaleString('vi')+' kỳ (số vé đạt từng mức · so với lý thuyết)</summary>'+
+      '<table><thead>'+head+'</thead><tbody>'+rows+'</tbody></table>'+
+      '<div class="pc" style="margin-top:6px">Cột <b>Lý thuyết</b> là tỉ lệ của vé bốc '+
+      'ngẫu nhiên hoàn toàn. Nếu một chế độ thật sự "đoán" được thì cột của nó phải cao '+
+      'hơn hẳn ở các mức 3–6 số một cách bền vững qua nhiều kỳ.</div></details>';
+  }
+
+  // Lịch sử từng kỳ: TB trùng của mỗi giải thuật, tô đậm giải thuật thắng kỳ đó.
+  let hist='';
+  if(tr.recent && tr.recent.length){
+    const keys = tr.methods.map(m=>m.key), names = {};
+    tr.methods.forEach(m=>names[m.key]=m.name);
+    let head = '<tr><th>Kỳ</th><th>Kết quả</th>';
+    keys.forEach(k=> head += '<th>'+esc(names[k])+'</th>');
+    head += '</tr>';
+    let rows='';
+    tr.recent.forEach(r=>{
+      const vals = keys.map(k=> (r.per_method && r.per_method[k]!=null) ? r.per_method[k] : null);
+      const top  = Math.max.apply(null, vals.filter(v=>v!=null));
+      rows += '<tr><td>'+esc(r.period||'—')+'<div style="color:var(--muted);font-size:11px">'+
+        esc(r.date||'')+'</div></td><td>'+(r.result||[]).join(' ')+'</td>'+
+        vals.map(v=> v==null ? '<td>—</td>'
+          : '<td'+(v===top?' style="font-weight:650;color:var(--good)"':'')+'>'+
+            v.toFixed(3)+'</td>').join('')+'</tr>';
+    });
+    hist = '<details style="margin-top:12px"><summary>TB trùng từng kỳ — '+
+      tr.recent.length+' kỳ gần nhất (giải thuật thắng kỳ tô xanh)</summary>'+
+      '<table><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></details>';
+  }
+
+  // Kết luận thẳng: có chế độ nào thật sự vượt ngẫu nhiên không.
+  const beat = withData.filter(m=>m.beats_random);
+  const verdict = !withData.length || withData[0].t===undefined ? ''
+    : beat.length
+      ? '<div class="banner" style="margin-top:10px">⚑ <b>'+
+        beat.map(m=>esc(m.name)).join(', ')+'</b> đang lệch khỏi ngẫu nhiên (t vượt 2,58). '+
+        'Đáng xem tiếp — nhưng hãy chạy thêm kỳ trước khi tin, và kiểm tra xem có lỗi '+
+        'rò rỉ kết quả trong cách sinh số không.</div>'
+      : '<div class="banner" style="margin-top:10px">✓ Sau <b>'+tr.scored_batches+
+        '</b> kỳ: <b>không chế độ nào</b> vượt ngẫu nhiên. Chế độ dẫn đầu bảng chỉ đang '+
+        'gặp may — chênh lệch nằm trong sai số. Đúng như lý thuyết: kỳ vọng mỗi vé luôn '+
+        'là 6×6/'+DATA[current].extra.n+' = <b>'+tr.baseline.avg+'</b> số trùng, '+
+        '<b>bất kể chọn số nào</b>.</div>';
+
+  status.innerHTML = 'Đã chấm <b>'+tr.scored_batches+'</b> kỳ thật'+
+    (tr.pending?' · đang chờ <b>'+tr.pending+'</b> kỳ':'')+
+    ' · ngẫu nhiên lý thuyết TB <b>'+tr.baseline.avg+'</b> số trùng/vé.';
+  body.innerHTML = '<div class="btgrid">'+cols+'</div>'+ verdict + distTbl + hist +
+    '<div class="pc" style="margin-top:10px">Khác với bảng ở trên (bộ số lưu trong trình duyệt), '+
+    'bảng này dùng <b>bộ số đã chốt trong DB trước khi kỳ mới về</b> nên không thể "nhìn trước kết quả". '+
+    '<b>TB trùng/vé</b> = trung bình số trùng trên toàn bộ vé đã chấm; <b>Thắng kỳ</b> = số kỳ giải thuật đó '+
+    'có TB cao nhất (hoà thì chia đôi). '+
+    '<span class="wl">⚠ Cần vài chục kỳ chênh lệch mới có ý nghĩa — ít kỳ thì thứ hạng chủ yếu là nhiễu, '+
+    'và không giải thuật nào làm tăng xác suất trúng.</span></div>';
 }
 
 function renderAlgos(){
