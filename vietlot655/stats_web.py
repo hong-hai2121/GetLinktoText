@@ -17,7 +17,6 @@ import json
 import math
 import os
 import random
-import re
 import sqlite3
 import statistics
 import subprocess
@@ -45,41 +44,6 @@ POSITION_NAMES = {
     5: "x5",
     6: "x6 · lớn nhất",
 }
-
-
-def compute_gap_stats(db_path: Path | str, game_type: str) -> dict | None:
-    """Dùng lại gap_stats.py để tính khoảng cách gap; trả None nếu không có dữ liệu."""
-    try:
-        draws = gap_stats.fetch_draws(db_path, game_type=game_type)
-        n = gap_stats.resolve_n(None, game_type)
-        gs = gap_stats.compute_stats(draws, n)
-    except Exception:
-        return None
-
-    labels = ["g1 (x1→x2)", "g2 (x2→x3)", "g3 (x3→x4)",
-              "g4 (x4→x5)", "g5 (x5→x6)"]
-    rel = abs(gs["gbar"] - gs["expected_gap"]) / gs["expected_gap"]
-    return {
-        "N": gs["N"],
-        "expected_gap": round(gs["expected_gap"], 3),
-        "expected_range": round(gs["expected_range"], 3),
-        "per_position": [
-            {
-                "label": labels[i],
-                "mean": round(gs["gbar_per_position"][i], 3),
-                "std": round(gs["gstd_per_position"][i], 3),
-            }
-            for i in range(len(gs["gbar_per_position"]))
-        ],
-        "gbar": round(gs["gbar"], 4),
-        "gstd": round(gs["gstd"], 3),
-        "range_bar": round(gs["range_bar"], 3),
-        "range_std": round(gs["range_std"], 3),
-        "range_min": gs["range_min"],
-        "range_max": gs["range_max"],
-        "rel_diff": round(rel * 100, 2),
-        "ok": rel < 0.05,
-    }
 
 
 def _gammq(a: float, x: float) -> float:
@@ -115,58 +79,6 @@ def _gammq(a: float, x: float) -> float:
         if abs(delv - 1.0) < 1e-14:
             break
     return math.exp(-x + a * math.log(x) - gln) * h
-
-
-def compute_tests(db_path: Path | str, game_type: str) -> dict | None:
-    """Chi-square (55 số có ra đều không?) + Runs test (chuỗi tổng có ngẫu nhiên không?)."""
-    draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ
-    total = len(draws)
-    if total < 30:
-        return None
-    n = gap_stats.resolve_n(None, game_type)
-
-    # --- Chi-square goodness-of-fit: mỗi số kỳ vọng ra total*6/n lần ---
-    count = {x: 0 for x in range(1, n + 1)}
-    for d in draws:
-        for x in d:
-            count[x] += 1
-    expected = total * 6 / n
-    chi2 = sum((count[x] - expected) ** 2 / expected for x in range(1, n + 1))
-    df = n - 1
-    p_chi = _gammq(df / 2.0, chi2 / 2.0)
-
-    # --- Runs test trên chuỗi tổng 6 số so với trung vị (theo thời gian) ---
-    sums_chrono = [sum(d) for d in reversed(draws)]  # cũ -> mới
-    med = statistics.median(sums_chrono)
-    seq = [1 if s > med else 0 for s in sums_chrono if s != med]
-    n1 = sum(seq)
-    n2 = len(seq) - n1
-    runs = 1 + sum(1 for i in range(1, len(seq)) if seq[i] != seq[i - 1]) if seq else 0
-    z = None
-    if n1 > 0 and n2 > 0:
-        er = 2 * n1 * n2 / (n1 + n2) + 1
-        var = (2 * n1 * n2 * (2 * n1 * n2 - n1 - n2)) / (
-            (n1 + n2) ** 2 * (n1 + n2 - 1)
-        )
-        z = (runs - er) / math.sqrt(var) if var > 0 else 0.0
-
-    return {
-        "chi2": {
-            "stat": round(chi2, 2),
-            "df": df,
-            "expected": round(expected, 1),
-            "p": round(p_chi, 4),
-            "ok": p_chi > 0.05,
-        },
-        "runs": {
-            "runs": runs,
-            "expected": round(2 * n1 * n2 / (n1 + n2) + 1, 1) if (n1 and n2) else None,
-            "z": round(z, 3) if z is not None else None,
-            "n1": n1,
-            "n2": n2,
-            "ok": (z is not None and abs(z) < 1.96),
-        },
-    }
 
 
 def compute_extra_stats(
@@ -323,189 +235,6 @@ def compute_extra_stats(
     }
 
 
-def compute_algo_picks(
-    db_path: Path | str, game_type: str, recent_w: int = 30, decay: float = 0.97
-) -> list[dict] | None:
-    """Chạy từng thuật toán lên lịch sử, mỗi cái xuất ra 1 bộ 6 số theo cách tính riêng.
-
-    LƯU Ý QUAN TRỌNG: đây chỉ là "áp dụng thuật toán để ra một con số"; khi backtest
-    tất cả đều xấp xỉ ngẫu nhiên (~0,65 số/kỳ). Không cái nào dự đoán được kỳ tới.
-    """
-    draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ, mỗi kỳ sort tăng
-    total = len(draws)
-    if total < 10:
-        return None
-    n = gap_stats.resolve_n(None, game_type)
-    nums = list(range(1, n + 1))
-
-    count = {x: 0 for x in nums}
-    weighted = {x: 0.0 for x in nums}
-    gap = {x: total for x in nums}
-    recent = {x: 0 for x in nums}
-    seen: set[int] = set()
-    win = min(recent_w, total)
-    cooc = [[0] * (n + 1) for _ in range(n + 1)]
-
-    for i, d in enumerate(draws):
-        w = decay ** i
-        for x in d:
-            count[x] += 1
-            weighted[x] += w
-            if x not in seen:
-                gap[x] = i
-                seen.add(x)
-            if i < win:
-                recent[x] += 1
-        for a, b in combinations(d, 2):
-            cooc[a][b] += 1
-            cooc[b][a] += 1
-
-    recent_rate = {x: recent[x] / win for x in nums}
-    posterior = {x: (count[x] + 1) / (total + 2) for x in nums}
-    last = draws[0]  # kỳ mới nhất
-    cooc_last = {j: sum(cooc[j][i] for i in last) for j in nums}
-
-    # Markov bậc 1: từ 6 số kỳ mới nhất -> số hay ra ở kỳ liền sau.
-    prev_occ = {x: 0 for x in nums}
-    conext = [[0] * (n + 1) for _ in range(n + 1)]
-    for t in range(total - 1):
-        older, newer = draws[t + 1], draws[t]
-        for i in older:
-            prev_occ[i] += 1
-            for j in newer:
-                conext[i][j] += 1
-    markov = {
-        j: sum(conext[i][j] / prev_occ[i] for i in last if prev_occ[i]) for j in nums
-    }
-
-    def top6(score, largest=True):
-        return sorted(nums, key=lambda x: (-score[x] if largest else score[x], x))[:6]
-
-    def zmap(d):
-        vals = list(d.values())
-        m = statistics.fmean(vals)
-        sd = statistics.pstdev(vals) or 1.0
-        return {k: (v - m) / sd for k, v in d.items()}
-
-    def greedy(seed_set):
-        s = list(seed_set)
-        while len(s) < 6:
-            best, bv = None, -1
-            for x in nums:
-                if x in s:
-                    continue
-                v = sum(cooc[x][y] for y in s)
-                if v > bv:
-                    bv, best = v, x
-            s.append(best)
-        return sorted(s)
-
-    zc, zr, zg, zl = zmap(count), zmap(recent_rate), zmap(gap), zmap(cooc_last)
-    composite = {x: zc[x] + zr[x] + zg[x] + zl[x] for x in nums}
-
-    # Cặp support cao nhất -> seed cho "frequent itemset".
-    top_pair, tpv = (1, 2), -1
-    for a in nums:
-        for b in range(a + 1, n + 1):
-            if cooc[a][b] > tpv:
-                tpv, top_pair = cooc[a][b], (a, b)
-
-    # Monte Carlo & ngẫu nhiên có trọng số (seed cố định để tái lập).
-    rnd = random.Random(1234)
-    mc_pick = sorted(rnd.sample(nums, 6))
-
-    def weighted_sample():
-        rr = random.Random(5678)
-        pool, wts, chosen = nums[:], [count[x] for x in nums], []
-        for _ in range(6):
-            tot = sum(wts)
-            if tot <= 0:
-                idx = rr.randrange(len(pool))
-            else:
-                t, acc, idx = rr.random() * tot, 0.0, 0
-                for k, ww in enumerate(wts):
-                    acc += ww
-                    if acc >= t:
-                        idx = k
-                        break
-            chosen.append(pool.pop(idx))
-            wts.pop(idx)
-        return sorted(chosen)
-
-    # Thuật toán di truyền: tối đa hoá "độ điển hình" (cặp mạnh + cân đối tổng/chẵn-lẻ/thấp-cao).
-    target_sum = 3 * (n + 1)
-    low_max = n // 2
-
-    def fix6(lst, rr):
-        out: list[int] = []
-        for x in lst:
-            if 1 <= x <= n and x not in out:
-                out.append(x)
-            if len(out) == 6:
-                break
-        while len(out) < 6:
-            c = rr.randint(1, n)
-            if c not in out:
-                out.append(c)
-        return sorted(out)
-
-    def fitness(s):
-        co = sum(cooc[a][b] for a, b in combinations(s, 2)) / (tpv * 15 + 1)
-        odd = sum(1 for x in s if x % 2)
-        low = sum(1 for x in s if x <= low_max)
-        bal = -abs(odd - 3) - abs(low - 3) - abs(sum(s) - target_sum) / (target_sum * 0.15)
-        return co + bal
-
-    gr = random.Random(999)
-    pop = [fix6(gr.sample(nums, 6), gr) for _ in range(60)]
-    for _ in range(60):
-        pop.sort(key=fitness, reverse=True)
-        pop = pop[:20]
-        while len(pop) < 60:
-            p1, p2 = gr.choice(pop[:10]), gr.choice(pop[:20])
-            child = list(dict.fromkeys(p1 + p2))
-            if len(child) > 6:
-                child = gr.sample(child, 6)
-            if gr.random() < 0.3:
-                child[gr.randrange(len(child))] = gr.randint(1, n)
-            pop.append(fix6(child, gr))
-    pop.sort(key=fitness, reverse=True)
-    ga_pick = sorted(pop[0])
-
-    return [
-        {"key": "hot", "group": "Tần suất & thời gian", "name": "Tần suất cao (số nóng)",
-         "note": "6 số về nhiều nhất toàn lịch sử", "pick": top6(count)},
-        {"key": "cold", "group": "Tần suất & thời gian", "name": "Tần suất thấp (số lạnh)",
-         "note": "6 số về ít nhất toàn lịch sử", "pick": top6(count, largest=False)},
-        {"key": "weighted", "group": "Tần suất & thời gian", "name": "Tần suất có trọng số",
-         "note": f"ưu tiên kỳ gần (giảm dần {decay}^kỳ)", "pick": top6(weighted)},
-        {"key": "ma", "group": "Tần suất & thời gian", "name": "Trung bình trượt",
-         "note": f"tỉ lệ về cao nhất trong {win} kỳ gần nhất", "pick": top6(recent_rate)},
-        {"key": "gap", "group": "Tần suất & thời gian", "name": "Khoảng cách xuất hiện (số gan)",
-         "note": "6 số lâu chưa về nhất", "pick": top6(gap)},
-        {"key": "bayes", "group": "Tần suất & thời gian", "name": "Xác suất Bayes",
-         "note": "hậu nghiệm Beta(1,1) — tần suất làm mượt", "pick": top6(posterior)},
-        {"key": "markov", "group": "Quan hệ cặp/nhóm", "name": "Chuỗi Markov (bậc 1)",
-         "note": "từ 6 số kỳ mới nhất → số hay ra ở kỳ liền sau", "pick": top6(markov)},
-        {"key": "cooc", "group": "Quan hệ cặp/nhóm", "name": "Ma trận đồng xuất hiện",
-         "note": "số đồng xuất hiện nhiều nhất với 6 số kỳ mới nhất", "pick": top6(cooc_last)},
-        {"key": "pairs", "group": "Quan hệ cặp/nhóm", "name": "Cặp & nhóm số (tham lam)",
-         "note": "khởi từ số nóng nhất, ghép dần theo cặp hay đi cùng",
-         "pick": greedy([max(nums, key=lambda x: (count[x], -x))])},
-        {"key": "itemset", "group": "Quan hệ cặp/nhóm", "name": "Apriori / FP-Growth",
-         "note": "ghép từ cặp support cao nhất — 2 thuật toán cho cùng kết quả, chỉ khác tốc độ",
-         "pick": greedy(list(top_pair))},
-        {"key": "composite", "group": "Tổng hợp & ngẫu nhiên", "name": "Chấm điểm tổng hợp",
-         "note": "cộng z-score: tần suất + phong độ + độ gan + đồng xuất hiện", "pick": top6(composite)},
-        {"key": "ga", "group": "Tổng hợp & ngẫu nhiên", "name": "Thuật toán di truyền",
-         "note": "tiến hoá bộ số tối đa hoá 'độ điển hình' (cặp mạnh + cân đối)", "pick": ga_pick},
-        {"key": "wrand", "group": "Tổng hợp & ngẫu nhiên", "name": "Ngẫu nhiên có trọng số",
-         "note": "bốc 6 số, xác suất tỉ lệ thuận tần suất", "pick": weighted_sample()},
-        {"key": "mc", "group": "Tổng hợp & ngẫu nhiên", "name": "Mô phỏng Monte Carlo",
-         "note": "mọi số xấp xỉ đều → kết quả ~ bốc ngẫu nhiên", "pick": mc_pick},
-    ]
-
-
 def compute_track(db_path: Path | str, game_type: str) -> dict | None:
     """Bảng xếp hạng 5 giải thuật trên KẾT QUẢ THẬT đã tích luỹ trong DB.
 
@@ -547,21 +276,6 @@ def load_game_data(
             FROM number_frequency
             WHERE game_type = ?
             ORDER BY number ASC
-            """,
-            (game_type,),
-        )
-    ]
-
-    # Phân bố chuỗi về liên tiếp (gộp mọi số).
-    streaks = [
-        {"length": row["streak_length"], "occ": row["total"]}
-        for row in conn.execute(
-            """
-            SELECT streak_length, SUM(occurrences) AS total
-            FROM number_streaks
-            WHERE game_type = ?
-            GROUP BY streak_length
-            ORDER BY streak_length ASC
             """,
             (game_type,),
         )
@@ -614,11 +328,7 @@ def load_game_data(
         "total_draws": total_draws,
         "positions": positions,
         "frequency": frequency,
-        "streaks": streaks,
-        "gaps": compute_gap_stats(db_path, game_type),
         "extra": compute_extra_stats(db_path, game_type),
-        "algos": compute_algo_picks(db_path, game_type),
-        "tests": compute_tests(db_path, game_type),
         "track": compute_track(db_path, game_type),
         "history": load_history(db_path, game_type),
     }
@@ -726,11 +436,7 @@ def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
         "total_draws": extra["total"],
         "positions": [],
         "frequency": compute_frequency_list(db_path, game_type, extra["n"]),
-        "streaks": [],
-        "gaps": None,
         "extra": extra,
-        "algos": None,
-        "tests": None,
         "track": compute_track(db_path, game_type),
         "history": load_history(db_path, game_type),
     }
@@ -893,15 +599,6 @@ HTML_TEMPLATE = r"""<!doctype html>
     background:var(--surface);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;
     font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
-  .algogrp{font-size:12px;color:var(--muted);font-weight:600;margin:14px 0 4px;
-    text-transform:uppercase;letter-spacing:.04em}
-  .algorow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;
-    border-bottom:1px solid var(--border)}
-  .algoinfo{flex:1 1 240px;min-width:220px}
-  .algoinfo b{font-size:13px}
-  .algoinfo .note{color:var(--muted);font-size:11.5px;display:block;margin-top:1px}
-  .algorow .chips{flex:0 0 auto}
-  .algorow .chip{width:27px;height:27px;font-size:12px}
   .banner{background:var(--series-soft);border:1px solid var(--border);border-radius:10px;
     padding:10px 14px;font-size:12.5px;color:var(--text);margin-bottom:6px}
   h2{font-size:15px;font-weight:600;margin:30px 0 4px}
@@ -925,9 +622,6 @@ HTML_TEMPLATE = r"""<!doctype html>
     font-variant-numeric:tabular-nums}
   th,td{border-bottom:1px solid var(--border);padding:3px 8px;text-align:right}
   th:first-child,td:first-child{text-align:left}
-  #tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .08s;
-    background:var(--text);color:var(--surface);padding:6px 9px;border-radius:7px;
-    font-size:12px;z-index:10;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   footer{color:var(--muted);font-size:12px;margin-top:34px}
 </style>
 </head>
@@ -1012,64 +706,6 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div class="pc" style="margin-top:10px">Mỗi "bộ" là 1 vé 6 số ngẫu nhiên. Trúng 6/6 trung bình cần hàng chục triệu bộ — không có cách rút ngắn vì mỗi kỳ độc lập.</div>
   </div>
 
-  <!--LOWER_START-->
-  <h2>Tần suất từng số <span class="hint">số lần mỗi số đã về</span>
-    <button class="btn" id="freqSort" type="button" style="margin-left:10px">Sắp theo: số</button>
-  </h2>
-  <div class="panel"><div id="freqChart"></div>
-    <details><summary>Xem bảng</summary><div id="freqTable"></div></details>
-  </div>
-
-  <h2>Phân bố độ dài chuỗi về liên tiếp <span class="hint">gộp tất cả số</span></h2>
-  <div class="panel" style="max-width:520px"><div id="streakChart"></div></div>
-
-  <h2>Khoảng cách giữa các số (gap) <span class="hint">gN = x(N+1) − xN mỗi kỳ · so với máy quay công bằng</span></h2>
-  <div class="panel" id="gapPanel" style="max-width:640px">
-    <div class="cards" id="gapCards" style="margin:0 0 6px"></div>
-    <div id="gapChart"></div>
-    <div class="pc" id="gapVerdict" style="margin-top:8px"></div>
-  </div>
-
-  <h2>Kiểm định thống kê <span class="hint">máy quay có ĐỀU và NGẪU NHIÊN không? (không dùng để chọn số)</span></h2>
-  <div class="panel" id="testPanel" style="max-width:660px">
-    <div class="cards" id="testCards" style="margin:0 0 8px"></div>
-    <div class="pc" id="testNote"></div>
-  </div>
-
-  <h2>Tổng &amp; cân bằng bộ số <span class="hint">giúp loại bộ số quá lệch</span></h2>
-  <div class="panel" id="balPanel">
-    <div class="cards" id="balCards" style="margin:0 0 8px"></div>
-    <div class="pc">Phân bố tổng 6 số</div>
-    <div id="sumChart"></div>
-    <div class="grid3" style="margin-top:12px">
-      <div><div class="pc">Số lẻ mỗi kỳ (còn lại là chẵn)</div><div id="oddChart"></div></div>
-      <div><div class="pc">Số "thấp" (1–<span id="lowMax"></span>) mỗi kỳ</div><div id="lowChart"></div></div>
-      <div><div class="pc">Đầu số (theo hàng chục)</div><div id="decChart"></div></div>
-    </div>
-    <div class="grid3" style="margin-top:12px">
-      <div><div class="pc">Đuôi số (chữ số cuối 0–9)</div><div id="tailChart"></div></div>
-      <div><div class="pc">Số cặp liên tiếp mỗi kỳ</div><div id="consecChart"></div></div>
-      <div><div class="pc" id="repTitle">Số lặp lại từ kỳ trước</div><div id="repChart"></div></div>
-    </div>
-  </div>
-
-  <h2>Số gan &amp; phong độ <span class="hint">lâu chưa về vs nóng gần đây</span></h2>
-  <div class="panel" id="ganPanel"><div class="grid3"
-      style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
-    <div><div class="pc" id="ganTitle">Gan nhất — số kỳ chưa về</div><div id="ganChart"></div></div>
-    <div><div class="pc" id="hotTitle">Nóng gần đây — số lần về</div><div id="hotChart"></div></div>
-  </div></div>
-
-  <h2>Cặp số hay đi cùng <span class="hint" id="pairHint"></span></h2>
-  <div class="panel" id="pairPanel" style="max-width:560px"><div id="pairTable"></div></div>
-
-  <h2>Bộ số theo từng thuật toán <span class="hint">chạy thuật toán trên lịch sử → ra 6 số theo cách tính của nó</span></h2>
-  <div class="panel" id="algoPanel">
-    <div class="banner">⚠ Đây là <b>kết quả tính từ lịch sử theo đúng từng thuật toán</b> — để hiểu thuật toán làm gì, KHÔNG phải để tin nó trúng. Khi backtest, tất cả đều xấp xỉ ngẫu nhiên (~0,65 số/kỳ).</div>
-    <div id="algoList"></div>
-    <div class="pc" style="margin-top:12px">Nhóm máy học (Logistic, Random Forest, XGBoost, Mạng nơ-ron, LSTM) cần thư viện ngoài (sklearn/xgboost/torch) và khi backtest cũng cho kết quả ~ ngẫu nhiên — mình để riêng, làm nếu bạn cần.</div>
-  </div>
-  <!--LOWER_END-->
 
   <!-- Ngoài khối LOWER: lịch sử chỉ cần draw_results nên bản rút gọn vẫn có. -->
   <h2>Lịch sử kết quả <span class="hint" id="histHint"></span></h2>
@@ -1090,39 +726,14 @@ HTML_TEMPLATE = r"""<!doctype html>
   <footer id="footer"></footer>
 </div>
 
-<div id="tip"></div>
-
 <script>
 const DATA = %%DATA%%;
 const GENERATED = "%%GENERATED%%";
 const SOURCE = "%%SOURCE%%";
-let current = 0, freqByCount = false;
+let current = 0;
 let simRunning = false, simTarget = null, simAttempts = 0, simHits = null;
 const SIM_CAP = 100000000, SIM_CHUNK = 300000;
 
-const tip = document.getElementById('tip');
-function showTip(html, x, y){
-  tip.innerHTML = html; tip.style.opacity = 1;
-  const w = tip.offsetWidth, h = tip.offsetHeight;
-  let nx = x + 14, ny = y + 14;
-  if(nx + w > window.innerWidth) nx = x - w - 14;
-  if(ny + h > window.innerHeight) ny = y - h - 14;
-  tip.style.left = nx + 'px'; tip.style.top = ny + 'px';
-}
-function hideTip(){ tip.style.opacity = 0; }
-
-// --- reusable column chart (single blue series, magnitude) -----------------
-function niceTicks(max, count){
-  if(max <= 0) return [0];
-  const raw = max / count;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw / mag;
-  const step = (norm >= 5 ? 10 : norm >= 2 ? 5 : norm >= 1 ? 2 : 1) * mag;
-  const ticks = [];
-  for(let v = 0; v <= max + 1e-9; v += step) ticks.push(Math.round(v));
-  if(ticks[ticks.length-1] < max) ticks.push(Math.round(ticks[ticks.length-1]+step));
-  return ticks;
-}
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const pad2 = x => String(x).padStart(2,'0');
 function mkTile(k,v,sub){
@@ -1131,90 +742,6 @@ function mkTile(k,v,sub){
 }
 
 // series: [{label, value, sub, highlight}]
-function columnChart(mount, series, opt){
-  opt = opt || {};
-  const W = opt.W || 720, H = opt.H || 240;
-  const mL = 34, mR = 8, mT = 14, mB = 20;
-  const iw = W - mL - mR, ih = H - mT - mB;
-  const n = series.length || 1;
-  const maxV = Math.max(1, ...series.map(d => d.value));
-  const ticks = niceTicks(maxV, 4);
-  const top = ticks[ticks.length - 1];
-  const band = iw / n;
-  const bw = Math.min(band - 2, 24);
-  const y = v => mT + ih - (v / top) * ih;
-  const labelEvery = opt.labelEvery || Math.ceil(n / 12);
-
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
-  s += `<g class="grid">`;
-  for(const t of ticks) s += `<line x1="${mL}" y1="${y(t)}" x2="${W-mR}" y2="${y(t)}"/>`;
-  s += `</g><g class="tick" text-anchor="end">`;
-  for(const t of ticks) s += `<text x="${mL-6}" y="${y(t)+3}">${t.toLocaleString('vi')}</text>`;
-  s += `</g>`;
-  // columns
-  for(let i=0;i<n;i++){
-    const d = series[i];
-    const x = mL + i*band + (band-bw)/2;
-    const yt = y(d.value), yb = mT + ih;
-    const r = Math.min(4, bw/2, Math.max(0, yb-yt));
-    const cls = 'bar' + (d.highlight ? '' : (opt.softNonMax && d.value!==maxV ? ' soft':''));
-    if(d.value>0){
-      s += `<path class="${cls}" d="M${x} ${yb} L${x} ${yt+r} Q${x} ${yt} ${x+r} ${yt} `
-         + `L${x+bw-r} ${yt} Q${x+bw} ${yt} ${x+bw} ${yt+r} L${x+bw} ${yb} Z" `
-         + `data-i="${i}"></path>`;
-    } else {
-      s += `<rect x="${x}" y="${yb-1}" width="${bw}" height="1" class="bar" data-i="${i}"></rect>`;
-    }
-  }
-  // x labels (bỏ nhãn cuối nếu quá sát nhãn kề để tránh chồng chữ)
-  const showLast = ((n-1) % labelEvery) >= Math.ceil(labelEvery/2);
-  s += `<g class="tick" text-anchor="middle">`;
-  for(let i=0;i<n;i++){
-    if(i % labelEvery === 0 || (i === n-1 && showLast)){
-      const x = mL + i*band + band/2;
-      s += `<text x="${x}" y="${H-6}">${esc(series[i].label)}</text>`;
-    }
-  }
-  s += `</g>`;
-  // baseline
-  s += `<g class="base"><line x1="${mL}" y1="${mT+ih}" x2="${W-mR}" y2="${mT+ih}"/></g>`;
-  // đường lý thuyết (reference line)
-  if(opt.refLine != null && opt.refLine <= top){
-    const yv = y(opt.refLine);
-    s += `<line class="refline" x1="${mL}" y1="${yv}" x2="${W-mR}" y2="${yv}"/>`;
-    if(opt.refLabel)
-      s += `<text class="reftext" text-anchor="end" x="${W-mR}" y="${yv-4}">${esc(opt.refLabel)}</text>`;
-  }
-  // selective direct label on the tallest column
-  if(opt.labelMax){
-    const i = series.findIndex(d=>d.value===maxV);
-    if(i>=0){ const x = mL + i*band + band/2;
-      s += `<text class="dlabel" text-anchor="middle" x="${x}" y="${y(maxV)-4}">${maxV.toLocaleString('vi')}</text>`; }
-  }
-  // label every column (dùng khi ít cột, vd biểu đồ chuỗi)
-  if(opt.labelAll){
-    for(let i=0;i<n;i++){ const d=series[i]; if(d.value<=0) continue;
-      const x = mL + i*band + band/2;
-      s += `<text class="dlabel" text-anchor="middle" x="${x}" y="${y(d.value)-4}">${d.value.toLocaleString('vi')}</text>`;
-    }
-  }
-  s += `</svg>`;
-  mount.innerHTML = s;
-
-  // hover
-  const svg = mount.querySelector('svg');
-  svg.addEventListener('mousemove', e=>{
-    const t = e.target.closest('[data-i]');
-    if(!t){ hideTip(); return; }
-    const d = series[+t.getAttribute('data-i')];
-    showTip((opt.tipTitle?opt.tipTitle(d):esc(d.label)) + '<br>' +
-            d.value.toLocaleString('vi') + ' lần' +
-            (d.sub?('<br>'+d.sub):''), e.clientX, e.clientY);
-  });
-  svg.addEventListener('mouseleave', hideTip);
-}
-
-// --- render one game -------------------------------------------------------
 function render(){
   const g = DATA[current];
   document.getElementById('subtitle').textContent =
@@ -1235,173 +762,21 @@ function render(){
     mk('Số về nhiều nhất', hot ? (hot.number+' · '+hot.count+' lần') : '—') +
     mk('Lâu chưa về nhất', cold ? (cold.number+' · '+cold.gap+' kỳ') : '—');
 
-  // Mục "Phân bố theo vị trí" đã bỏ khỏi trang. Dữ liệu g.positions VẪN được giữ
-  // trong payload vì sugEngine dùng min/max từng vị trí làm ràng buộc sinh số —
-  // bỏ đi thì bộ số trên web sẽ khác với predict_track.py sinh cho DB.
+  // Các mục "Phân bố theo vị trí" / "Tần suất từng số" đã bỏ khỏi trang, nhưng
+  // g.positions và g.frequency VẪN nằm trong payload: sugEngine dùng min/max
+  // từng vị trí làm ràng buộc, và dùng count/gap cho chế độ số nóng/số gan. Bỏ
+  // dữ liệu đi thì bộ số trên web sẽ khác với predict_track.py sinh cho DB.
+  // Ba thẻ tóm tắt phía trên cũng đọc g.frequency.
 
-  renderFreq();
-
-  // streaks (đếm chính xác độ dài; ít cột nên nhãn tất cả)
-  const streakEl = document.getElementById('streakChart');
-  if(streakEl){
-    columnChart(streakEl,
-      g.streaks.map(s=>({label:s.length+' kỳ', value:s.occ})),
-      {W:400, H:230, labelAll:true, labelEvery:1,
-       tipTitle:d=>('chuỗi dài đúng '+esc(d.label))});
-  }
-
-  renderGap();
-  renderTests();
-  renderBalance();
-  renderGanHot();
-  renderPairs();
   renderSuggest();
   renderBacktest();
   renderTrack();
   renderSim();
-  renderAlgos();
   histShown = HIST_STEP;   // đổi game -> về lại 100 kỳ đầu
   renderHistory();
 
   document.getElementById('footer').textContent =
     'Nguồn: ' + SOURCE + ' · tạo lúc ' + GENERATED;
-}
-
-function renderGap(){
-  if(!document.getElementById('gapPanel')) return;
-  const gp = DATA[current].gaps;
-  const panel = document.getElementById('gapPanel');
-  if(!gp){ panel.style.display='none'; return; }
-  panel.style.display='';
-
-  const dgap = gp.gbar - gp.expected_gap;
-  document.getElementById('gapCards').innerHTML =
-    mkTile('Gap TB chung', gp.gbar.toLocaleString('vi'),
-      'LT '+gp.expected_gap+' · lệch '+(dgap>=0?'+':'')+dgap.toFixed(2)+' · ±'+gp.gstd) +
-    mkTile('Range TB', gp.range_bar.toLocaleString('vi'),
-      'LT '+gp.expected_range+' · ±'+gp.range_std) +
-    mkTile('Range nhỏ–lớn', gp.range_min+'–'+gp.range_max, gp.N.toLocaleString('vi')+' kỳ');
-
-  columnChart(document.getElementById('gapChart'),
-    gp.per_position.map(p=>({label:p.label.split(' ')[0], value:p.mean, sub:'±'+p.std})),
-    {W:540, H:220, labelAll:true, labelEvery:1,
-     refLine:gp.expected_gap, refLabel:'LT '+gp.expected_gap,
-     tipTitle:d=>('khoảng cách '+esc(d.label))});
-
-  document.getElementById('gapVerdict').innerHTML = gp.ok
-    ? '<span class="good">✓ gbar lệch '+gp.rel_diff+'% so với lý thuyết → máy quay ỔN.</span>'
-    : '<span class="warn">⚠ gbar lệch '+gp.rel_diff+'% (&gt;5%) → nên xem thêm dữ liệu.</span>';
-}
-
-const argmax = arr => arr.reduce((bi,v,i,a)=> v>a[bi]?i:bi, 0);
-
-function renderTests(){
-  if(!document.getElementById('testPanel')) return;
-  const t = DATA[current].tests;
-  const panel = document.getElementById('testPanel');
-  if(!t){ panel.style.display='none'; return; }
-  panel.style.display='';
-  const c=t.chi2, r=t.runs;
-  document.getElementById('testCards').innerHTML =
-    mkTile('Chi-square (đồng đều?)', 'χ² = '+c.stat,
-      'df='+c.df+' · p='+c.p+' · '+(c.ok?'ĐỀU':'LỆCH')) +
-    mkTile('Runs test (ngẫu nhiên?)', (r.z!=null?('Z = '+r.z):'—'),
-      'runs='+r.runs+(r.expected!=null?(' / kỳ vọng '+r.expected):'')+
-      ' · '+(r.ok?'NGẪU NHIÊN':'BẤT THƯỜNG'));
-  document.getElementById('testNote').innerHTML =
-    (c.ok
-      ? '<span class="good">✓ Chi-square p='+c.p+' (&gt;0,05): 55 số ra ĐỀU nhau, không số nào bị thiên vị.</span>'
-      : '<span class="warn">⚠ Chi-square p='+c.p+' (≤0,05): có dấu hiệu lệch phân phối.</span>')
-    + '<br>' +
-    (r.ok
-      ? '<span class="good">✓ Runs test |Z|&lt;1,96: chuỗi tổng không có streak bất thường → ngẫu nhiên.</span>'
-      : '<span class="warn">⚠ Runs test |Z|≥1,96: chuỗi có dấu hiệu bất thường.</span>')
-    + '<br><span style="color:var(--muted)">Hai kiểm định chỉ xác nhận máy công bằng — KHÔNG dùng để chọn số.</span>';
-}
-
-function renderBalance(){
-  if(!document.getElementById('balPanel')) return;
-  const ex = DATA[current].extra;
-  const panel = document.getElementById('balPanel');
-  if(!ex){ panel.style.display='none'; return; }
-  panel.style.display='';
-  document.getElementById('lowMax').textContent = ex.low_max;
-
-  const oK = argmax(ex.odd), lK = argmax(ex.low);
-  const consecPct = Math.round(ex.with_consec/ex.total*100);
-  document.getElementById('balCards').innerHTML =
-    mkTile('Tổng TB', ex.sum.mean.toLocaleString('vi'),
-      'thực tế '+ex.sum.min+'–'+ex.sum.max) +
-    mkTile('Vùng tổng hay gặp', ex.sum.p10+'–'+ex.sum.p90, '~80% số kỳ') +
-    mkTile('Chẵn/lẻ hay gặp', oK+' lẻ · '+(6-oK)+' chẵn', '') +
-    mkTile('Thấp/cao hay gặp', lK+' thấp · '+(6-lK)+' cao', '1–'+ex.low_max+' là thấp') +
-    mkTile('Kỳ có số liên tiếp', consecPct+'%', ex.with_consec+' / '+ex.total+' kỳ') +
-    mkTile('Lặp lại từ kỳ trước', ex.repeat_mean+' số', 'trung bình mỗi kỳ');
-
-  const bins = ex.sum.bins;
-  columnChart(document.getElementById('sumChart'),
-    bins.map(b=>({label:b.label, value:b.occ, range:b.range})),
-    {W:760, H:220, labelEvery: Math.ceil(bins.length/10),
-     tipTitle:d=>('tổng '+esc(d.range))});
-
-  const kLabels = ['0','1','2','3','4','5','6'];
-  columnChart(document.getElementById('oddChart'),
-    ex.odd.map((v,i)=>({label:kLabels[i], value:v})),
-    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' số lẻ')});
-  columnChart(document.getElementById('lowChart'),
-    ex.low.map((v,i)=>({label:kLabels[i], value:v})),
-    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' số thấp')});
-  columnChart(document.getElementById('decChart'),
-    ex.decade.map(d=>({label:d.label, value:d.occ})),
-    {W:340,H:170,labelEvery:1,tipTitle:d=>('đầu số '+esc(d.label))});
-
-  columnChart(document.getElementById('tailChart'),
-    ex.last_digit.map(d=>({label:d.label, value:d.occ})),
-    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>('đuôi '+esc(d.label))});
-  columnChart(document.getElementById('consecChart'),
-    ex.consecutive.map(d=>({label:d.label, value:d.occ})),
-    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' cặp liên tiếp')});
-  columnChart(document.getElementById('repChart'),
-    ex.repeat_prev.map(d=>({label:d.label, value:d.occ})),
-    {W:340,H:170,labelAll:true,labelEvery:1,tipTitle:d=>(esc(d.label)+' số lặp lại')});
-  document.getElementById('repTitle').textContent =
-    'Số lặp lại từ kỳ trước (TB '+ex.repeat_mean+')';
-}
-
-function renderGanHot(){
-  if(!document.getElementById('ganPanel')) return;
-  const ex = DATA[current].extra;
-  const panel = document.getElementById('ganPanel');
-  if(!ex){ panel.style.display='none'; return; }
-  panel.style.display='';
-  document.getElementById('ganTitle').textContent =
-    'Gan nhất — số kỳ chưa về (nghỉ TB lý thuyết ~'+ex.exp_rest+' kỳ)';
-  document.getElementById('hotTitle').textContent =
-    'Nóng '+ex.recent_n+' kỳ gần nhất — số lần về';
-  columnChart(document.getElementById('ganChart'),
-    ex.overdue.map(o=>({label:o.number, value:o.gap, sub:'nghỉ TB '+(o.rest==null?'—':o.rest)+' kỳ'})),
-    {W:460,H:200,labelAll:true,labelEvery:1,tipTitle:d=>('số '+esc(d.label)+' · chưa về')});
-  columnChart(document.getElementById('hotChart'),
-    ex.hot.map(o=>({label:o.number, value:o.count})),
-    {W:460,H:200,labelAll:true,labelEvery:1,tipTitle:d=>('số '+esc(d.label)+' · lần về')});
-}
-
-function renderPairs(){
-  if(!document.getElementById('pairPanel')) return;
-  const ex = DATA[current].extra;
-  const panel = document.getElementById('pairPanel');
-  if(!ex){ panel.style.display='none'; return; }
-  panel.style.display='';
-  document.getElementById('pairHint').textContent =
-    'kỳ vọng ngẫu nhiên ≈ '+ex.exp_pair+' lần/cặp — top cao hơn chủ yếu do biến động';
-  const mx = ex.pairs.length ? ex.pairs[0].count : 1;
-  const rows = ex.pairs.map(p=>{
-    const w = Math.round(p.count/mx*100);
-    return `<tr><td class="pair">${p.a} · ${p.b}</td>`+
-      `<td class="barcell"><div class="track" style="width:${w}%"></div></td>`+
-      `<td style="text-align:right">${p.count}</td></tr>`;
-  }).join('');
-  document.getElementById('pairTable').innerHTML = '<table class="ptbl"><tbody>'+rows+'</tbody></table>';
 }
 
 // --- Lịch sử kết quả -------------------------------------------------------
@@ -2119,22 +1494,6 @@ function renderTrack(){
     'và không giải thuật nào làm tăng xác suất trúng.</span></div>';
 }
 
-function renderAlgos(){
-  if(!document.getElementById('algoPanel')) return;
-  const algos = DATA[current].algos;
-  const panel = document.getElementById('algoPanel');
-  if(!algos){ panel.style.display='none'; return; }
-  panel.style.display='';
-  let html='', grp=null;
-  for(const a of algos){
-    if(a.group !== grp){ grp=a.group; html += '<div class="algogrp">'+esc(grp)+'</div>'; }
-    html += '<div class="algorow"><div class="algoinfo"><b>'+esc(a.name)+'</b>'+
-      '<span class="note">'+esc(a.note)+'</span></div>'+
-      '<div class="chips">'+a.pick.map(x=>'<span class="chip">'+x+'</span>').join('')+'</div></div>';
-  }
-  document.getElementById('algoList').innerHTML = html;
-}
-
 // --- mô phỏng: cần bao nhiêu vé để trúng 3/4/5/6 số --------------------------
 function nCr(n,k){ if(k<0||k>n) return 0; k=Math.min(k,n-k); let r=1;
   for(let i=0;i<k;i++) r = r*(n-i)/(i+1); return Math.round(r); }
@@ -2237,30 +1596,6 @@ function renderSim(){
   buildSimTable(ex.n, null);
 }
 
-function renderFreq(){
-  if(!document.getElementById('freqChart')) return;
-  const g = DATA[current];
-  let rows = g.frequency.map(f=>({
-    label:f.number, value:f.count,
-    sub:'chưa về '+f.gap+' kỳ · chuỗi dài nhất '+f.max_streak,
-    number:f.number, gap:f.gap, cur:f.current_streak, mx:f.max_streak
-  }));
-  if(freqByCount) rows = [...rows].sort((a,b)=>b.value-a.value);
-  columnChart(document.getElementById('freqChart'), rows,
-    {W:920, H:300, labelEvery: freqByCount?4:5,
-     tipTitle:d=>('số '+esc(d.label))});
-
-  // table
-  const t = ['<table><thead><tr><th>Số</th><th>Về</th><th>Chuỗi nay</th>'+
-             '<th>Dài nhất</th><th>Chưa về</th></tr></thead><tbody>'];
-  for(const r of [...g.frequency].sort((a,b)=>b.count-a.count)){
-    t.push(`<tr><td>${r.number}</td><td>${r.count}</td><td>${r.current_streak}</td>`+
-           `<td>${r.max_streak}</td><td>${r.gap}</td></tr>`);
-  }
-  t.push('</tbody></table>');
-  document.getElementById('freqTable').innerHTML = t.join('');
-}
-
 // --- wiring ----------------------------------------------------------------
 const tabs = document.getElementById('gameTabs');
 DATA.forEach((g,i)=>{
@@ -2269,12 +1604,6 @@ DATA.forEach((g,i)=>{
   b.onclick=()=>{ current=i; render(); };
   tabs.appendChild(b);
 });
-const freqSortBtn = document.getElementById('freqSort');
-if(freqSortBtn) freqSortBtn.onclick = (e)=>{
-  freqByCount = !freqByCount;
-  e.target.textContent = 'Sắp theo: ' + (freqByCount?'số lần':'số');
-  renderFreq();
-};
 document.getElementById('genBtn').onclick = renderSuggest;
 document.getElementById('sugMode').onchange = renderSuggest;
 document.getElementById('sugCount').onchange = renderSuggest;
@@ -2320,20 +1649,13 @@ render();
 
 def render_html(
     all_data: list[dict],
-    minimal: bool = False,
     source: str = "vietlott_data.db",
     title: str = "Thống kê Vietlott",
     nav: str = "",
 ) -> str:
     generated = datetime.now().strftime("%d/%m/%Y %H:%M")
-    html = HTML_TEMPLATE
-    if minimal:
-        # Trang rút gọn: bỏ khối "Phân bố theo vị trí" trở xuống.
-        html = re.sub(
-            r"<!--LOWER_START-->.*?<!--LOWER_END-->\s*", "", html, flags=re.S
-        )
     return (
-        html
+        HTML_TEMPLATE
         .replace("%%DATA%%", json.dumps(all_data, ensure_ascii=False))
         .replace("%%GENERATED%%", generated)
         .replace("%%SOURCE%%", source)
@@ -2496,11 +1818,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Đường dẫn file HTML xuất ra (chỉ dùng khi --game là 1 loại hình).",
     )
     parser.add_argument(
-        "--minimal",
-        action="store_true",
-        help="Bỏ mục 'Phân bố theo vị trí' trở xuống (mega645 vốn luôn rút gọn).",
-    )
-    parser.add_argument(
         "--no-open",
         action="store_true",
         help="Chỉ tạo file, không tự mở trình duyệt.",
@@ -2534,7 +1851,6 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
             "db": db,
             "games": ["power655"],
             "out": out,
-            "minimal": args.minimal,
             "source": Path(db).name,
             "title": "Thống kê Power 6/55",
             "nav": '<a class="btn" href="stats_mega645.html" '
@@ -2552,10 +1868,6 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
             "db": db,
             "games": ["mega645"],
             "out": out,
-            # Mega đầy đủ như Power từ khi crawl_mega645.py sinh number_frequency
-            # / number_streaks / position_* trong DB riêng của nó. Chỉ rút gọn
-            # khi người dùng tự yêu cầu --minimal.
-            "minimal": args.minimal,
             "source": Path(db).name,
             "title": "Thống kê Mega 6/45",
             "nav": '<a class="btn" href="stats.html" '
@@ -2565,26 +1877,22 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
     return specs
 
 
-def build_page_data(
-    db_path: str, game_types: list[str], minimal: bool
-) -> tuple[list[dict], bool]:
-    """Trả về (dữ liệu, có phải bản rút gọn không).
+def build_page_data(db_path: str, game_types: list[str]) -> list[dict]:
+    """Nạp dữ liệu cho 1 trang, tự hạ xuống loader nhẹ nếu DB thiếu bảng.
 
-    Cờ rút gọn có thể khác `minimal` đầu vào: DB thiếu bảng thống kê thì tự hạ
-    xuống bản rút gọn, và lúc render phải biết để không vẽ mục rỗng.
+    Trang chỉ còn các mục không cần biểu đồ, nhưng payload vẫn phải có
+    `frequency` / `positions` / `extra` vì sugEngine và phần mô phỏng đọc chúng.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        if minimal:
-            return load_all_minimal(conn, db_path, game_types), True
         try:
-            return load_all(conn, db_path, game_types), False
+            return load_all(conn, db_path, game_types)
         except sqlite3.OperationalError as exc:
             # DB chưa chạy number_stats bao giờ -> thiếu number_frequency /
-            # position_*. Vẽ trang rút gọn còn hơn không có trang nào.
-            print(f"⚠ {Path(db_path).name}: {exc} — tạm dùng bản rút gọn.")
-            return load_all_minimal(conn, db_path, game_types), True
+            # position_*. Tính thẳng từ draw_results còn hơn không có trang nào.
+            print(f"⚠ {Path(db_path).name}: {exc} — tính từ draw_results.")
+            return load_all_minimal(conn, db_path, game_types)
     finally:
         conn.close()
 
@@ -2611,9 +1919,7 @@ def main() -> int:
         if not Path(spec["db"]).exists():
             print(f"⚠ Không thấy DB {spec['db']} — bỏ qua {spec['games']}.")
             continue
-        data, is_minimal = build_page_data(
-            spec["db"], spec["games"], spec["minimal"]
-        )
+        data = build_page_data(spec["db"], spec["games"])
         if not data:
             print(
                 f"⚠ Không có dữ liệu cho {spec['games']} trong {spec['db']} "
@@ -2625,7 +1931,6 @@ def main() -> int:
         out.write_text(
             render_html(
                 data,
-                minimal=is_minimal,
                 source=spec["source"],
                 title=spec["title"],
                 nav=spec["nav"],

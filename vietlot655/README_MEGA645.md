@@ -45,9 +45,11 @@ Từ 2026-07-21, `crawl_mega645.py` làm đủ mọi thứ mà `crawl.py` làm c
 
 Tắt phần dự đoán: `--no-predict`. Đổi số bộ: `--predict-sets 5000`.
 
-Nhờ vậy `stats_web.py` sinh trang Mega **đầy đủ** như Power (có "Phân bố theo vị
-trí", bảng xếp hạng giải thuật...), không còn bản rút gọn. Muốn rút gọn thì
-truyền `--minimal`.
+Nhờ vậy `stats_web.py` sinh trang Mega **giống hệt** trang Power — cùng 5 mục,
+không còn bản rút gọn.
+
+Các bảng `number_frequency` / `position_*` vẫn cần dù trang không còn vẽ biểu đồ:
+`sugEngine` đọc chúng để sinh bộ số. Xem mục "Các mục đã bỏ" trong `README.md`.
 
 Bảng xếp hạng giải thuật cho Mega:
 

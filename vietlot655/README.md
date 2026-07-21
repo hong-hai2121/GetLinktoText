@@ -167,10 +167,27 @@ O **Loc** nhan nhieu tu, cach nhau bang dau cach:
 So 1-2 chu so duoc hieu la SO trong bo ket qua; con lai hieu la ky/ngay. Nen
 `01538` (5 chu so) tim theo ky, khong phai tim so.
 
-Muc nay nam NGOAI khoi `<!--LOWER_START-->`, nen ban rut gon (`--minimal`) van
-co — no chi can bang `draw_results`, khong can `number_stats.py`.
-
 Trang nang them ~100KB vi nhung ~1500 ky (khoa JSON dat ngan `p/d/n/s` cho nhe).
+
+## Cac muc da BO khoi trang
+
+Trang chi con 5 muc: Bo so goi y · Bang xep hang che do · Giai thuat nao dang
+trung nhieu nhat · Mo phong · Lich su ket qua. Da bo (con trong git history):
+
+- Tan suat tung so, Phan bo do dai chuoi, Khoang cach (gap), Kiem dinh thong ke,
+  Tong & can bang bo so, So gan & phong do, Cap so hay di cung, Bo so theo tung
+  thuat toan — cung toan bo bieu do (`columnChart`) va tooltip.
+- Ham Python khong con ai goi: `compute_algo_picks`, `compute_gap_stats`,
+  `compute_tests`.
+- Co `--minimal` (truoc dung de cat bot muc) — gio khong con muc nao de cat.
+
+**QUAN TRONG:** payload van giu `frequency` / `positions` / `extra` du khong con
+muc nao hien thi chung. `sugEngine` dung `count`/`gap` cho che do so nong/so gan,
+dung min/max tung vi tri lam rang buoc, va phan Mo phong doc `extra`. Bo di thi
+bo so sinh tren web se LECH voi `predict_track.py` sinh cho DB.
+
+Vi the `crawl.py` / `crawl_mega645.py` VAN phai chay `number_stats.py` sau khi
+cao — cac bang `number_frequency` / `position_*` van can, chi la khong ve ra nua.
 
 ## Shortcut Desktop — bam 1 phat la cap nhat + xem
 
