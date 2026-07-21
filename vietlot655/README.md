@@ -152,6 +152,26 @@ lech voi backtest chay tren trang:
 He so theo duoi 8/6/4 la GIA DINH thoi quen VN (phat/loc/tu), khong lay tu nghien
 cuu — Vietlott khong cong bo du lieu ve ban ra nen khong kiem chung duoc.
 
+## Muc "Lich su ket qua" (cuoi trang)
+
+Toan bo cac ky da ve, moi nhat truoc, nhung san trong HTML nen tra cuu duoc
+offline. Mac dinh hien 100 ky, co nut "Xem them 100 ky" / "Hien tat ca" /
+"Chep" (chep ra dang TSV, dan thang vao Excel duoc).
+
+O **Loc** nhan nhieu tu, cach nhau bang dau cach:
+
+- `01538` hoac `2026-07` -> khop theo ky / ngay (so sanh chuoi)
+- `22 41` -> chi cac ky co **CA HAI** so 22 va 41; so khop duoc to sang trong bang
+- Tron duoc: `2026 22` = cac ky nam 2026 co so 22
+
+So 1-2 chu so duoc hieu la SO trong bo ket qua; con lai hieu la ky/ngay. Nen
+`01538` (5 chu so) tim theo ky, khong phai tim so.
+
+Muc nay nam NGOAI khoi `<!--LOWER_START-->`, nen ban rut gon (`--minimal`) van
+co — no chi can bang `draw_results`, khong can `number_stats.py`.
+
+Trang nang them ~100KB vi nhung ~1500 ky (khoa JSON dat ngan `p/d/n/s` cho nhe).
+
 ## Shortcut Desktop — bam 1 phat la cap nhat + xem
 
 ```powershell

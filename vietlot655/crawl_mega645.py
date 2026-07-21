@@ -680,13 +680,13 @@ def main() -> int:
                     if result["scored"]:
                         print(
                             f"Da cham diem {result['scored']} ky du doan "
-                            f"(con {result['pending']} ky dang cho ket qua).",
+                            f"(con {result['still_pending']} ky dang cho ket qua).",
                             flush=True,
                         )
                     else:
                         print(
                             f"Chua co ky moi de cham diem "
-                            f"({result['pending']} ky dang cho ket qua).",
+                            f"({result['still_pending']} ky dang cho ket qua).",
                             flush=True,
                         )
                 except Exception as eval_exc:  # noqa: BLE001

@@ -620,6 +620,7 @@ def load_game_data(
         "algos": compute_algo_picks(db_path, game_type),
         "tests": compute_tests(db_path, game_type),
         "track": compute_track(db_path, game_type),
+        "history": load_history(db_path, game_type),
     }
 
 
@@ -672,6 +673,45 @@ def compute_frequency_list(
     ]
 
 
+def load_history(db_path: Path | str, game_type: str) -> list[dict]:
+    """Toàn bộ kỳ đã về, mới nhất trước — cho mục "Lịch sử kết quả".
+
+    Khoá đặt ngắn (p/d/n/s) vì list này nhúng thẳng vào HTML: ~1500 kỳ, tên khoá
+    dài ra là trang phình thêm vài chục KB mà không thêm thông tin gì.
+    """
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT draw_period, draw_date, num1, num2, num3, num4, num5, num6,
+                   special_num
+            FROM draw_results
+            WHERE game_type = ?
+            ORDER BY draw_date DESC, draw_period DESC
+            """,
+            (game_type,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+
+    history = []
+    for r in rows:
+        nums = [
+            int(r[f"num{i}"])
+            for i in range(1, 7)
+            if r[f"num{i}"] not in (None, "")
+        ]
+        item = {"p": r["draw_period"], "d": r["draw_date"], "n": sorted(nums)}
+        # Mega 6/45 không có số đặc biệt -> bỏ hẳn khoá cho nhẹ payload.
+        if r["special_num"] not in (None, ""):
+            item["s"] = int(r["special_num"])
+        history.append(item)
+    return history
+
+
 def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
     """Nạp dữ liệu tối thiểu cho trang rút gọn (Gợi ý / Backtest / Mô phỏng).
 
@@ -692,6 +732,7 @@ def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
         "algos": None,
         "tests": None,
         "track": compute_track(db_path, game_type),
+        "history": load_history(db_path, game_type),
     }
 
 
@@ -779,6 +820,20 @@ HTML_TEMPLATE = r"""<!doctype html>
   .ptbl .pair{white-space:nowrap;font-weight:600}
   .ptbl .barcell{width:60%}
   .ptbl .track{height:10px;border-radius:5px;background:var(--series)}
+  .histctl{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .histctl label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--text2)}
+  .histctl input{background:var(--surface);border:1px solid var(--border);
+    color:var(--text);border-radius:6px;padding:5px 8px;font:inherit;font-size:12.5px;
+    width:190px}
+  .htbl{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .htbl th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--baseline);
+    color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--surface)}
+  .htbl td{padding:4px 8px;border-bottom:1px solid var(--border)}
+  .htbl .date{color:var(--muted);white-space:nowrap}
+  .htbl .balls{font-weight:650;letter-spacing:.5px}
+  .htbl .sp{color:var(--warn);font-weight:650}
+  .htbl mark{background:var(--series-soft);color:var(--text);border-radius:3px;padding:0 2px}
+  .histwrap{max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px}
   .sugwrap{display:flex;gap:18px;flex-wrap:wrap}
   .sugleft{flex:1 1 320px;min-width:300px}
   .sugnote{flex:0 1 268px;font-size:12.5px;color:var(--text2);line-height:1.55;
@@ -1016,6 +1071,22 @@ HTML_TEMPLATE = r"""<!doctype html>
   </div>
   <!--LOWER_END-->
 
+  <!-- Ngoài khối LOWER: lịch sử chỉ cần draw_results nên bản rút gọn vẫn có. -->
+  <h2>Lịch sử kết quả <span class="hint" id="histHint"></span></h2>
+  <div class="panel" id="histPanel">
+    <div class="histctl">
+      <label>Lọc<input id="histFind" type="text"
+        placeholder="vd: 01538 · 2026-07 · 22 41"></label>
+      <span class="pc" id="histCount"></span>
+    </div>
+    <div id="histTable"></div>
+    <div style="margin-top:10px">
+      <button class="btn" id="histMore" type="button">Xem thêm 100 kỳ</button>
+      <button class="btn" id="histAll" type="button">Hiện tất cả</button>
+      <button class="btn" id="histCopy" type="button">📋 Chép</button>
+    </div>
+  </div>
+
   <footer id="footer"></footer>
 </div>
 
@@ -1053,6 +1124,7 @@ function niceTicks(max, count){
   return ticks;
 }
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const pad2 = x => String(x).padStart(2,'0');
 function mkTile(k,v,sub){
   return `<div class="card"><div class="k">${k}</div><div class="v">${v}</div>`+
          (sub?`<div class="s">${sub}</div>`:'')+`</div>`;
@@ -1188,6 +1260,8 @@ function render(){
   renderTrack();
   renderSim();
   renderAlgos();
+  histShown = HIST_STEP;   // đổi game -> về lại 100 kỳ đầu
+  renderHistory();
 
   document.getElementById('footer').textContent =
     'Nguồn: ' + SOURCE + ' · tạo lúc ' + GENERATED;
@@ -1328,6 +1402,68 @@ function renderPairs(){
       `<td style="text-align:right">${p.count}</td></tr>`;
   }).join('');
   document.getElementById('pairTable').innerHTML = '<table class="ptbl"><tbody>'+rows+'</tbody></table>';
+}
+
+// --- Lịch sử kết quả -------------------------------------------------------
+let histShown = 100, histQuery = '';
+const HIST_STEP = 100;
+
+function histFilter(){
+  const h = DATA[current].history || [];
+  const q = histQuery.trim().toLowerCase();
+  if(!q) return h;
+  // Số tách rời nhau: "22 41" = kỳ nào có CẢ 22 và 41. Chữ/ngày thì so chuỗi.
+  const terms = q.split(/\s+/);
+  const nums = terms.filter(t=>/^\d{1,2}$/.test(t)).map(Number);
+  const texts = terms.filter(t=>!/^\d{1,2}$/.test(t));
+  return h.filter(r=>{
+    if(nums.length && !nums.every(x=> r.n.includes(x) || r.s===x)) return false;
+    if(texts.length){
+      const hay = (r.p+' '+r.d).toLowerCase();
+      if(!texts.every(t=> hay.includes(t))) return false;
+    }
+    return true;
+  });
+}
+
+function renderHistory(){
+  const panel = document.getElementById('histPanel');
+  if(!panel) return;
+  const h = DATA[current].history || [];
+  if(!h.length){ panel.style.display='none'; return; }
+  panel.style.display='';
+
+  const rows = histFilter();
+  const slice = rows.slice(0, histShown);
+  const hasSpecial = h.some(r=> r.s!=null);
+  const hi = new Set(histQuery.trim().split(/\s+/)
+    .filter(t=>/^\d{1,2}$/.test(t)).map(Number));
+
+  const ball = x => hi.has(x) ? '<mark>'+pad2(x)+'</mark>' : pad2(x);
+  let body = slice.map(r=>
+    '<tr><td>'+esc(r.p||'—')+'</td>'+
+    '<td class="date">'+esc(r.d||'')+'</td>'+
+    '<td class="balls">'+r.n.map(ball).join(' ')+'</td>'+
+    (hasSpecial ? '<td class="sp">'+(r.s!=null ? ball(r.s) : '—')+'</td>' : '')+
+    '</tr>').join('');
+  if(!slice.length) body = '<tr><td colspan="4" class="pc">Không có kỳ nào khớp.</td></tr>';
+
+  document.getElementById('histTable').innerHTML =
+    '<div class="histwrap"><table class="htbl"><thead><tr>'+
+    '<th>Kỳ</th><th>Ngày</th><th>Kết quả</th>'+
+    (hasSpecial ? '<th>ĐB</th>' : '')+
+    '</tr></thead><tbody>'+body+'</tbody></table></div>';
+
+  document.getElementById('histCount').textContent =
+    'Hiện ' + Math.min(histShown, rows.length).toLocaleString('vi') +
+    '/' + rows.length.toLocaleString('vi') + ' kỳ' +
+    (rows.length !== h.length ? ' (lọc từ '+h.length.toLocaleString('vi')+')' : '');
+  document.getElementById('histHint').textContent =
+    h.length.toLocaleString('vi') + ' kỳ · mới nhất trước';
+
+  const done = histShown >= rows.length;
+  document.getElementById('histMore').disabled = done;
+  document.getElementById('histAll').disabled = done;
 }
 
 function sugInputs(){
@@ -2149,6 +2285,24 @@ document.getElementById('btCmp').onclick = btCompare;
 document.getElementById('btInput').addEventListener('keydown', e=>{
   if(e.key==='Enter') btCompare();
 });
+document.getElementById('histFind').addEventListener('input', e=>{
+  histQuery = e.target.value; histShown = HIST_STEP; renderHistory();
+});
+document.getElementById('histMore').onclick = ()=>{
+  histShown += HIST_STEP; renderHistory();
+};
+document.getElementById('histAll').onclick = ()=>{
+  histShown = (DATA[current].history||[]).length; renderHistory();
+};
+document.getElementById('histCopy').onclick = (e)=>{
+  const txt = histFilter().slice(0, histShown).map(r=>
+    [r.p, r.d, r.n.map(pad2).join(' ')].concat(r.s!=null?[pad2(r.s)]:[]).join('\t')
+  ).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>{
+    const b=e.target, old=b.textContent;
+    b.textContent='✓ Đã chép'; setTimeout(()=>{ b.textContent=old; }, 1500);
+  });
+};
 document.getElementById('themeBtn').onclick = ()=>{
   const cur = document.documentElement.getAttribute('data-theme');
   const isDark = cur ? cur==='dark'
