@@ -152,6 +152,35 @@ lech voi backtest chay tren trang:
 He so theo duoi 8/6/4 la GIA DINH thoi quen VN (phat/loc/tu), khong lay tu nghien
 cuu — Vietlott khong cong bo du lieu ve ban ra nen khong kiem chung duoc.
 
+## Shortcut Desktop — bam 1 phat la cap nhat + xem
+
+```powershell
+python stats_web.py --tao-shortcut
+```
+
+Tao `Thống kê Vietlott.lnk` ra Desktop. Bam vao no se: cao ky moi (Power qua
+`crawl.py`, Mega qua `crawl_mega645.py`) -> sinh lai `exports\stats.html` +
+`exports\stats_mega645.html` -> mo trinh duyet.
+
+Shortcut chi TRO toi `stats_web.py`, khong copy code — sua file la ap dung ngay.
+No dung chinh interpreter dang chay luc tao shortcut (nen chay lenh tren trong
+venv de co san bs4/openpyxl). Icon `vietlott_stats.ico` duoc PIL sinh ra lan dau,
+khong co PIL thi shortcut van chay, chi la khong co icon rieng.
+
+Cua so console hien ra de xem tien trinh cao, tu dong dong khi mo trinh duyet.
+Neu cao loi thi dung lai cho doc thong bao roi moi dong.
+
+Chay thang khong can shortcut:
+
+```powershell
+python stats_web.py --update              # cao roi mo trang
+python stats_web.py --update --no-open    # cao roi chi tao file
+python stats_web.py                       # chi sinh trang tu DB hien co
+```
+
+Luu y: `.lnk` tao bang IShellLink chu khong phai WScript.Shell — WScript luu
+duong dan theo ANSI codepage nen nuot dau tieng Viet ("Thống" -> "Th?ng").
+
 ## Export
 
 ```powershell

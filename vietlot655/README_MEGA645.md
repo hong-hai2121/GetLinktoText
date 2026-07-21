@@ -34,6 +34,36 @@ Cào full lịch sử khi cần:
 python crawl_mega645.py --full-crawl
 ```
 
+## Thống kê & backtest — giống hệt Power 6/55
+
+Từ 2026-07-21, `crawl_mega645.py` làm đủ mọi thứ mà `crawl.py` làm cho Power:
+
+- Trước khi cào: chốt 1000 bộ/chế độ (5 giải thuật) dựa trên lịch sử hiện có.
+- Sau khi cào: tính lại `number_frequency` / `number_streaks` /
+  `position_distribution` / `position_summary` cho `mega645`.
+- Chấm điểm các batch đang chờ vào `prediction_stats`.
+
+Tắt phần dự đoán: `--no-predict`. Đổi số bộ: `--predict-sets 5000`.
+
+Nhờ vậy `stats_web.py` sinh trang Mega **đầy đủ** như Power (có "Phân bố theo vị
+trí", bảng xếp hạng giải thuật...), không còn bản rút gọn. Muốn rút gọn thì
+truyền `--minimal`.
+
+Bảng xếp hạng giải thuật cho Mega:
+
+```powershell
+python predict_track.py --db vietlott_mega645_data.db board --game mega645
+```
+
+Lưu ý thứ tự tham số: `--db` đứng TRƯỚC subcommand, `--game` đứng sau.
+
+DB Mega cũ chưa có bảng thống kê thì tính một lần bằng:
+
+```powershell
+python number_stats.py --db vietlott_mega645_data.db --game mega645
+python predict_track.py --db vietlott_mega645_data.db backfill --game mega645 --periods 300 -n 1000
+```
+
 ## Export
 
 ```powershell

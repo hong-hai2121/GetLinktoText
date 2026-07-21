@@ -581,6 +581,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "already exists in the database."
         ),
     )
+    parser.add_argument(
+        "--predict-sets",
+        type=int,
+        default=1000,
+        help=(
+            "So bo so moi che do se chot TRUOC khi cao (backtest 5 giai thuat). "
+            "Dat 0 de tat."
+        ),
+    )
+    parser.add_argument(
+        "--no-predict",
+        dest="predict",
+        action="store_false",
+        default=True,
+        help="Khong chot bo so du doan va khong cham diem khi cao.",
+    )
     return parser
 
 
@@ -607,6 +623,24 @@ def main() -> int:
 
     try:
         conn = init_db(args.db)
+
+        # Truoc khi cao: chot san bo so dua tren lich su HIEN CO, de bo so hoan
+        # toan "mu" voi ky sap ve. Giong crawl.py cua Power 6/55.
+        if args.predict and args.predict_sets > 0:
+            try:
+                from predict_track import auto_generate
+
+                for message in auto_generate(
+                    Path(args.db), [GAME_TYPE], args.predict_sets
+                ):
+                    print(f"Du doan: {message}", flush=True)
+            except Exception as predict_exc:  # noqa: BLE001
+                print(
+                    f"Canh bao: khong chot duoc bo so du doan: "
+                    f"{type(predict_exc).__name__}: {predict_exc}",
+                    flush=True,
+                )
+
         summary = crawl(args, conn)
         status = "success"
     except PartialCrawlError as exc:
@@ -617,6 +651,51 @@ def main() -> int:
     finally:
         if conn is not None:
             save_log(conn, status, summary, error_message)
+
+            # Cao xong -> tinh lai bang thong ke so. Loi o day khong duoc lam
+            # hong ket qua cao.
+            try:
+                from number_stats import init_stats_tables, recompute_stats
+
+                init_stats_tables(conn)
+                recompute_stats(conn=conn, game_types=[GAME_TYPE])
+                print(
+                    "Da cap nhat bang thong ke so "
+                    "(number_frequency, number_streaks, position_*).",
+                    flush=True,
+                )
+            except Exception as stats_exc:  # noqa: BLE001
+                print(
+                    f"Canh bao: khong cap nhat duoc bang thong ke: "
+                    f"{type(stats_exc).__name__}: {stats_exc}",
+                    flush=True,
+                )
+
+            # Ky moi da nam trong DB -> cham diem cac batch dang cho.
+            if args.predict:
+                try:
+                    from predict_track import auto_evaluate
+
+                    result = auto_evaluate(Path(args.db))
+                    if result["scored"]:
+                        print(
+                            f"Da cham diem {result['scored']} ky du doan "
+                            f"(con {result['pending']} ky dang cho ket qua).",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"Chua co ky moi de cham diem "
+                            f"({result['pending']} ky dang cho ket qua).",
+                            flush=True,
+                        )
+                except Exception as eval_exc:  # noqa: BLE001
+                    print(
+                        f"Canh bao: khong cham diem duoc du doan: "
+                        f"{type(eval_exc).__name__}: {eval_exc}",
+                        flush=True,
+                    )
+
             conn.close()
 
     print_summary(status, summary, error_message)

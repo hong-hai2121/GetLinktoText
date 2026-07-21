@@ -15,10 +15,12 @@ trình duyệt. Chạy: python stats_web.py  [--game power655] [--no-open]
 import argparse
 import json
 import math
+import os
 import random
 import re
 import sqlite3
 import statistics
+import subprocess
 import sys
 import webbrowser
 from collections import defaultdict
@@ -27,11 +29,13 @@ from itertools import combinations
 from pathlib import Path
 
 import gap_stats
-from crawl import DB_PATH, EXPORT_DIR, ensure_dirs
+from crawl import BASE_DIR, DB_PATH, EXPORT_DIR, ensure_dirs
 
 DEFAULT_HTML_PATH = EXPORT_DIR / "stats.html"
 MEGA_DB_PATH = DB_PATH.parent / "vietlott_mega645_data.db"
 MEGA_HTML_PATH = EXPORT_DIR / "stats_mega645.html"
+ICON_PATH = BASE_DIR / "vietlott_stats.ico"
+SHORTCUT_NAME = "Thống kê Vietlott.lnk"
 
 POSITION_NAMES = {
     1: "x1 · nhỏ nhất",
@@ -2184,6 +2188,137 @@ def render_html(
     )
 
 
+def run_update(game: str) -> list[str]:
+    """Cào kỳ mới về DB trước khi sinh trang. Trả về danh sách game cào lỗi.
+
+    Power 6/55 và Mega 6/45 nằm ở 2 DB riêng nên phải gọi 2 crawler. Lỗi mạng
+    của một game không được chặn việc sinh trang từ dữ liệu đã có.
+    """
+    failed: list[str] = []
+    jobs: list[tuple[str, list[str]]] = []
+    if game in ("power655", "all"):
+        jobs.append(("Power 6/55", [str(BASE_DIR / "crawl.py")]))
+    if game in ("mega645", "all"):
+        jobs.append(("Mega 6/45", [str(BASE_DIR / "crawl_mega645.py")]))
+
+    for label, cmd in jobs:
+        print(f"\n=== Cập nhật {label} ===", flush=True)
+        try:
+            subprocess.run(
+                [sys.executable, *cmd], cwd=str(BASE_DIR), check=True
+            )
+        except subprocess.CalledProcessError as exc:
+            print(f"⚠ Cào {label} lỗi (mã {exc.returncode}) — dùng dữ liệu cũ.")
+            failed.append(label)
+        except Exception as exc:  # noqa: BLE001
+            print(f"⚠ Cào {label} lỗi: {type(exc).__name__}: {exc}")
+            failed.append(label)
+    print()
+    return failed
+
+
+def _sinh_icon(path: Path) -> bool:
+    """Vẽ icon quả cầu số nền đỏ Vietlott bằng PIL. Không có PIL -> False."""
+    try:
+        from PIL import Image, ImageDraw
+    except Exception:
+        return False
+    size = 256
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([8, 8, size - 8, size - 8], radius=44,
+                           fill=(200, 30, 45, 255))
+    draw.ellipse([46, 46, 210, 210], fill=(255, 255, 255, 255))
+    draw.ellipse([84, 84, 172, 172], fill=(200, 30, 45, 255))
+    try:
+        img.save(path, format="ICO",
+                 sizes=[(16, 16), (32, 32), (48, 48), (128, 128), (256, 256)])
+        return True
+    except Exception:
+        return False
+
+
+def _desktop_dir() -> Path:
+    import ctypes
+    from ctypes import wintypes
+
+    buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+    ctypes.windll.shell32.SHGetFolderPathW(0, 0, 0, 0, buf)  # CSIDL_DESKTOP=0
+    return Path(buf.value or os.path.expanduser("~/Desktop"))
+
+
+def _tao_lnk_shelllink(lnk: Path, target: str, args: str, workdir: Path,
+                       icon: str, desc: str) -> None:
+    """Tạo .lnk qua IShellLink + IPersistFile (API Unicode thật sự).
+
+    WScript.Shell (cả pywin32 lẫn PowerShell) lưu đường dẫn theo ANSI codepage
+    nên tên file có dấu tiếng Việt ngoài CP1252 bị nuốt: "Thống" -> "Th?ng".
+    """
+    import pythoncom
+    from win32com.shell import shell
+
+    link = pythoncom.CoCreateInstance(
+        shell.CLSID_ShellLink, None,
+        pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink,
+    )
+    link.SetPath(target)
+    link.SetArguments(args)
+    link.SetWorkingDirectory(str(workdir))
+    link.SetDescription(desc)
+    if icon:
+        link.SetIconLocation(icon, 0)
+    link.QueryInterface(pythoncom.IID_IPersistFile).Save(str(lnk), 0)
+
+
+def _tao_lnk_powershell(lnk: Path, target: str, args: str, workdir: Path,
+                        icon: str, desc: str) -> None:
+    """Dự phòng khi máy không có pywin32: tạo .lnk qua PowerShell."""
+    ps = (
+        "$s = New-Object -ComObject WScript.Shell; "
+        "$sc = $s.CreateShortcut($env:LNK); "
+        "$sc.TargetPath = $env:TGT; "
+        "$sc.Arguments = $env:ARG; "
+        "$sc.WorkingDirectory = $env:WRK; "
+        "$sc.Description = $env:DSC; "
+        "$sc.WindowStyle = 1; "
+        + ("$sc.IconLocation = $env:ICO; " if icon else "")
+        + "$sc.Save()"
+    )
+    env = dict(os.environ, LNK=str(lnk), TGT=target, ARG=args,
+               WRK=str(workdir), DSC=desc)
+    if icon:
+        env["ICO"] = icon
+    subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+        env=env, check=True,
+    )
+
+
+def tao_shortcut() -> int:
+    """Tạo shortcut Desktop: bấm 1 phát là cào kỳ mới rồi mở trang thống kê.
+
+    Shortcut chỉ TRỎ tới file .py này, sửa code ở đây là áp dụng ngay. Dùng
+    python.exe (không phải pythonw) để còn thấy tiến trình cào chạy tới đâu.
+    """
+    script = Path(__file__).resolve()
+    args = f'"{script}" --update'
+    icon = str(ICON_PATH) if (ICON_PATH.is_file() or _sinh_icon(ICON_PATH)) else ""
+    desc = "Cập nhật kết quả Vietlott rồi mở trang thống kê"
+
+    lnk = _desktop_dir() / SHORTCUT_NAME
+    try:
+        _tao_lnk_shelllink(lnk, sys.executable, args, BASE_DIR, icon, desc)
+    except ImportError:  # không có pywin32
+        _tao_lnk_powershell(lnk, sys.executable, args, BASE_DIR, icon, desc)
+
+    print("Đã tạo shortcut:", lnk)
+    print("  Trỏ tới     :", script, "(sửa code ở đây là áp dụng ngay)")
+    print("  Bấm vào sẽ  : cào kỳ mới (Power + Mega) → sinh HTML → mở trình duyệt")
+    if icon:
+        print("  Icon        :", icon)
+    return 0
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -2215,6 +2350,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--no-open",
         action="store_true",
         help="Chỉ tạo file, không tự mở trình duyệt.",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Cào kỳ mới (crawl.py + crawl_mega645.py) trước khi sinh trang.",
+    )
+    parser.add_argument(
+        "--tao-shortcut",
+        action="store_true",
+        help="Tạo shortcut '%s' ra Desktop rồi thoát." % SHORTCUT_NAME,
     )
     return parser
 
@@ -2253,8 +2398,10 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
             "db": db,
             "games": ["mega645"],
             "out": out,
-            # Mega luôn rút gọn (bỏ mục "Phân bố theo vị trí" trở xuống).
-            "minimal": True,
+            # Mega đầy đủ như Power từ khi crawl_mega645.py sinh number_frequency
+            # / number_streaks / position_* trong DB riêng của nó. Chỉ rút gọn
+            # khi người dùng tự yêu cầu --minimal.
+            "minimal": args.minimal,
             "source": Path(db).name,
             "title": "Thống kê Mega 6/45",
             "nav": '<a class="btn" href="stats.html" '
@@ -2266,13 +2413,24 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
 
 def build_page_data(
     db_path: str, game_types: list[str], minimal: bool
-) -> list[dict]:
+) -> tuple[list[dict], bool]:
+    """Trả về (dữ liệu, có phải bản rút gọn không).
+
+    Cờ rút gọn có thể khác `minimal` đầu vào: DB thiếu bảng thống kê thì tự hạ
+    xuống bản rút gọn, và lúc render phải biết để không vẽ mục rỗng.
+    """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
         if minimal:
-            return load_all_minimal(conn, db_path, game_types)
-        return load_all(conn, db_path, game_types)
+            return load_all_minimal(conn, db_path, game_types), True
+        try:
+            return load_all(conn, db_path, game_types), False
+        except sqlite3.OperationalError as exc:
+            # DB chưa chạy number_stats bao giờ -> thiếu number_frequency /
+            # position_*. Vẽ trang rút gọn còn hơn không có trang nào.
+            print(f"⚠ {Path(db_path).name}: {exc} — tạm dùng bản rút gọn.")
+            return load_all_minimal(conn, db_path, game_types), True
     finally:
         conn.close()
 
@@ -2284,14 +2442,24 @@ def main() -> int:
         pass
 
     args = build_arg_parser().parse_args()
+
+    if args.tao_shortcut:
+        return tao_shortcut()
+
     ensure_dirs()
+
+    failed_updates: list[str] = []
+    if args.update:
+        failed_updates = run_update(args.game or "all")
 
     written: list[Path] = []
     for spec in build_page_specs(args):
         if not Path(spec["db"]).exists():
             print(f"⚠ Không thấy DB {spec['db']} — bỏ qua {spec['games']}.")
             continue
-        data = build_page_data(spec["db"], spec["games"], spec["minimal"])
+        data, is_minimal = build_page_data(
+            spec["db"], spec["games"], spec["minimal"]
+        )
         if not data:
             print(
                 f"⚠ Không có dữ liệu cho {spec['games']} trong {spec['db']} "
@@ -2303,7 +2471,7 @@ def main() -> int:
         out.write_text(
             render_html(
                 data,
-                minimal=spec["minimal"],
+                minimal=is_minimal,
                 source=spec["source"],
                 title=spec["title"],
                 nav=spec["nav"],
@@ -2320,6 +2488,15 @@ def main() -> int:
     if not args.no_open:
         for out in written:
             webbrowser.open(out.resolve().as_uri())
+
+    # Chạy từ shortcut: console đóng ngay sau khi mở trình duyệt, nên khi cào
+    # lỗi phải dừng lại cho kịp đọc thông báo.
+    if failed_updates:
+        print(f"⚠ Không cập nhật được: {', '.join(failed_updates)}.")
+        try:
+            input("Nhấn Enter để đóng...")
+        except (EOFError, KeyboardInterrupt):
+            pass
     return 0
 
 
