@@ -86,6 +86,9 @@ Misatothue/*
 # MisaThueSuafile: bỏ qua toàn bộ, không đưa lên git
 MisaThueSuafile/
 
+# ReelStats: file kết quả tự sinh, không đưa lên git
+ReelStats/reel_stats.xlsx
+
 # Ignore output and backup directories
 output_videos/
 local_videos/
