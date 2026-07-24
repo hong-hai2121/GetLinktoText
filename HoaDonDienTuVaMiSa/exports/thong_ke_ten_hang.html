@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thống kê tên hàng</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #202124;
+      --muted: #667085;
+      --line: #d9dee7;
+      --teal: #23736b;
+      --orange: #b45c2e;
+      --violet: #5d5fef;
+      --shadow: 0 10px 28px rgba(32, 33, 36, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .app {
+      width: min(1440px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 32px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      max-width: 900px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .metric .value {
+      margin-top: 6px;
+      font-size: 26px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    input[type="search"] {
+      width: min(340px, 52vw);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+    }
+
+    input[type="search"]:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(35, 115, 107, 0.14);
+    }
+
+    button {
+      border: 1px solid var(--teal);
+      border-radius: 6px;
+      padding: 9px 12px;
+      background: var(--teal);
+      color: #fff;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--teal);
+    }
+
+    .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--teal);
+      border-radius: 6px;
+      padding: 9px 12px;
+      background: #fff;
+      color: var(--teal);
+      font: inherit;
+      font-weight: 650;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .table-wrap {
+      max-height: calc(100vh - 250px);
+      min-height: 420px;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #eef2f5;
+      color: #30343b;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    td.number, th.number { text-align: right; }
+    th:nth-child(1), td:nth-child(1) { width: 64px; }
+    th:nth-child(3), td:nth-child(3) { width: 96px; }
+    th:nth-child(4), td:nth-child(4) { width: 150px; }
+    th:nth-child(5), td:nth-child(5) { width: 110px; }
+    th:nth-child(6), td:nth-child(6) { width: 120px; }
+
+    tbody tr:hover { background: #f4fbfa; }
+
+    .item-name {
+      overflow-wrap: anywhere;
+      font-weight: 600;
+    }
+
+    .empty {
+      padding: 28px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .side {
+      display: grid;
+      gap: 16px;
+    }
+
+    .source-list {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .source {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfd;
+    }
+
+    .source strong {
+      display: block;
+      overflow-wrap: anywhere;
+      margin-bottom: 4px;
+    }
+
+    .source span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .chart {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .bar-row {
+      display: grid;
+      gap: 5px;
+    }
+
+    .bar-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: #30343b;
+      font-size: 13px;
+    }
+
+    .bar-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .bar-track {
+      height: 10px;
+      background: #e8edf1;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      min-width: 2px;
+      background: linear-gradient(90deg, var(--teal), var(--orange));
+    }
+
+    .muted { color: var(--muted); }
+
+    @media (max-width: 980px) {
+      .topbar,
+      .panel-head {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .table-wrap {
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .app {
+        width: min(100% - 20px, 1440px);
+        padding-top: 14px;
+      }
+
+      h1 { font-size: 20px; }
+
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      input[type="search"] {
+        width: 100%;
+      }
+
+      .toolbar {
+        width: 100%;
+      }
+
+      button {
+        flex: 1 1 auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar">
+      <div>
+        <h1>Thống kê số lượng theo tên hàng</h1>
+        <div class="subtitle" id="generatedAt"></div>
+      </div>
+      <div class="toolbar">
+        <button class="secondary" id="resetButton" type="button">Xóa lọc</button>
+        <a class="button-link" id="openCsvButton" href="file:///D:/Python/GetLinktoText/HoaDonDienTuVaMiSa/exports/thong_ke_ten_hang.csv" target="_blank" rel="noopener">Mở CSV bằng Excel</a>
+        <button id="downloadButton" type="button">Tải CSV</button>
+      </div>
+    </section>
+
+    <section class="summary">
+      <div class="metric">
+        <div class="label">Mặt hàng</div>
+        <div class="value" id="itemCount">0</div>
+      </div>
+      <div class="metric">
+        <div class="label">Tổng số lượng</div>
+        <div class="value" id="quantityTotal">0</div>
+      </div>
+      <div class="metric">
+        <div class="label">Dòng hóa đơn</div>
+        <div class="value" id="lineCount">0</div>
+      </div>
+      <div class="metric">
+        <div class="label">Số hóa đơn</div>
+        <div class="value" id="invoiceCount">0</div>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Bảng tổng hợp</div>
+            <div class="muted" id="visibleSummary"></div>
+          </div>
+          <input id="searchInput" type="search" placeholder="Tìm tên hàng, đơn vị tính...">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="number" data-key="index">STT</th>
+                <th data-key="name">Tên hàng</th>
+                <th data-key="unit">ĐVT</th>
+                <th class="number" data-key="quantity">Tổng số lượng</th>
+                <th class="number" data-key="lineCount">Số dòng</th>
+                <th class="number" data-key="invoiceCount">Số hóa đơn</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+          <div class="empty" id="emptyState" hidden>Không có mặt hàng phù hợp.</div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Top số lượng</div>
+          </div>
+          <div class="chart" id="chart"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Nguồn dữ liệu</div>
+          </div>
+          <div class="source-list" id="sources"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const payload = {"generatedAt": "24/07/2026 15:26:19", "reports": [{"file_name": "Bang_ke_chi_tiet_HD_da_su_dung (2).xls", "sheet_name": "Bảng kê chi tiết HĐ đã sử dụng", "header_row": 6, "product_column": "AB", "quantity_column": "AE", "line_count": 9272}], "summary": {"itemCount": 125, "lineCount": 9272, "invoiceCount": 1943, "quantity": 14485.0, "quantityText": "14.485"}, "rows": [{"index": 1, "name": "Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói)", "unit": "Hộp", "quantity": 4172.0, "quantityText": "4.172", "lineCount": 1431, "invoiceCount": 1425}, {"index": 2, "name": "Thực phẩm bảo vệ sức khỏe NEXTHP GREEN", "unit": "Hộp", "quantity": 2500.0, "quantityText": "2.500", "lineCount": 1279, "invoiceCount": 1277}, {"index": 3, "name": "MYBUTIN 200", "unit": "Hộp", "quantity": 1512.0, "quantityText": "1.512", "lineCount": 1480, "invoiceCount": 1479}, {"index": 4, "name": "Solvitale Magnefol", "unit": "Hộp", "quantity": 1119.0, "quantityText": "1.119", "lineCount": 1095, "invoiceCount": 1095}, {"index": 5, "name": "Aclomez (Esomeprazole dưới dạng Esomeprazole magnesium trihydrate) 40mg", "unit": "Hộp", "quantity": 923.0, "quantityText": "923", "lineCount": 921, "invoiceCount": 920}, {"index": 6, "name": "CNN AQUACALCI EXTRACT", "unit": "Hộp", "quantity": 617.0, "quantityText": "617", "lineCount": 614, "invoiceCount": 614}, {"index": 7, "name": "Thực phẩm bảo vệ sức khỏe TỎI ĐEN 3B TONICPHAR", "unit": "Hộp", "quantity": 589.0, "quantityText": "589", "lineCount": 525, "invoiceCount": 523}, {"index": 8, "name": "Đại tràng Vạn Xuân", "unit": "Hộp", "quantity": 406.0, "quantityText": "406", "lineCount": 222, "invoiceCount": 222}, {"index": 9, "name": "Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new (Hộp 6 vỉ x 10 viên)", "unit": "Hộp", "quantity": 400.0, "quantityText": "400", "lineCount": 313, "invoiceCount": 292}, {"index": 10, "name": "Tỏi đen 3B Tonicphar (100 viên/hộp)", "unit": "Hộp", "quantity": 379.0, "quantityText": "379", "lineCount": 328, "invoiceCount": 328}, {"index": 11, "name": "Thực phẩm bảo vệ sức khỏe T GAST ( Hộp 20 gói *10ml )", "unit": "Hộp", "quantity": 252.0, "quantityText": "252", "lineCount": 89, "invoiceCount": 89}, {"index": 12, "name": "Thực phẩm bảo vệ sức khỏe Dung dịch dạ dày P-Gast (hộp 15 gói)", "unit": "Hộp", "quantity": 216.0, "quantityText": "216", "lineCount": 90, "invoiceCount": 90}, {"index": 13, "name": "Thực phẩm bảo vệ sức khoẻ Men vi sinh Enter Maxlife", "unit": "Hộp", "quantity": 212.0, "quantityText": "212", "lineCount": 81, "invoiceCount": 81}, {"index": 14, "name": "Thực phẩm bảo vệ sức khoẻ TỎI ĐEN 3B TONICPHAR", "unit": "Hộp", "quantity": 210.0, "quantityText": "210", "lineCount": 190, "invoiceCount": 188}, {"index": 15, "name": "Thực phẩm bảo vệ sức khỏe Men Vi Sinh Enter Maxlife", "unit": "Hộp", "quantity": 202.0, "quantityText": "202", "lineCount": 77, "invoiceCount": 77}, {"index": 16, "name": "DẠ DÀY SITOMA", "unit": "Hộp", "quantity": 180.0, "quantityText": "180", "lineCount": 103, "invoiceCount": 103}, {"index": 17, "name": "Thực phẩm bảo vệ sức khỏe T-Gast ( Hộp 20 gói*10ml)", "unit": "Hộp", "quantity": 174.0, "quantityText": "174", "lineCount": 59, "invoiceCount": 59}, {"index": 18, "name": "ĐẠI TRÀNG GOLAX (Hộp 30 viên)", "unit": "Hộp", "quantity": 94.0, "quantityText": "94", "lineCount": 54, "invoiceCount": 53}, {"index": 19, "name": "Thực phẩm bảo vệ sức khoẻ T-Gast ( Hộp 20 gói * 10 ml )", "unit": "Hộp", "quantity": 85.0, "quantityText": "85", "lineCount": 28, "invoiceCount": 28}, {"index": 20, "name": "Thực phẩm bảo vệ sức khỏe: KTIRA OMEGA 3 KRILL; dạng viên; 60 viên/lọ", "unit": "Hộp", "quantity": 58.0, "quantityText": "58", "lineCount": 48, "invoiceCount": 48}, {"index": 21, "name": "Dạ Dày P_GAST 20 gói", "unit": "Hộp", "quantity": 47.0, "quantityText": "47", "lineCount": 21, "invoiceCount": 21}, {"index": 22, "name": "Thực phẩm bảo vệ sức khoẻ Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên )", "unit": "Hộp", "quantity": 43.0, "quantityText": "43", "lineCount": 23, "invoiceCount": 23}, {"index": 23, "name": "Thực phẩm bảo vệ sức khỏe GREEN COLONS", "unit": "Hộp", "quantity": 35.0, "quantityText": "35", "lineCount": 17, "invoiceCount": 17}, {"index": 24, "name": "Thực phẩm bảo vệ sức khoẻ Vitamin 3B gold new", "unit": "Hộp", "quantity": 30.0, "quantityText": "30", "lineCount": 16, "invoiceCount": 16}, {"index": 25, "name": "Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên)", "unit": "Hộp", "quantity": 29.0, "quantityText": "29", "lineCount": 14, "invoiceCount": 14}, {"index": 26, "name": "Thực phẩm bảo vệ sức khỏe An thần Sleep well melatonin", "unit": "Hộp", "quantity": 25.0, "quantityText": "25", "lineCount": 25, "invoiceCount": 25}, {"index": 27, "name": "Thực phẩm bảo vệ sức khỏe N Diamond Night", "unit": "Hộp", "quantity": 5.0, "quantityText": "5", "lineCount": 5, "invoiceCount": 5}, {"index": 28, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe Dung dịch dạ dày P-Gast (hộp 15 gói) do khách trả lại hàng", "unit": "hộp", "quantity": 3.0, "quantityText": "3", "lineCount": 1, "invoiceCount": 1}, {"index": 29, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 3.0, "quantityText": "3", "lineCount": 1, "invoiceCount": 1}, {"index": 30, "name": "điều chỉnh giảm Đại tràng Vạn Xuân do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 31, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe NEXTHP GREEN do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 32, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách trả lại hàng", "unit": "hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 33, "name": "Thực phẩm bảo vệ sức khoẻ GREEN COLONS", "unit": "Hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 34, "name": "Thực phẩm bảo vệ sức khoẻ Men Vi Sinh ProB 4 Billion ( Hộp x 2 vỉ x 10 ống x 10ml )", "unit": "Hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 35, "name": "Thực phẩm bảo vệ sức khoẻ T GAST ( Hộp 20 gói * 10 ml )", "unit": "Hộp", "quantity": 2.0, "quantityText": "2", "lineCount": 1, "invoiceCount": 1}, {"index": 36, "name": "Aclomez (Esomeprazole (dưới dạng Esomeprazole magnesium trihydrate) 40mg. Hộp 3 vỉ x 10 viên nén", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 37, "name": "điều chỉnh giảm CNN AQUACALCI EXTRACT do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 38, "name": "điều chỉnh giảm MYBUTIN 200 do khách trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 39, "name": "điêu chỉnh giảm Thực phẩm bảo vệ sức khỏe NEXTHP GREEN do khách trả lại hàng", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 40, "name": "dieu chỉnh giảm Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên) do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 41, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên) do khách trả lại hàng", "unit": "hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 42, "name": "Thực phẩm bảo vệ sức khỏe OMEGA 3.6.9", "unit": "Hộp", "quantity": 1.0, "quantityText": "1", "lineCount": 1, "invoiceCount": 1}, {"index": 43, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ 00004914", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 44, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại Hđ 00004915", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 45, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ 00004918", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 46, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ 00004919", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 47, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 2, "invoiceCount": 2}, {"index": 48, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004858", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 49, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004859", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 50, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004860", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 51, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004861", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 52, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004862", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 53, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004865", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 54, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004866", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 55, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004867", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 56, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004868", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 57, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004869", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 58, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004870", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 59, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004871", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 60, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004872", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 61, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004874", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 62, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004875", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 63, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004877", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 64, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004879", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 65, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004880", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 66, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004881", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 67, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004882", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 68, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004883", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 69, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004884", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 70, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004885", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 71, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004886", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 72, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004888", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 73, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004889", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 74, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004892", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 75, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004893", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 76, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004894", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 77, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004895", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 78, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004896", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 79, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004897", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 80, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004898", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 81, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004900", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 82, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004901", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 83, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004902", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 84, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004903", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 85, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004904", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 86, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004905", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 87, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004906", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 88, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004909", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 89, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004911", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 90, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004912", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 91, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004913", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 92, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004916", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 93, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004917", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 94, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 00004921", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 95, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4863", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 96, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4864", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 97, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4873", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 98, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4876", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 99, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4878", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 100, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4887", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 101, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4890", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 102, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4891", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 103, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4907", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 104, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp \" cho toàn bộ hàng hoá tại HĐ số 4908", "unit": "hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 105, "name": "Điều chỉnh bổ sung đơn vị tính \" Hộp\" cho toàn bộ hàng hoá tại HĐ 00004920", "unit": "Hộp", "quantity": 0.0, "quantityText": "0", "lineCount": 1, "invoiceCount": 1}, {"index": 106, "name": "Điều chỉnh tên hàng hóa từ “DẠ DÀY SITOMA” thành “Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new Hộp 6 vỉ x 10 viên”; không làm thay đổi số lượng, đơn giá, thuế suất, tiền thuế GTGT và tổng tiền thanh toán.", "unit": "", "quantity": 0.0, "quantityText": "0", "lineCount": 25, "invoiceCount": 25}, {"index": 107, "name": "điều chỉnh giảm Aclomez (Esomeprazole (dưới dạng Esomeprazole magnesium trihydrate) 40mg. Hộp 3 vỉ x 10 viên nén do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -1.0, "quantityText": "-1", "lineCount": 1, "invoiceCount": 1}, {"index": 108, "name": "điều chỉnh giảm MYBUTIN 200 do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -1.0, "quantityText": "-1", "lineCount": 1, "invoiceCount": 1}, {"index": 109, "name": "điều chỉnh giảm Solvitale Magnefol do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -1.0, "quantityText": "-1", "lineCount": 1, "invoiceCount": 1}, {"index": 110, "name": "điêu chỉnh giảm Thực phẩm bảo vệ sức khỏe TỎI ĐEN 3B TONICPHAR do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -1.0, "quantityText": "-1", "lineCount": 1, "invoiceCount": 1}, {"index": 111, "name": "điều chỉnh giả CNN AQUACALCI EXTRACT do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 112, "name": "điều chỉnh giảm CNN AQUACALCI EXTRACT do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 113, "name": "điều chỉnh giảm MYBUTIN 200 do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 114, "name": "điều chỉnh giảm MYBUTIN 200 do khách hàng trả lại toàn bộ hàng hoá", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 115, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe NEXTHP GREEN do khach hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 116, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe NEXTHP GREEN do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 117, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe TỎI ĐEN 3B TONICPHAR do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 118, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên) do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 119, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe Vitamin 3B gold new ( Hộp 6 vỉ x 10 viên) do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -2.0, "quantityText": "-2", "lineCount": 1, "invoiceCount": 1}, {"index": 120, "name": "điều chỉnh giảm Đại tràng Vạn Xuân do khách hầng trả hàng hóa", "unit": "hộp", "quantity": -4.0, "quantityText": "-4", "lineCount": 1, "invoiceCount": 1}, {"index": 121, "name": "điêu chỉnh giảm Thực phẩm bảo vệ sức khỏe NEXTHP GREEN do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -4.0, "quantityText": "-4", "lineCount": 1, "invoiceCount": 1}, {"index": 122, "name": "diều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -4.0, "quantityText": "-4", "lineCount": 1, "invoiceCount": 1}, {"index": 123, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -4.0, "quantityText": "-4", "lineCount": 1, "invoiceCount": 1}, {"index": 124, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe Dung dịch dạ dày P-Gast (hộp 15 gói) do khách hàng trả lại 1 phần hàng hóa", "unit": "hộp", "quantity": -6.0, "quantityText": "-6", "lineCount": 1, "invoiceCount": 1}, {"index": 125, "name": "điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại toàn bộ hàng hóa", "unit": "hộp", "quantity": -10.0, "quantityText": "-10", "lineCount": 2, "invoiceCount": 2}]};
+    const csvFileName = "thong_ke_ten_hang.csv";
+    let currentRows = [];
+    let sortState = { key: "quantity", direction: -1 };
+
+    const searchInput = document.getElementById("searchInput");
+    const tableBody = document.getElementById("tableBody");
+    const emptyState = document.getElementById("emptyState");
+    const visibleSummary = document.getElementById("visibleSummary");
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function formatNumber(value) {
+      return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 }).format(value || 0);
+    }
+
+    function compareRows(a, b) {
+      const key = sortState.key;
+      const av = a[key];
+      const bv = b[key];
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * sortState.direction;
+      }
+      return String(av ?? "").localeCompare(String(bv ?? ""), "vi", { sensitivity: "base" }) * sortState.direction;
+    }
+
+    function applyFilterAndSort() {
+      const query = searchInput.value.trim().toLocaleLowerCase("vi");
+      currentRows = payload.rows.filter((row) => {
+        const text = `${row.name} ${row.unit}`.toLocaleLowerCase("vi");
+        return !query || text.includes(query);
+      }).sort(compareRows);
+      renderTable();
+    }
+
+    function renderTable() {
+      tableBody.innerHTML = currentRows.map((row, index) => `
+        <tr>
+          <td class="number">${index + 1}</td>
+          <td><div class="item-name">${escapeHtml(row.name)}</div></td>
+          <td>${escapeHtml(row.unit)}</td>
+          <td class="number">${escapeHtml(row.quantityText)}</td>
+          <td class="number">${formatNumber(row.lineCount)}</td>
+          <td class="number">${formatNumber(row.invoiceCount)}</td>
+        </tr>
+      `).join("");
+
+      emptyState.hidden = currentRows.length > 0;
+      const visibleQuantity = currentRows.reduce((sum, row) => sum + (row.quantity || 0), 0);
+      visibleSummary.textContent = `${formatNumber(currentRows.length)} mặt hàng, tổng số lượng ${formatNumber(visibleQuantity)}`;
+    }
+
+    function renderSummary() {
+      const firstSource = payload.reports[0] || {};
+      document.getElementById("generatedAt").textContent =
+        `Tạo lúc ${payload.generatedAt}. Cột tên hàng: ${firstSource.product_column || "AB"}, cột số lượng: ${firstSource.quantity_column || "AE"}.`;
+      document.getElementById("itemCount").textContent = formatNumber(payload.summary.itemCount);
+      document.getElementById("quantityTotal").textContent = payload.summary.quantityText;
+      document.getElementById("lineCount").textContent = formatNumber(payload.summary.lineCount);
+      document.getElementById("invoiceCount").textContent = formatNumber(payload.summary.invoiceCount);
+    }
+
+    function renderSources() {
+      const container = document.getElementById("sources");
+      container.innerHTML = payload.reports.map((source) => `
+        <div class="source">
+          <strong>${escapeHtml(source.file_name)}</strong>
+          <span>Sheet: ${escapeHtml(source.sheet_name)}</span>
+          <span>Header dòng ${source.header_row}; tên hàng ${source.product_column}; số lượng ${source.quantity_column}</span>
+          <span>${formatNumber(source.line_count)} dòng dữ liệu</span>
+        </div>
+      `).join("");
+    }
+
+    function renderChart() {
+      const chart = document.getElementById("chart");
+      const topRows = [...payload.rows].sort((a, b) => b.quantity - a.quantity).slice(0, 12);
+      const maxQuantity = Math.max(...topRows.map((row) => row.quantity), 1);
+      chart.innerHTML = topRows.map((row) => {
+        const width = Math.max(2, (row.quantity / maxQuantity) * 100);
+        return `
+          <div class="bar-row" title="${escapeHtml(row.name)}">
+            <div class="bar-meta">
+              <span class="bar-name">${escapeHtml(row.name)}</span>
+              <strong>${escapeHtml(row.quantityText)}</strong>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width: ${width}%"></div></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function downloadCsv() {
+      const header = ["STT", "Tên hàng", "ĐVT", "Tổng số lượng", "Số dòng", "Số hóa đơn"];
+      const rows = currentRows.map((row, index) => [
+        index + 1,
+        row.name,
+        row.unit,
+        row.quantityText,
+        row.lineCount,
+        row.invoiceCount
+      ]);
+      const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+      const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = csvFileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    document.querySelectorAll("th[data-key]").forEach((header) => {
+      header.addEventListener("click", () => {
+        const key = header.dataset.key;
+        sortState = {
+          key,
+          direction: sortState.key === key ? sortState.direction * -1 : (key === "name" || key === "unit" ? 1 : -1)
+        };
+        applyFilterAndSort();
+      });
+    });
+
+    searchInput.addEventListener("input", applyFilterAndSort);
+    document.getElementById("resetButton").addEventListener("click", () => {
+      searchInput.value = "";
+      sortState = { key: "quantity", direction: -1 };
+      applyFilterAndSort();
+    });
+    document.getElementById("downloadButton").addEventListener("click", downloadCsv);
+
+    renderSummary();
+    renderSources();
+    renderChart();
+    applyFilterAndSort();
+  </script>
+</body>
+</html>
