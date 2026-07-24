@@ -89,6 +89,10 @@ MisaThueSuafile/
 # ReelStats: file kết quả tự sinh, không đưa lên git
 ReelStats/reel_stats.xlsx
 
+# GetTextLargeV3: model weights (~3GB) và driver nhị phân (đã có bản ở root)
+GetTextLargeV3/models/
+GetTextLargeV3/geckodriver.exe
+
 # Ignore output and backup directories
 output_videos/
 local_videos/
