@@ -6,6 +6,7 @@ Phần mềm này đọc bảng kê chi tiết hóa đơn của MISA, lấy cộ
 
 - `hoa_don_stats_web.py`: file Python chính, xử lý đọc Excel, tính toán và tạo báo cáo.
 - `Chay thong ke hoa don.bat`: file chạy nhanh bằng double-click trên Windows.
+- `Tên Sản Phẩm.xlsx`: danh mục thuốc, cột A là tên hàng, cột B..F là các tên khác của cùng thuốc.
 - `exports/thong_ke_ten_hang.html`: báo cáo webview được tạo sau khi chạy.
 - `exports/thong_ke_ten_hang.csv`: file CSV kết quả, có thể mở bằng Excel.
 
@@ -21,7 +22,9 @@ Sau khi double-click, chương trình sẽ mở một cửa sổ desktop. Trong 
 
 - Bấm `Chọn file Bang_ke_chi_tiet_HD` để chọn file dữ liệu hóa đơn MISA.
 - Hỗ trợ chọn file `.csv`, `.xls`, `.xlsx`, `.xlsm`.
-- Bấm `Chạy thống kê` để đọc file đã chọn.
+- Trong khối `File ZIP hóa đơn HTML/XML`, bấm `Chọn ZIP hóa đơn` để chọn một hoặc nhiều file `.zip` hóa đơn.
+- Các file ZIP được hiển thị trong một danh sách nguồn hóa đơn ngắn gọn.
+- Bấm `Chạy thống kê` để đọc dữ liệu đã chọn.
 - Sau khi chạy xong chương trình tự mở báo cáo HTML.
 - Có thể bấm `Mở báo cáo HTML` hoặc `Mở CSV bằng Excel` để mở lại kết quả.
 - Đóng cửa sổ desktop là chương trình dừng hẳn.
@@ -33,13 +36,26 @@ cd /d D:\Python\GetLinktoText\HoaDonDienTuVaMiSa
 python hoa_don_stats_web.py
 ```
 
-Khi bấm `Chạy thống kê`, chương trình sẽ tạo báo cáo HTML và CSV. Báo cáo được lưu vào thư mục `exports` cạnh file đầu tiên đã chọn. Cửa sổ desktop vẫn mở để bạn chạy lại file khác hoặc mở kết quả.
+Khi bấm `Chạy thống kê`, chương trình sẽ tạo báo cáo HTML và CSV. Báo cáo luôn được lưu vào thư mục `exports` của phần mềm:
+
+```text
+D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\exports
+```
+
+Cửa sổ desktop vẫn mở để bạn chạy lại file/ZIP khác hoặc mở kết quả.
+
+Trong file `exports/thong_ke_ten_hang.html`, kết quả được tách thành 2 bảng riêng nếu có đủ dữ liệu đầu vào:
+
+- `Bảng kê chi tiết hóa đơn`: thống kê từ file `Bang_ke_chi_tiet_HD` dạng `.csv`, `.xls`, `.xlsx`, `.xlsm`.
+- `Hóa đơn HTML/XML/ZIP`: thống kê từ các thư mục hóa đơn và các file ZIP hóa đơn.
+
+File `exports/thong_ke_ten_hang.csv` cũng có cột `Nguồn` để khi mở bằng Excel vẫn biết từng dòng tổng hợp thuộc nhóm dữ liệu nào.
 
 ## Logic hoạt động
 
 ### 1. Chọn file dữ liệu đầu vào
 
-Nếu chạy bằng file `.bat` hoặc chạy `python hoa_don_stats_web.py` mà không truyền tên file/folder, chương trình sẽ mở cửa sổ desktop trước. Báo cáo chưa tạo ngay từ đầu để tránh đọc nhầm file hoặc tạo báo cáo khi chưa chọn dữ liệu.
+Nếu chạy bằng file `.bat` hoặc chạy `python hoa_don_stats_web.py` mà không truyền tên file/ZIP, chương trình sẽ mở cửa sổ desktop trước. Báo cáo chưa tạo ngay từ đầu để tránh đọc nhầm file hoặc tạo báo cáo khi chưa chọn dữ liệu.
 
 Trong cửa sổ desktop, bấm `Chọn file Bang_ke_chi_tiet_HD` để chọn một file:
 
@@ -48,7 +64,27 @@ Trong cửa sổ desktop, bấm `Chọn file Bang_ke_chi_tiet_HD` để chọn m
 - `.xlsx`
 - `.xlsm`
 
-Nếu chạy bằng dòng lệnh và truyền sẵn file/folder, chương trình sẽ dùng đúng đường dẫn được truyền vào và không mở cửa sổ desktop.
+Trong khối `File ZIP hóa đơn HTML/XML`, bấm `Chọn ZIP hóa đơn` để chọn một hoặc nhiều file ZIP. Chương trình sẽ tự giải nén mỗi ZIP vào một thư mục con riêng để tránh trùng tên `invoice.xml` và `invoice.html`.
+
+```text
+exports\extracted_invoices\20260724_162953
+├─ 001_invoice
+├─ 002_invoice (1)
+├─ 003_invoice (2)
+```
+
+Mỗi ZIP sau khi giải nén có thể chứa:
+
+```text
+invoice.xml
+invoice.html
+details.js
+sign-check.jpg
+```
+
+Chương trình ưu tiên đọc `invoice.xml`. Nếu không có `invoice.xml`, chương trình đọc fallback từ `invoice.html`. Sau khi giải nén, chương trình tự tìm đệ quy các thư mục có `invoice.xml` hoặc `invoice.html`.
+
+Nếu chạy bằng dòng lệnh và truyền sẵn file/folder/ZIP, chương trình sẽ dùng đúng đường dẫn được truyền vào và không mở cửa sổ desktop.
 
 File mẫu hiện tại là:
 
@@ -69,6 +105,25 @@ Với file Excel, script mở file và đọc:
 Sau đó script duyệt từng sheet để tìm sheet có dòng tiêu đề phù hợp.
 
 Với file CSV, script đọc trực tiếp nội dung CSV, tự nhận diện dấu phân cách thường gặp như dấu phẩy, chấm phẩy hoặc tab, rồi tìm dòng tiêu đề giống cách đọc Excel.
+
+Với thư mục hóa đơn HTML/XML, script đọc:
+
+- `invoice.xml` nếu có.
+- `invoice.html` nếu không có XML.
+
+Các trường chính lấy từ `invoice.xml`:
+
+```text
+Số hóa đơn     -> TTChung/SHDon
+Tên hàng       -> DSHHDVu/HHDVu/THHDVu
+ĐVT            -> DSHHDVu/HHDVu/DVTinh
+Số lượng       -> DSHHDVu/HHDVu/SLuong
+Đơn giá        -> DSHHDVu/HHDVu/DGia
+Thành tiền     -> DSHHDVu/HHDVu/ThTien
+Thuế suất      -> DSHHDVu/HHDVu/TSuat
+```
+
+Sau khi đọc các dòng hàng trong các thư mục hóa đơn, chương trình gom nhóm và cộng số lượng theo `Tên hàng` giống file bảng kê chi tiết.
 
 ### 3. Tự tìm dòng tiêu đề
 
@@ -181,85 +236,133 @@ Ngoài tổng số lượng, chương trình còn tính thêm:
 
 ## Cách gom nhóm tên hàng
 
-Tên hàng được gom nhóm theo nội dung sau khi đã:
+Mỗi tên hàng được tách thành **lõi tên** và **quy cách đóng gói**, rồi gom nhóm theo cặp đó.
 
-- Cắt khoảng trắng đầu/cuối.
-- Gom nhiều khoảng trắng liên tiếp thành một khoảng trắng.
-- Không phân biệt chữ hoa/chữ thường.
+Khi tính lõi tên, chương trình bỏ đi:
 
-Ví dụ các dòng sau được tính là cùng một tên hàng:
+- Khoảng trắng thừa, chữ hoa/thường, dấu tiếng Việt (`sức khoẻ` = `sức khỏe`).
+- Tiền tố nhóm hàng: `Thực phẩm bảo vệ sức khỏe`, `Thực phẩm bổ sung`, `TPBVSK`, kèm dấu `:` hoặc `-` đứng sau.
+- Số lô và hạn dùng: `(SL: 200326, HD: 210429)`, `(T/242 - H/30)`.
+- Dấu câu và ký tự phân cách, nên `T-Gast` = `T GAST` = `T_Gast`.
 
-```text
-Sản phẩm A
-sản phẩm a
-  Sản   phẩm   A
-```
+Khi tính quy cách, chương trình bỏ `x` và dạng bào chế (`viên nén` = `viên`), đồng thời bỏ dung tích
+mỗi đơn vị nên `Hộp 20 gói*10ml` = `Hộp 20 gói`. Nhưng nếu dung tích chính là quy cách
+(`250ml`) thì vẫn giữ.
 
-Nhưng nếu tên hàng khác dấu câu, khác ký tự hoặc khác nội dung thì vẫn được tính là mặt hàng khác.
-
-## Lưu ý về hàng trả lại và điều chỉnh giảm
-
-Hiện tại chương trình cộng trực tiếp giá trị ở cột `Số lượng`.
-
-Nếu một dòng có `Số lượng` âm, ví dụ:
+Ví dụ các dòng sau được tính là cùng một sản phẩm:
 
 ```text
--1
--4
+Thực phẩm bảo vệ sức khỏe T-Gast ( Hộp 20 gói*10ml)
+Thực phẩm bảo vệ sức khỏe T GAST (Hộp 20 gói*10ml)
+Thực phẩm bảo vệ sức khoẻ T-Gast ( Hộp 20 gói * 10 ml )
 ```
 
-thì giá trị âm đó sẽ được trừ vào tổng của nhóm `Tên hàng` tương ứng.
+Còn **quy cách khác nhau thì vẫn là hai sản phẩm khác nhau**:
 
-Ví dụ nếu cùng một tên hàng có dữ liệu:
+```text
+OMEGA 3.6.9 (Hộp 1 lọ x 50 viên)     -> sản phẩm A
+OMEGA 3.6.9 (Hộp 1 lọ x 60 viên)     -> sản phẩm B
+```
+
+### Tên không ghi quy cách
+
+Tên không ghi quy cách (`Thực phẩm bảo vệ sức khỏe OMEGA 3.6.9`) được xử lý như sau:
+
+- Nếu trong dữ liệu lõi tên đó **chỉ có một quy cách** thì gộp luôn vào quy cách đó.
+- Nếu có **từ hai quy cách trở lên** thì để riêng thành một dòng, kèm cảnh báo ⚠ trên báo cáo,
+  vì chương trình không thể đoán số lượng đó thuộc quy cách nào.
+
+## Danh mục thuốc (`Tên Sản Phẩm.xlsx`)
+
+Đây là bảng mốc quyết định thuốc nào là thuốc nào. **Mỗi hàng là một thuốc**: cột A là tên hàng
+chính, cột B đến F là các tên khác mà hóa đơn hay ghi cho đúng thuốc đó.
+
+| Tên hàng | Tên khác 1 | Tên khác 2 |
+|---|---|---|
+| `Thực phẩm bảo vệ sức khỏe Dung dịch dạ dày P-Gast (hộp 15 gói)` | `Dạ Dày P_GAST 20 gói` | |
+| `MYBUTIN 200` | | |
+| `Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói)` | | |
+
+Cách chương trình dò, theo hai tầng:
+
+1. **Khớp cả quy cách** - tên mốc nằm trong tên hóa đơn sau khi chuẩn hóa. Nhờ vậy hai hàng danh
+   mục cùng tên nhưng khác quy cách (`OMEGA 3.6.9 (Hộp 1 lọ x 50 viên)` và `(60 viên)`) vẫn tách
+   được. Nhiều mốc cùng khớp thì lấy mốc dài nhất.
+2. **Khớp lõi tên** - dành cho tên hóa đơn không ghi quy cách. Nếu lõi tên đó thuộc nhiều thuốc
+   khác quy cách thì chương trình không đoán bừa, để tên đó thành dòng riêng.
+
+Tên khớp danh mục thì **lấy đúng tên ở cột A làm tên hiển thị**, nên bạn kiểm soát được tên trên
+báo cáo. Tên không khớp hàng nào vẫn được gộp bằng thuật toán lõi tên + quy cách như trên, lấy tên
+gốc phổ biến nhất làm tên hiển thị, và được đánh dấu là chưa có trong danh mục.
+
+### Tên chưa có trong danh mục
+
+Trên báo cáo, dòng chưa có trong danh mục được **tô nền cam, tên hàng đổi màu**, kèm nhãn
+`⚠ chưa có trong danh mục`. Đầu bảng có thông báo đếm số tên và nút **Đi đến** để nhảy thẳng
+xuống đúng dòng đó (bấm tiếp sẽ sang dòng chưa có tiếp theo).
+
+Nếu không tìm thấy file danh mục, chương trình vẫn chạy bình thường và không đánh dấu gì cả.
+
+### Màn hình sửa danh mục
+
+Bấm nút **Danh mục thuốc** trong cửa sổ chương trình:
+
+- Bảng bên trái liệt kê từng thuốc kèm các tên khác. Bấm đúp để sửa.
+- **Thêm thuốc / Sửa / Xóa** - form sửa có 6 ô: tên hàng và 5 tên khác.
+- Danh sách bên phải là các tên trên hóa đơn chưa có trong danh mục, lấy từ lần chạy thống kê gần
+  nhất. Chọn một tên rồi bấm **Thành thuốc mới**, hoặc chọn thêm một thuốc ở bảng trái rồi bấm
+  **Thành tên khác của thuốc đang chọn**.
+- **Lưu vào file** ghi thẳng vào `Tên Sản Phẩm.xlsx`, Excel vẫn mở và sửa tay được. Chạy lại thống
+  kê là áp dụng.
+
+## Hàng trả lại và điều chỉnh giảm
+
+MISA ghi dòng trả hàng bằng một câu dài chứ không phải tên hàng gốc:
 
 | Tên hàng | Số lượng |
 |---|---:|
-| Sản phẩm A | 10 |
-| Sản phẩm A | -2 |
+| `Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói)` | 4.172 |
+| `điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại 1 phần hàng hóa` | -4 |
 
-thì kết quả sẽ là:
+Chương trình tách phần tên hàng nằm giữa `điều chỉnh giảm` và `do khách ... trả lại`, tìm đúng
+sản phẩm rồi cộng số lượng đó vào **cột Hoàn** thay vì tạo một dòng riêng. Các lỗi chính tả có
+thật trong dữ liệu (`điêu chỉnh giảm`, `dieu chỉnh giảm`, `diều chỉnh giảm`, `điều chỉnh giả`,
+`do khách trả lại hàng`, `do khách hầng trả hàng hóa`) đều nhận diện được.
 
-```text
-Sản phẩm A = 8
-```
+Dòng trả hàng **luôn được tính là số âm**, kể cả khi MISA ghi số dương. Trong file thử có 10 dòng
+như vậy ở hóa đơn `00007133` và `00007134`. Ngoài ra **mọi dòng có số lượng âm cũng là hoàn**, kể
+cả khi dòng đó ghi đúng tên hàng.
 
-Tuy nhiên có một trường hợp cần xử lý sau: MISA có thể ghi dòng trả hàng bằng một tên hàng khác với tên hàng gốc, ví dụ:
+Bảng kết quả có 3 cột số lượng:
 
-| Tên hàng | Số lượng |
-|---|---:|
-| Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) | 4.172 |
-| điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại 1 phần hàng hóa | -4 |
+| Cột | Ý nghĩa |
+|---|---|
+| **Hoàn** | Số lượng khách trả lại, luôn là số âm hoặc 0 |
+| **Tổng số lượng** | Tổng bán ra, chưa trừ hoàn (giữ nguyên như báo cáo cũ) |
+| **Thực bán** | `Tổng số lượng + Hoàn` |
 
-Với logic hiện tại, 2 dòng trên bị xem là 2 tên hàng khác nhau vì nội dung `Tên hàng` không giống nhau hoàn toàn.
-
-Kết quả hiện tại sẽ là:
-
-```text
-Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) = 4.172
-điều chỉnh giảm Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói) do khách hàng trả lại 1 phần hàng hóa = -4
-```
-
-Chương trình hiện **chưa tự tách tên hàng gốc** trong câu `điều chỉnh giảm ... do khách hàng trả lại ...`, nên chưa tự trừ `-4` vào dòng PROENTERMAX gốc.
-
-Phương án xử lý sau:
-
-- Nhận diện các dòng có dạng `điều chỉnh giảm ... do khách hàng trả lại ...`.
-- Tách phần tên hàng gốc nằm giữa `điều chỉnh giảm` và `do khách hàng trả lại`.
-- Gom số lượng âm đó vào đúng tên hàng gốc.
-- Bổ sung các cột rõ hơn:
+Ví dụ thật từ file `Bang_ke_chi_tiet_HD_da_su_dung (2).xls`:
 
 ```text
-Tên hàng | ĐVT | Số lượng bán | Số lượng trả/điều chỉnh giảm | Số lượng ròng
+Tên hàng                                              Hoàn     Tổng   Thực bán
+Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói)     -23    4.172      4.149
+Thực phẩm bảo vệ sức khỏe NEXTHP GREEN                 -11    2.500      2.489
+MYBUTIN 200                                             -6    1.512      1.506
+CNN AQUACALCI EXTRACT                                   -5      617        612
 ```
 
-Ví dụ mong muốn sau khi xử lý:
+### Dòng điều chỉnh khác
 
-```text
-Thực phẩm bảo vệ sức khỏe PROENTERMAX (Hộp 30 gói)
-Số lượng bán: 4.172
-Số lượng trả/điều chỉnh giảm: 4
-Số lượng ròng: 4.168
-```
+Các dòng điều chỉnh **không phải trả hàng** (`Điều chỉnh bổ sung đơn vị tính " Hộp " cho toàn bộ
+hàng hoá tại HĐ số ...`, `Điều chỉnh tên hàng hóa từ X thành Y`) không gắn được vào sản phẩm nào,
+nên được dồn hết vào một dòng cuối bảng tên **"Dòng điều chỉnh khác (không phải trả hàng)"**.
+Bấm *Chi tiết* để xem từng dòng gốc. Trong file thử có 89 dòng loại này, tất cả đều có số lượng 0.
+
+Chỉ dòng có **số lượng bằng 0** mới được dồn vào đây. Dòng bắt đầu bằng `điều chỉnh` mà có số
+lượng thật thì vẫn đứng riêng, để không giấu mất số liệu.
+
+Nhờ hai bước gom này, bảng thống kê giảm từ 107 dòng xuống 22 dòng mà không mất dòng dữ liệu nào:
+tổng số dòng và tổng số lượng trước/sau khi gom vẫn khớp tuyệt đối.
 
 ## Kết quả xuất ra
 
@@ -273,9 +376,10 @@ exports/thong_ke_ten_hang.csv
 File HTML hiển thị:
 
 - Tổng số mặt hàng.
-- Tổng số lượng.
+- Tổng số lượng, tổng hàng hoàn và tổng thực bán.
 - Tổng số dòng hóa đơn.
 - Tổng số hóa đơn.
+- Khối "Đã gộp N tên trên hóa đơn thành M sản phẩm" kèm cảnh báo ⚠ nếu có tên chưa rõ quy cách.
 - Bảng thống kê chi tiết.
 - Ô tìm kiếm theo tên hàng.
 - Sắp xếp khi bấm vào tiêu đề cột.
@@ -283,13 +387,24 @@ File HTML hiển thị:
 - Nút `Mở CSV bằng Excel` để mở file CSV đã xuất ra.
 - Nút tải CSV.
 
+### Tên hàng dài
+
+Tên hàng của MISA thường rất dài nên ô tên hàng chỉ hiển thị tối đa **2 dòng**, phần thừa được
+cắt bằng dấu `...`. Đưa chuột vào ô sẽ hiện tên đầy đủ, **bấm vào ô là copy** tên đầy đủ vào
+clipboard kèm thông báo `Đã copy: ...` ở đáy màn hình. Copy được ở cả bảng chính, bảng đã gộp,
+popup Chi tiết và popup So sánh.
+
 Lưu ý: nút `Mở CSV bằng Excel` là link trực tiếp tới file `.csv` trên máy. Nếu Windows hoặc trình duyệt đang gán file CSV mở bằng Excel thì file sẽ mở bằng Excel; nếu không, trình duyệt có thể mở hoặc tải file CSV theo cấu hình hiện tại.
 
 File CSV có các cột:
 
 ```text
-STT, Tên hàng, ĐVT, Tổng số lượng, Số dòng, Số hóa đơn
+Nguồn, STT, Tên hàng, Hoàn, Tổng số lượng, Thực bán, Số dòng, Số hóa đơn,
+Số tên gốc, Tên gốc đã gộp, Cảnh báo
 ```
+
+Ba cột cuối để soát lại việc gộp tên: `Tên gốc đã gộp` liệt kê mọi cách viết đã dồn vào dòng đó,
+`Cảnh báo` chỉ có nội dung khi chương trình không tự quyết được quy cách.
 
 ## Kết quả chạy thử với file hiện tại
 
@@ -303,7 +418,8 @@ Chương trình đã đọc được:
 
 ```text
 9.272 dòng dữ liệu
-125 tên hàng
+22 sản phẩm (gộp từ 107 cách viết tên khác nhau), 20 khớp danh mục thuốc
+Tổng bán 14.522 - hoàn 71 = thực bán 14.451
 ```
 
 ## Tùy chọn dòng lệnh
@@ -331,6 +447,60 @@ Chạy thống kê một file cụ thể:
 ```powershell
 python hoa_don_stats_web.py "D:\DuLieuHoaDon\Bang_ke_chi_tiet_HD_da_su_dung.xlsx"
 ```
+
+## Đóng gói sang máy khác
+
+Mục tiêu đóng gói:
+
+- Tạo file chạy chính: `dist\ThongKeHoaDonMISA.exe`.
+- Tạo file cài đặt: `dist\installer\Setup_ThongKeHoaDonMISA.exe`.
+- Khi cài đặt, chương trình tạo biểu tượng ngoài Desktop.
+
+Trên máy dùng để build cần có:
+
+- Python 3.
+- Inno Setup 6 nếu muốn tạo file cài đặt `.exe`.
+
+Chạy lệnh build:
+
+```powershell
+cd /d D:\Python\GetLinktoText\HoaDonDienTuVaMiSa
+powershell -ExecutionPolicy Bypass -File .\packaging\build_installer.ps1
+```
+
+Nếu chỉ muốn tạo file `.exe` chạy trực tiếp, chưa tạo bộ cài:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\packaging\build_installer.ps1 -SkipInstaller
+```
+
+Sau khi build xong, lấy file này đem sang máy khác để cài:
+
+```text
+D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\dist\installer\Setup_ThongKeHoaDonMISA.exe
+```
+
+Khi chạy file cài đặt, app được cài vào thư mục người dùng:
+
+```text
+%LOCALAPPDATA%\HoaDonDienTuVaMiSa
+```
+
+Chọn tùy chọn `Tao bieu tuong ngoai Desktop` để tạo biểu tượng ngoài màn hình Desktop.
+
+Chạy thống kê một thư mục hóa đơn:
+
+```powershell
+python hoa_don_stats_web.py --no-dialog --invoice-folder "D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\invoice"
+```
+
+Chạy thống kê một file ZIP hóa đơn:
+
+```powershell
+python hoa_don_stats_web.py --no-dialog --invoice-zip "C:\Users\PC\Downloads\invoice.zip"
+```
+
+Có thể truyền nhiều ZIP bằng cách lặp lại `--invoice-zip`.
 
 Chỉ đọc một sheet cụ thể:
 

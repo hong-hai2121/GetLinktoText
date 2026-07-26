@@ -97,6 +97,11 @@ GetTextLargeV3/geckodriver.exe
 output_videos/
 local_videos/
 backup/
+HoaDonDienTuVaMiSa/exports/extracted_invoices/
+HoaDonDienTuVaMiSa/.build_venv/
+HoaDonDienTuVaMiSa/build/
+HoaDonDienTuVaMiSa/dist/
+HoaDonDienTuVaMiSa/*.spec
 final_result.docx
 final_result2.docx
 linkgettoText.txt
