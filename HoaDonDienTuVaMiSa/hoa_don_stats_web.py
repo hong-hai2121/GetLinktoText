@@ -37,6 +37,49 @@ def app_base_dir() -> Path:
 
 
 BASE_DIR = app_base_dir()
+ICON_FILE_NAME = "hoa_don_misa.ico"
+APP_USER_MODEL_ID = "HoaDonDienTuVaMiSa.ThongKeHoaDonMISA"
+
+
+def app_icon_path() -> Path | None:
+    """File .ico của app: ưu tiên bản nhúng trong exe, rồi tới assets cạnh app."""
+    candidates: list[Path] = []
+    bundle = getattr(sys, "_MEIPASS", "")
+    if bundle:  # PyInstaller onefile giải nén vào thư mục tạm
+        candidates.append(Path(bundle) / "assets" / ICON_FILE_NAME)
+    candidates.append(BASE_DIR / "assets" / ICON_FILE_NAME)
+    try:
+        candidates.append(Path(__file__).resolve().parent / "assets" / ICON_FILE_NAME)
+    except NameError:  # noqa: PERF203 - __file__ có thể vắng khi đóng gói.
+        pass
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def apply_window_icon(root) -> None:
+    """Gắn icon cho cửa sổ gốc và mọi cửa sổ con mở sau đó (tham số default)."""
+    icon = app_icon_path()
+    if not icon:
+        return
+    try:
+        # Không có AppUserModelID riêng thì Windows gộp cửa sổ vào icon của python.exe.
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:  # noqa: BLE001 - không phải Windows hoặc bị chặn thì bỏ qua.
+        pass
+    try:
+        root.iconbitmap(default=str(icon))  # áp cho cả cửa sổ con mở sau này
+    except Exception:  # noqa: BLE001 - icon hỏng không được làm chết app.
+        pass
+    try:
+        root.iconbitmap(str(icon))  # gắn thẳng lên cửa sổ gốc
+    except Exception:  # noqa: BLE001
+        pass
+
+
 EXPORT_DIR = BASE_DIR / "exports"
 DEFAULT_HTML_PATH = EXPORT_DIR / "thong_ke_ten_hang.html"
 DEFAULT_CSV_PATH = EXPORT_DIR / "thong_ke_ten_hang.csv"
@@ -4345,6 +4388,7 @@ def run_desktop_app(args: argparse.Namespace) -> int:
 
     root = tk.Tk()
     root.title("Thống kê hóa đơn MISA")
+    apply_window_icon(root)
     center_on_screen(root, 980, 700)
     root.minsize(860, 600)
 

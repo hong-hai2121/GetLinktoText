@@ -42,6 +42,7 @@ if (Test-Path $SpecFile) {
     Remove-Item -LiteralPath $SpecFile -Force
 }
 
+# --add-data: nhung .ico vao exe de cua so Tk lay duoc icon ke ca khi chay exe roi.
 & $PyInstaller `
     --noconfirm `
     --clean `
@@ -49,6 +50,7 @@ if (Test-Path $SpecFile) {
     --windowed `
     --name $AppName `
     --icon $IconPath `
+    --add-data "$IconPath;assets" `
     --distpath $DistDir `
     --workpath $BuildDir `
     --specpath $ProjectDir `
