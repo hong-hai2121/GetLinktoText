@@ -35,6 +35,18 @@ except ImportError:
     print("❌ Thiếu srt. Cài: pip install srt")
     sys.exit(1)
 
+
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
 # ===================== CẤU HÌNH =====================
 OUTPUT_DIR = r"D:\Python\GetLinktoText\SourceTruyen\XulyAmThanh\AmThanh_GiamGiong"
 
@@ -546,6 +558,7 @@ def main():
 
     tk.Button(frm, text="Bắt đầu xử lý", command=on_run).grid(row=5, column=0, sticky="w", pady=12)
 
+    center_on_screen(root)
     root.mainloop()
 
     # chạy xử lý

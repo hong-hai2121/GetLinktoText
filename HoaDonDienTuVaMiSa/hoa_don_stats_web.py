@@ -92,6 +92,8 @@ class ReportResult:
     file_count: int
     errors: list[str]
     unknown_names: list[str] = field(default_factory=list)
+    # Tên chưa có trong danh mục -> nguồn dữ liệu chứa tên đó (bảng kê / hóa đơn / cả hai).
+    unknown_sources: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -1584,6 +1586,9 @@ HTML_TEMPLATE = """<!doctype html>
       border-bottom: 1px solid var(--line);
     }
 
+    /* Thẻ thanh công cụ không có gì bên dưới nên bỏ đường kẻ chân, tránh gạch thừa. */
+    .panel-toolbar .panel-head { border-bottom: 0; }
+
     .panel-title {
       font-size: 16px;
       font-weight: 700;
@@ -1647,16 +1652,23 @@ HTML_TEMPLATE = """<!doctype html>
 
     .table-wrap {
       max-height: min(680px, calc(100vh - 280px));
-      min-height: 320px;
-      overflow: auto;
+      overflow: auto;   /* không ép cao tối thiểu: bảng ít dòng thì thẻ co lại vừa nội dung */
     }
+
+    /* Mỗi nguồn là một thẻ riêng, tách hẳn khỏi bảng phía trên cho dễ đọc. */
+    #sectionsContainer {
+      display: grid;
+      gap: 16px;
+    }
+
+    #sectionsContainer:empty { display: none; }
 
     .section-block {
-      border-bottom: 1px solid var(--line);
-    }
-
-    .section-block:last-child {
-      border-bottom: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
     }
 
     .section-head {
@@ -1667,9 +1679,11 @@ HTML_TEMPLATE = """<!doctype html>
       padding: 14px;
       background: #fbfcfd;
       border-bottom: 1px solid var(--line);
+      border-top: 3px solid var(--teal);
     }
 
     .section-title {
+      font-size: 16px;
       font-weight: 750;
       color: var(--ink);
     }
@@ -1679,6 +1693,101 @@ HTML_TEMPLATE = """<!doctype html>
       color: var(--muted);
       font-size: 13px;
     }
+
+    /* ── Bảng đối chiếu 2 nguồn ─────────────────────────────────────────── */
+    #comparePanel .section-head { border-top-color: var(--violet); }
+
+    .compare-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .metric-switch {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .metric-btn {
+      border: 0;
+      padding: 7px 12px;
+      background: #fff;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .metric-btn + .metric-btn { border-left: 1px solid var(--line); }
+    .metric-btn:hover { background: #f2f4f8; }
+
+    .metric-btn.is-active {
+      background: var(--violet);
+      color: #fff;
+    }
+
+    .check-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .compare-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fcfcff;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .compare-summary strong { color: var(--ink); }
+
+    .compare-table { min-width: 900px; }
+
+    /* Ghi đè bề rộng cột mặc định (vốn tính cho bảng 8 cột ở trên). */
+    .compare-table th:nth-child(1), .compare-table td:nth-child(1) { width: 56px; }
+    .compare-table th:nth-child(2), .compare-table td:nth-child(2) { width: auto; }
+    .compare-table th:nth-child(3), .compare-table td:nth-child(3) { width: clamp(140px, 13vw, 186px); }
+    .compare-table th:nth-child(4), .compare-table td:nth-child(4) { width: clamp(140px, 13vw, 186px); }
+    .compare-table th:nth-child(5), .compare-table td:nth-child(5) { width: clamp(118px, 10vw, 146px); }
+    .compare-table th:nth-child(6), .compare-table td:nth-child(6) { width: clamp(152px, 14vw, 190px); }
+    .compare-table th:nth-child(7), .compare-table td:nth-child(7) { width: clamp(96px, 9vw, 112px); }
+
+    .cell-missing { color: #a2acb8; }
+
+    .diff-pos { color: var(--orange); font-weight: 700; }
+    .diff-neg { color: #2563eb; font-weight: 700; }
+    .diff-zero { color: var(--muted); }
+
+    .status-pill {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .status-match { background: #e7f6ef; color: #17663f; }
+    .status-diff { background: #fdeee0; color: #8a4b12; }
+    .status-only { background: #eceafe; color: #46389c; }
+
+    tr.row-compare-diff { background: #fffaf4; }
+    tr.row-compare-diff:hover { background: #fff2e2; }
 
     .section-stats {
       color: var(--muted);
@@ -1710,17 +1819,58 @@ HTML_TEMPLATE = """<!doctype html>
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0;
-      cursor: pointer;
+      cursor: default;
       user-select: none;
+    }
+
+    th[data-key] {
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    th[data-key]:hover { background: #e3ebef; }
+
+    /* Cột đang được sắp xếp */
+    th[data-sort] {
+      background: #e2eeec;
+      color: var(--teal);
+    }
+
+    .th-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Cặp mũi tên lên/xuống: mờ khi chưa sắp, sáng lên ở chiều đang áp dụng */
+    .sort-arrows {
+      display: inline-flex;
+      flex-direction: column;
+      line-height: 0.7;
+      font-size: 8px;
+      color: #b9c1cb;
+      flex: none;
+    }
+
+    th[data-key]:hover .sort-arrows { color: #97a2af; }
+
+    .sort-arrows span { transition: color 0.12s ease, transform 0.12s ease; }
+
+    th[data-sort="asc"] .sort-up,
+    th[data-sort="desc"] .sort-down {
+      color: var(--teal);
+      transform: scale(1.35);
+      text-shadow: 0 0 5px rgba(35, 115, 107, 0.45);
     }
 
     td.number, th.number { text-align: right; }
     th:nth-child(1), td:nth-child(1) { width: 56px; }
-    th:nth-child(3), td:nth-child(3) { width: clamp(78px, 7vw, 96px); }
-    th:nth-child(4), td:nth-child(4) { width: clamp(110px, 11vw, 140px); }
-    th:nth-child(5), td:nth-child(5) { width: clamp(96px, 9vw, 118px); }
-    th:nth-child(6), td:nth-child(6) { width: clamp(80px, 8vw, 100px); }
-    th:nth-child(7), td:nth-child(7) { width: clamp(92px, 9vw, 112px); }
+    /* +12px so với trước để chừa chỗ cho cặp mũi tên sắp xếp */
+    th:nth-child(3), td:nth-child(3) { width: clamp(90px, 7vw, 108px); }
+    th:nth-child(4), td:nth-child(4) { width: clamp(122px, 11vw, 152px); }
+    th:nth-child(5), td:nth-child(5) { width: clamp(108px, 9vw, 130px); }
+    th:nth-child(6), td:nth-child(6) { width: clamp(92px, 8vw, 112px); }
+    th:nth-child(7), td:nth-child(7) { width: clamp(104px, 9vw, 124px); }
     th:nth-child(8), td:nth-child(8) { width: clamp(160px, 16vw, 190px); }
 
     tbody tr:hover { background: #f4fbfa; }
@@ -2219,7 +2369,7 @@ HTML_TEMPLATE = """<!doctype html>
     </details>
 
     <section class="main-grid">
-      <section class="panel">
+      <section class="panel panel-toolbar">
         <div class="panel-head">
           <div>
             <div class="panel-title">Bảng tổng hợp theo nguồn</div>
@@ -2231,9 +2381,36 @@ HTML_TEMPLATE = """<!doctype html>
           <span class="notice-text" id="unknownNoticeText"></span>
           <button type="button" id="gotoUnknownButton">Đi đến</button>
         </div>
-        <div id="sectionsContainer"></div>
-        <div class="empty" id="emptyState" hidden>Không có mặt hàng phù hợp.</div>
       </section>
+      <div id="sectionsContainer"></div>
+
+      <section class="panel" id="comparePanel" hidden>
+        <div class="section-head">
+          <div>
+            <div class="section-title">Đối chiếu 2 nguồn</div>
+            <div class="section-desc" id="compareDesc"></div>
+          </div>
+          <div class="compare-tools">
+            <div class="metric-switch" role="group" aria-label="Chỉ tiêu so sánh">
+              <button type="button" class="metric-btn is-active" data-metric="quantity">Tổng số lượng</button>
+              <button type="button" class="metric-btn" data-metric="net">Thực bán</button>
+            </div>
+            <label class="check-inline">
+              <input type="checkbox" id="compareOnlyDiff"> Chỉ hiện dòng lệch
+            </label>
+          </div>
+        </div>
+        <div class="compare-summary" id="compareSummary"></div>
+        <div class="table-wrap">
+          <table class="compare-table">
+            <thead><tr id="compareHeaderRow"></tr></thead>
+            <tbody id="compareRows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="compareEmpty" hidden>Không có dòng nào khớp bộ lọc.</div>
+      </section>
+
+      <div class="panel empty" id="emptyState" hidden>Không có mặt hàng phù hợp.</div>
     </section>
   </main>
 
@@ -2317,6 +2494,24 @@ HTML_TEMPLATE = """<!doctype html>
         return (av - bv) * sortState.direction;
       }
       return String(av ?? "").localeCompare(String(bv ?? ""), "vi", { sensitivity: "base" }) * sortState.direction;
+    }
+
+    // `state` cho phép dùng lại cho bảng đối chiếu (có trạng thái sắp xếp riêng).
+    function sortableTh(key, label, options, state) {
+      const opts = options || {};
+      const st = state || sortState;
+      const active = st.key === key;
+      const dir = active ? (st.direction === 1 ? "asc" : "desc") : "";
+      const hint = dir === "asc" ? "tăng dần" : dir === "desc" ? "giảm dần" : "";
+      const title = opts.title
+        ? `${opts.title}${hint ? ` (đang sắp ${hint})` : ""}`
+        : hint ? `Đang sắp ${hint} - bấm để đảo chiều` : "Bấm để sắp xếp";
+      return `
+        <th class="${opts.number ? "number" : ""}" data-key="${escapeHtml(key)}"${
+          dir ? ` data-sort="${dir}" aria-sort="${dir === "asc" ? "ascending" : "descending"}"` : ""
+        } title="${escapeHtml(title)}">
+          <span class="th-label">${escapeHtml(label)}<span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></span>
+        </th>`;
     }
 
     function nameKey(value) {
@@ -2430,6 +2625,7 @@ HTML_TEMPLATE = """<!doctype html>
         return { ...section, rows };
       });
       renderSections();
+      renderCompare();
     }
 
     function renderRows(rows, sectionKey) {
@@ -2489,12 +2685,12 @@ HTML_TEMPLATE = """<!doctype html>
               <thead>
                 <tr>
                   <th class="number">STT</th>
-                  <th data-key="name">Tên hàng</th>
-                  <th class="number" data-key="returned" title="Hàng khách trả lại, lấy từ các dòng điều chỉnh giảm">Hoàn</th>
-                  <th class="number" data-key="quantity">Tổng số lượng</th>
-                  <th class="number" data-key="net" title="Thực bán = Tổng số lượng + Hoàn">Thực bán</th>
-                  <th class="number" data-key="lineCount">Số dòng</th>
-                  <th class="number" data-key="invoiceCount">Số hóa đơn</th>
+                  ${sortableTh("name", "Tên hàng")}
+                  ${sortableTh("returned", "Hoàn", { number: true, title: "Hàng khách trả lại, lấy từ các dòng điều chỉnh giảm" })}
+                  ${sortableTh("quantity", "Tổng số lượng", { number: true })}
+                  ${sortableTh("net", "Thực bán", { number: true, title: "Thực bán = Tổng số lượng + Hoàn" })}
+                  ${sortableTh("lineCount", "Số dòng", { number: true })}
+                  ${sortableTh("invoiceCount", "Số hóa đơn", { number: true })}
                   <th class="number">Thao tác</th>
                 </tr>
               </thead>
@@ -2797,6 +2993,153 @@ HTML_TEMPLATE = """<!doctype html>
       detailModal.hidden = false;
     }
 
+    // ── Bảng đối chiếu 2 nguồn ────────────────────────────────────────────
+    // Ghép cặp bằng đúng matchKey() mà nút "So sánh" từng dòng đang dùng,
+    // nên hai chỗ không bao giờ ra kết quả khác nhau.
+    const comparePanel = document.getElementById("comparePanel");
+    const compareDesc = document.getElementById("compareDesc");
+    const compareSummary = document.getElementById("compareSummary");
+    const compareHeaderRow = document.getElementById("compareHeaderRow");
+    const compareRowsBody = document.getElementById("compareRows");
+    const compareEmpty = document.getElementById("compareEmpty");
+    const compareOnlyDiff = document.getElementById("compareOnlyDiff");
+    let compareMetric = "quantity";
+    let compareSort = { key: "diff", direction: -1 };
+
+    function compareValue(row) {
+      if (!row) {
+        return 0;
+      }
+      return Number((compareMetric === "net" ? row.net : row.quantity) || 0);
+    }
+
+    function compareValueText(row) {
+      if (!row) {
+        return "";
+      }
+      return String((compareMetric === "net" ? row.netText : row.quantityText) ?? "0");
+    }
+
+    function buildCompareEntries(sections) {
+      const byKey = new Map();
+      sections.forEach((section, sectionIndex) => {
+        (section.rows || []).forEach((row) => {
+          const key = matchKey(row);
+          if (!byKey.has(key)) {
+            byKey.set(key, { key, name: row.name, unit: row.unit || "", cells: sections.map(() => null) });
+          }
+          const entry = byKey.get(key);
+          entry.cells[sectionIndex] = row;
+          if (sectionIndex === 0 || !entry.name) {
+            entry.name = row.name;
+          }
+        });
+      });
+      return [...byKey.values()].map((entry) => {
+        const values = entry.cells.map(compareValue);
+        const present = entry.cells.filter(Boolean).length;
+        const diff = values[0] - values[1];
+        const status = present < entry.cells.length ? "only" : (diff === 0 ? "match" : "diff");
+        return { ...entry, values, diff, status };
+      });
+    }
+
+    function compareEntrySorter(a, b) {
+      const key = compareSort.key;
+      const dir = compareSort.direction;
+      const byName = () => String(a.name).localeCompare(String(b.name), "vi", { sensitivity: "base" });
+      if (key === "name") {
+        return byName() * dir;
+      }
+      if (key === "status") {
+        const rank = { diff: 0, only: 1, match: 2 };
+        const d = rank[a.status] - rank[b.status];
+        return d !== 0 ? d * dir : byName();
+      }
+      const d = key === "diff"
+        ? Math.abs(a.diff) - Math.abs(b.diff)
+        : (a.values[Number(key)] || 0) - (b.values[Number(key)] || 0);
+      return d !== 0 ? d * dir : byName();
+    }
+
+    function renderCompare() {
+      const sections = allSourceSections();
+      if (sections.length < 2) {   // một nguồn thì không có gì để đối chiếu
+        comparePanel.hidden = true;
+        return;
+      }
+      comparePanel.hidden = false;
+
+      const entries = buildCompareEntries(sections);
+      const counts = { match: 0, diff: 0, only: 0 };
+      entries.forEach((entry) => { counts[entry.status] += 1; });
+      const metricLabel = compareMetric === "net" ? "Thực bán" : "Tổng số lượng";
+      const totals = sections.map((section, index) =>
+        entries.reduce((sum, entry) => sum + (entry.values[index] || 0), 0)
+      );
+      const totalDiff = totals[0] - totals[1];
+
+      compareDesc.textContent =
+        `Tự động ghép mọi sản phẩm của 2 bảng theo cùng quy tắc với nút "So sánh". `
+        + `Chênh lệch = ${sections[0].title} trừ ${sections[1].title}, tính trên ${metricLabel}.`;
+      compareSummary.innerHTML = `
+        <span><strong>${formatNumber(entries.length)}</strong> sản phẩm</span>
+        <span><strong>${formatNumber(counts.match)}</strong> khớp</span>
+        <span><strong>${formatNumber(counts.diff)}</strong> lệch số lượng</span>
+        <span><strong>${formatNumber(counts.only)}</strong> chỉ có ở một nguồn</span>
+        <span>${escapeHtml(sections[0].title)}: <strong>${formatNumber(totals[0])}</strong></span>
+        <span>${escapeHtml(sections[1].title)}: <strong>${formatNumber(totals[1])}</strong></span>
+        <span>Tổng chênh lệch: <strong>${totalDiff > 0 ? "+" : ""}${formatNumber(totalDiff)}</strong></span>
+      `;
+
+      const query = searchInput.value.trim().toLocaleLowerCase("vi");
+      let rows = entries.filter((entry) =>
+        !query || `${entry.name} ${entry.unit}`.toLocaleLowerCase("vi").includes(query)
+      );
+      if (compareOnlyDiff.checked) {
+        rows = rows.filter((entry) => entry.status !== "match");
+      }
+      rows.sort(compareEntrySorter);
+
+      compareHeaderRow.innerHTML = `
+        <th class="number">STT</th>
+        ${sortableTh("name", "Tên hàng", {}, compareSort)}
+        ${sortableTh("0", sections[0].title, { number: true, title: `${metricLabel} ở ${sections[0].title}` }, compareSort)}
+        ${sortableTh("1", sections[1].title, { number: true, title: `${metricLabel} ở ${sections[1].title}` }, compareSort)}
+        ${sortableTh("diff", "Chênh lệch", { number: true, title: "Sắp xếp theo mức lệch, lệch nhiều lên trước" }, compareSort)}
+        ${sortableTh("status", "Trạng thái", {}, compareSort)}
+        <th class="number">Thao tác</th>
+      `;
+
+      compareEmpty.hidden = rows.length > 0;
+      compareRowsBody.innerHTML = rows.map((entry, index) => {
+        const firstIndex = entry.cells.findIndex(Boolean);
+        const source = entry.cells[firstIndex];
+        const diffText = `${entry.diff > 0 ? "+" : ""}${formatNumber(entry.diff)}`;
+        const diffClass = entry.diff > 0 ? "diff-pos" : entry.diff < 0 ? "diff-neg" : "diff-zero";
+        const statusMarkup = entry.status === "match"
+          ? `<span class="status-pill status-match">✓ Khớp</span>`
+          : entry.status === "diff"
+            ? `<span class="status-pill status-diff">⚠ Lệch</span>`
+            : `<span class="status-pill status-only" title="${escapeHtml(sections[firstIndex].title)}">◐ Chỉ có ở ${escapeHtml(sections[firstIndex].title)}</span>`;
+        const cells = entry.cells.map((row) => row
+          ? `<td class="number">${escapeHtml(compareValueText(row))}</td>`
+          : `<td class="number cell-missing" title="Không có sản phẩm này trong bảng">—</td>`
+        ).join("");
+        return `
+        <tr class="${entry.status === "match" ? "" : "row-compare-diff"}">
+          <td class="number">${index + 1}</td>
+          <td>${nameCell(entry.name)}</td>
+          ${cells}
+          <td class="number ${diffClass}">${diffText}</td>
+          <td>${statusMarkup}</td>
+          <td class="number">
+            <button class="secondary compare-action" type="button" data-section-key="${escapeHtml(sections[firstIndex].key)}" data-row-key="${escapeHtml(source.rowKey)}">Chi tiết</button>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
     function csvCell(value) {
       const text = String(value ?? "");
       return `"${text.replace(/"/g, '""')}"`;
@@ -2851,9 +3194,40 @@ HTML_TEMPLATE = """<!doctype html>
     });
 
     searchInput.addEventListener("input", applyFilterAndSort);
+    comparePanel.addEventListener("click", (event) => {
+      const header = event.target.closest("th[data-key]");
+      if (header) {
+        const key = header.dataset.key;
+        compareSort = {
+          key,
+          direction: compareSort.key === key ? compareSort.direction * -1 : (key === "name" ? 1 : -1)
+        };
+        renderCompare();
+        return;
+      }
+
+      const metricButton = event.target.closest("button.metric-btn");
+      if (metricButton) {
+        compareMetric = metricButton.dataset.metric === "net" ? "net" : "quantity";
+        comparePanel.querySelectorAll("button.metric-btn").forEach((button) => {
+          button.classList.toggle("is-active", button === metricButton);
+        });
+        renderCompare();
+        return;
+      }
+
+      const compareButton = event.target.closest("button.compare-action");
+      if (compareButton) {
+        openCompare(compareButton.dataset.sectionKey, compareButton.dataset.rowKey);
+      }
+    });
+    compareOnlyDiff.addEventListener("change", renderCompare);
+
     document.getElementById("resetButton").addEventListener("click", () => {
       searchInput.value = "";
       sortState = { key: "quantity", direction: -1 };
+      compareSort = { key: "diff", direction: -1 };
+      compareOnlyDiff.checked = false;
       applyFilterAndSort();
     });
     document.getElementById("downloadButton").addEventListener("click", downloadCsv);
@@ -2973,8 +3347,12 @@ def create_report(
 
     stats = aggregate_lines(all_lines, matcher)
     sections: list[dict[str, object]] = []
+    # Mỗi sản phẩm xuất hiện ở nguồn nào, để cửa sổ Danh mục thuốc hiện cột "Nguồn".
+    stat_sources: dict[str, list[str]] = {}
     if detail_lines:
         detail_stats = aggregate_lines(detail_lines, matcher)
+        for stat in detail_stats:
+            stat_sources.setdefault(stat.key, []).append("Hóa đơn")
         sections.append(
             {
                 "key": "detail",
@@ -2987,6 +3365,8 @@ def create_report(
         )
     if invoice_source_lines:
         invoice_stats = aggregate_lines(invoice_source_lines, matcher)
+        for stat in invoice_stats:
+            stat_sources.setdefault(stat.key, []).append("ZIP")
         sections.append(
             {
                 "key": "invoice_sources",
@@ -3011,6 +3391,14 @@ def create_report(
     if open_report:
         webbrowser.open(output_html.resolve().as_uri())
 
+    unknown_stats = [stat for stat in stats if stat.key != OTHER_ADJUST_KEY and not stat.in_catalog]
+
+    def source_label(key: str) -> str:
+        labels = stat_sources.get(key, [])
+        if len(labels) > 1:
+            return "Cả hai"
+        return labels[0] if labels else "Không rõ"
+
     return ReportResult(
         output_html=output_html,
         output_csv=output_csv,
@@ -3018,7 +3406,8 @@ def create_report(
         item_count=len(stats),
         file_count=len(reports),
         errors=errors,
-        unknown_names=[stat.name for stat in stats if stat.key != OTHER_ADJUST_KEY and not stat.in_catalog],
+        unknown_names=[stat.name for stat in unknown_stats],
+        unknown_sources={stat.name: source_label(stat.key) for stat in unknown_stats},
     )
 
 
@@ -3540,9 +3929,25 @@ def open_path(path: Path) -> None:
         webbrowser.open(path.resolve().as_uri())
 
 
-def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: list[str]) -> None:
+def center_on_screen(win, w: int | None = None, h: int | None = None) -> None:
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    win.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
+
+
+def open_catalog_window(
+    parent: object,
+    colors: dict[str, str],
+    unknown_names: list[str],
+    unknown_sources: dict[str, str] | None = None,
+) -> None:
     """Cửa sổ thêm/sửa/xóa tên thuốc, lưu thẳng vào Tên Sản Phẩm.xlsx."""
     import tkinter as tk
+    import tkinter.font as tkfont
     from tkinter import messagebox, simpledialog, ttk
 
     catalog = read_product_catalog()
@@ -3551,7 +3956,7 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
 
     window = tk.Toplevel(parent)  # type: ignore[arg-type]
     window.title("Danh mục thuốc")
-    window.geometry("1040x600")
+    center_on_screen(window, 1040, 600)
     window.minsize(880, 520)
     window.configure(bg=colors["bg"])
     window.transient(parent)  # type: ignore[arg-type]
@@ -3568,7 +3973,11 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
 
     tk.Label(
         outer,
-        text="Cột A là tên hàng chính, các cột sau là tên khác của cùng thuốc đó.",
+        text=(
+            "Cột A là tên hàng chính, các cột sau là tên khác của cùng thuốc đó. "
+            "Bấm ▸ để bung xem đầy đủ tên khác; chọn đúng một dòng tên khác rồi bấm Xóa "
+            "thì chỉ xóa tên khác đó."
+        ),
         bg=colors["bg"],
         fg=colors["muted"],
         font=("Segoe UI", 10),
@@ -3579,15 +3988,40 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
     table_frame.rowconfigure(0, weight=1)
     table_frame.columnconfigure(0, weight=1)
 
-    tree = ttk.Treeview(table_frame, columns=("name", "aliases"), show="headings", selectmode="browse")
-    tree.heading("name", text="Tên hàng")
-    tree.heading("aliases", text="Tên khác")
-    tree.column("name", width=330, anchor="w")
-    tree.column("aliases", width=330, anchor="w")
+    # Mỗi thuốc là một nhánh, bung ra thấy từng tên khác trên một dòng riêng
+    # nên tên dài không còn bị cắt cụt như khi nối chung bằng dấu "|".
+    tree_style = ttk.Style(window)
+    try:
+        base_font = tkfont.nametofont(str(tree_style.lookup("Treeview", "font") or "TkDefaultFont"))
+    except tk.TclError:
+        base_font = tkfont.nametofont("TkDefaultFont")
+    product_font = base_font.copy()
+    product_font.configure(weight="bold", size=abs(base_font.cget("size")) + 1)
+    # Style riêng để nới dòng cho vừa chữ đậm, không đụng Treeview chỗ khác.
+    tree_style.configure(
+        "Catalog.Treeview", rowheight=max(24, product_font.metrics("linespace") + 8)
+    )
+
+    tree = ttk.Treeview(
+        table_frame,
+        columns=("count",),
+        show="tree headings",
+        selectmode="browse",
+        style="Catalog.Treeview",
+    )
+    tree.heading("#0", text="Tên hàng  /  các tên khác")
+    tree.heading("count", text="Số tên khác")
+    tree.column("#0", width=430, minwidth=240, anchor="w")
+    tree.column("count", width=110, minwidth=90, anchor="center", stretch=False)
+    # Tên chính: đậm, to hơn 1pt, màu mực đậm. Tên khác: nhạt hơn + nền xám nhẹ.
+    tree.tag_configure("product", font=product_font, foreground=colors["ink"])
+    tree.tag_configure("alias", foreground=colors["muted"], background="#f2f6f6")
     tree.grid(row=0, column=0, sticky="nsew")
     tree_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
     tree_scroll.grid(row=0, column=1, sticky="ns")
-    tree.configure(yscrollcommand=tree_scroll.set)
+    tree_scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+    tree_scroll_x.grid(row=1, column=0, sticky="ew")
+    tree.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_scroll_x.set)
 
     side = tk.Frame(outer, bg=colors["panel"], highlightbackground=colors["line"], highlightthickness=1, padx=12, pady=10)
     side.grid(row=1, column=1, sticky="nsew")
@@ -3610,26 +4044,66 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
         justify="left",
     ).grid(row=1, column=0, sticky="w", pady=(3, 8))
 
-    unknown_box = tk.Listbox(
-        side,
-        selectmode="browse",
-        bg="#fffaf3",
-        fg=colors["ink"],
-        highlightthickness=1,
-        highlightbackground=colors["line"],
-        relief="flat",
-        font=("Segoe UI", 9),
+    unknown_frame = tk.Frame(side, bg=colors["panel"])
+    unknown_frame.grid(row=2, column=0, sticky="nsew")
+    unknown_frame.rowconfigure(0, weight=1)
+    unknown_frame.columnconfigure(0, weight=1)
+
+    # Hai cột: tên trên hóa đơn và nguồn dữ liệu chứa tên đó.
+    tree_style.configure(
+        "Unknown.Treeview",
+        rowheight=max(22, base_font.metrics("linespace") + 6),
+        background="#fffaf3",
+        fieldbackground="#fffaf3",  # nền kem như Listbox cũ
     )
-    unknown_box.grid(row=2, column=0, sticky="nsew")
-    for name in unknown_names:
-        unknown_box.insert(tk.END, name)
+    unknown_box = ttk.Treeview(
+        unknown_frame,
+        columns=("name", "source"),
+        show="headings",
+        selectmode="browse",
+        style="Unknown.Treeview",
+    )
+    unknown_box.heading("name", text="Tên trên hóa đơn")
+    unknown_box.heading("source", text="Nguồn")
+    unknown_box.column("name", width=290, minwidth=140, anchor="w")
+    unknown_box.column("source", width=70, minwidth=60, anchor="w", stretch=False)
+    unknown_box.tag_configure("empty", foreground=colors["muted"])
+    unknown_box.grid(row=0, column=0, sticky="nsew")
+    unknown_scroll = ttk.Scrollbar(unknown_frame, orient="vertical", command=unknown_box.yview)
+    unknown_scroll.grid(row=0, column=1, sticky="ns")
+    unknown_scroll_x = ttk.Scrollbar(unknown_frame, orient="horizontal", command=unknown_box.xview)
+    unknown_scroll_x.grid(row=1, column=0, sticky="ew")
+    unknown_box.configure(yscrollcommand=unknown_scroll.set, xscrollcommand=unknown_scroll_x.set)
+
+    sources = unknown_sources or {}
+    for position, name in enumerate(unknown_names):
+        unknown_box.insert("", "end", iid=str(position), values=(name, sources.get(name, "Không rõ")))
     if not unknown_names:
-        unknown_box.insert(tk.END, "(chạy thống kê để thấy các tên chưa có)")
+        unknown_box.insert("", "end", values=("(chạy thống kê để thấy các tên chưa có)", ""), tags=("empty",))
+
+    # Nhớ nhánh nào đang bung theo TÊN thuốc (không theo chỉ số, vì xóa xong chỉ số dồn lại).
+    open_names: set[str] = {product.name for product in products if product.aliases}
 
     def refresh_tree(select_index: int | None = None) -> None:
-        tree.delete(*tree.get_children())
+        existing = tree.get_children("")
+        if existing:
+            open_names.clear()
+            open_names.update(
+                tree.item(iid, "text") for iid in existing if tree.item(iid, "open")
+            )
+        tree.delete(*existing)
         for index, product in enumerate(products):
-            tree.insert("", "end", iid=str(index), values=(product.name, " | ".join(product.aliases)))
+            parent = tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                text=product.name,
+                values=(f"{len(product.aliases)}/{CATALOG_ALIAS_COLUMNS}",),
+                open=bool(product.aliases) and (product.name in open_names or index == select_index),
+                tags=("product",),
+            )
+            for alias_index, alias in enumerate(product.aliases):
+                tree.insert(parent, "end", iid=f"{index}.{alias_index}", text=alias, tags=("alias",))
         if select_index is not None and 0 <= select_index < len(products):
             tree.selection_set(str(select_index))
             tree.see(str(select_index))
@@ -3637,8 +4111,25 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
         status_var.set(f"{len(products)} thuốc{mark} - {catalog_path}")
 
     def selected_index() -> int | None:
+        """Chỉ số thuốc; chọn dòng tên khác thì vẫn tính là chọn thuốc cha."""
         selection = tree.selection()
-        return int(selection[0]) if selection else None
+        return int(selection[0].split(".")[0]) if selection else None
+
+    def selected_alias() -> tuple[int, int] | None:
+        """(chỉ số thuốc, chỉ số tên khác) nếu đang chọn đúng một dòng tên khác."""
+        selection = tree.selection()
+        if not selection or "." not in selection[0]:
+            return None
+        index, alias_index = selection[0].split(".", 1)
+        return int(index), int(alias_index)
+
+    def expand_all() -> None:
+        for iid in tree.get_children(""):
+            tree.item(iid, open=True)
+
+    def collapse_all() -> None:
+        for iid in tree.get_children(""):
+            tree.item(iid, open=False)
 
     def edit_product(index: int | None) -> None:
         nonlocal dirty
@@ -3648,7 +4139,7 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
         form.configure(bg=colors["bg"])
         form.transient(window)
         form.grab_set()
-        form.geometry("620x360")
+        center_on_screen(form, 620, 360)
         body = tk.Frame(form, bg=colors["bg"], padx=16, pady=14)
         body.pack(fill="both", expand=True)
         body.columnconfigure(1, weight=1)
@@ -3707,6 +4198,22 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
 
     def delete_selected() -> None:
         nonlocal dirty
+        alias_ref = selected_alias()
+        if alias_ref is not None:  # đang chọn một dòng tên khác -> chỉ xóa tên khác đó
+            index, alias_index = alias_ref
+            product = products[index]
+            alias = product.aliases[alias_index]
+            if not messagebox.askyesno(
+                "Xóa tên khác",
+                f"Xóa tên khác \"{alias}\" của \"{product.name}\"?\n\nThuốc vẫn được giữ lại.",
+                parent=window,
+            ):
+                return
+            product.aliases.pop(alias_index)
+            dirty = True
+            refresh_tree(index)
+            return
+
         index = selected_index()
         if index is None:
             messagebox.showinfo("Chưa chọn", "Hãy chọn một thuốc trong danh sách.", parent=window)
@@ -3718,10 +4225,10 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
         refresh_tree(min(index, len(products) - 1) if products else None)
 
     def selected_unknown() -> str:
-        selection = unknown_box.curselection()
+        selection = unknown_box.selection()
         if not selection or not unknown_names:
             return ""
-        return unknown_names[selection[0]] if selection[0] < len(unknown_names) else ""
+        return str(unknown_box.item(selection[0], "values")[0])
 
     def unknown_as_new() -> None:
         nonlocal dirty
@@ -3797,6 +4304,8 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
     ttk.Button(actions, text="Sửa", command=edit_selected, style="Secondary.TButton").pack(side="left", padx=(0, 8))
     ttk.Button(actions, text="Xóa", command=delete_selected, style="Secondary.TButton").pack(side="left", padx=(0, 8))
     ttk.Button(actions, text="Lưu vào file", command=save_catalog, style="Accent.TButton").pack(side="left", padx=(0, 8))
+    ttk.Button(actions, text="Thu gọn", command=collapse_all, style="Secondary.TButton").pack(side="left", padx=(0, 8))
+    ttk.Button(actions, text="Bung hết", command=expand_all, style="Secondary.TButton").pack(side="left", padx=(0, 8))
     ttk.Button(actions, text="Đóng", command=close_window, style="Secondary.TButton").pack(side="right")
 
     tk.Label(
@@ -3809,7 +4318,17 @@ def open_catalog_window(parent: object, colors: dict[str, str], unknown_names: l
         justify="left",
     ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
-    tree.bind("<Double-1>", lambda _event: edit_selected())
+    def on_tree_double_click(event) -> str | None:
+        if tree.identify_region(event.x, event.y) in {"heading", "separator", "nothing"}:
+            return None
+        if not tree.identify_row(event.y):
+            return None
+        if "indicator" in tree.identify_element(event.x, event.y):
+            return None  # bấm đúng tam giác bung/thu thì để Treeview tự xử lý
+        edit_selected()
+        return "break"
+
+    tree.bind("<Double-1>", on_tree_double_click)
     window.protocol("WM_DELETE_WINDOW", close_window)
     refresh_tree(0 if products else None)
     if catalog.error:
@@ -3826,14 +4345,8 @@ def run_desktop_app(args: argparse.Namespace) -> int:
 
     root = tk.Tk()
     root.title("Thống kê hóa đơn MISA")
-    window_width = 980
-    window_height = 620
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    position_x = max(0, (screen_width - window_width) // 2)
-    position_y = max(0, (screen_height - window_height) // 2)
-    root.geometry(f"{window_width}x{window_height}+{position_x}+{position_y}")
-    root.minsize(860, 540)
+    center_on_screen(root, 980, 700)
+    root.minsize(860, 600)
 
     colors = {
         "bg": "#f4faf9",
@@ -3934,7 +4447,14 @@ def run_desktop_app(args: argparse.Namespace) -> int:
     ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(3, 10))
 
     file_entry = ttk.Entry(file_frame, textvariable=file_var, state="readonly")
-    file_entry.grid(row=2, column=0, sticky="ew", padx=(0, 10))
+    file_entry.grid(row=2, column=0, sticky="ew")
+
+    # Cụm nút bên phải nằm trong frame riêng để khóa cùng bề rộng với cụm nút của khung ZIP,
+    # nhờ vậy ô nhập file và danh sách ZIP rộng bằng nhau.
+    file_buttons = tk.Frame(file_frame, bg=colors["panel"])
+    file_buttons.grid(row=2, column=1, sticky="ew")
+    file_buttons.columnconfigure(0, weight=1)
+    file_buttons.columnconfigure(1, weight=1)
 
     source_frame = tk.Frame(
         outer,
@@ -3973,13 +4493,18 @@ def run_desktop_app(args: argparse.Namespace) -> int:
         relief="flat",
         font=("Segoe UI", 9),
     )
-    source_box.grid(row=2, column=0, sticky="nsew", padx=(0, 10))
-    source_scrollbar = ttk.Scrollbar(source_frame, orient="vertical", command=source_box.yview)
-    source_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 10))
+    source_box.grid(row=2, column=0, sticky="nsew")
+
+    # Cột phải gồm thanh cuộn + lưới nút 2 hàng 2 cột, gọn chiều cao để còn chỗ cho khung trạng thái.
+    source_right = tk.Frame(source_frame, bg=colors["panel"])
+    source_right.grid(row=2, column=1, sticky="new")
+    source_right.columnconfigure(1, weight=1)
+    source_right.columnconfigure(2, weight=1)
+
+    source_scrollbar = ttk.Scrollbar(source_right, orient="vertical", command=source_box.yview)
+    source_scrollbar.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
     source_box.configure(yscrollcommand=source_scrollbar.set)
 
-    source_buttons = tk.Frame(source_frame, bg=colors["panel"])
-    source_buttons.grid(row=2, column=2, sticky="ns")
 
     actions = tk.Frame(
         outer,
@@ -4042,7 +4567,8 @@ def run_desktop_app(args: argparse.Namespace) -> int:
             status_var.set(f"Đã chọn {len(selected_invoice_sources)} file ZIP hóa đơn.")
 
     def choose_file() -> None:
-        initial_dir = str(selected_file.parent) if selected_file else str(BASE_DIR)
+        # Bảng kê tải từ MISA về nằm ở Downloads, nên mở sẵn thư mục đó thay vì thư mục dự án.
+        initial_dir = str(selected_file.parent) if selected_file else str(downloads_dir())
         file = filedialog.askopenfilename(
             title="Chọn file Bang_ke_chi_tiet_HD",
             initialdir=initial_dir,
@@ -4103,15 +4629,21 @@ def run_desktop_app(args: argparse.Namespace) -> int:
             open_path(last_result.output_csv)
 
     def open_catalog() -> None:
-        open_catalog_window(root, colors, last_result.unknown_names if last_result else [])
+        open_catalog_window(
+            root,
+            colors,
+            last_result.unknown_names if last_result else [],
+            last_result.unknown_sources if last_result else None,
+        )
 
     def set_running(is_running: bool) -> None:
         state = "disabled" if is_running else "normal"
         for child in actions.winfo_children():
             child.configure(state=state)
         browse_button.configure(state=state)
-        for child in source_buttons.winfo_children():
-            child.configure(state=state)
+        clear_file_button.configure(state=state)
+        for button in (choose_zip_button, remove_zip_button, clear_zip_button):
+            button.configure(state=state)
         if not is_running:
             report_button.configure(state="normal" if last_result else "disabled")
             csv_button.configure(state="normal" if last_result else "disabled")
@@ -4178,31 +4710,49 @@ def run_desktop_app(args: argparse.Namespace) -> int:
         open_path(result.output_html)
 
     browse_button = ttk.Button(
-        file_frame,
+        file_buttons,
         text="Chọn file Bang_ke_chi_tiet_HD",
         command=choose_file,
         style="Accent.TButton",
     )
-    browse_button.grid(row=2, column=1)
+    browse_button.grid(row=0, column=0, sticky="ew", padx=(10, 8))
 
-    ttk.Button(
-        source_buttons,
+    clear_file_button = ttk.Button(
+        file_buttons,
+        text="Xóa file",
+        command=clear_file,
+        style="Secondary.TButton",
+    )
+    clear_file_button.grid(row=0, column=1, sticky="ew")
+
+    # Ba nút ZIP xếp 2 hàng 2 cột thay vì chồng dọc, khung nguồn nhờ vậy thấp hơn hẳn.
+    choose_zip_button = ttk.Button(
+        source_right,
         text="Chọn ZIP hóa đơn",
         command=choose_invoice_zips,
         style="Accent.TButton",
-    ).pack(fill="x", pady=(0, 8))
-    ttk.Button(
-        source_buttons,
+    )
+    choose_zip_button.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=(0, 8))
+    remove_zip_button = ttk.Button(
+        source_right,
         text="Bỏ nguồn đã chọn",
         command=remove_selected_sources,
         style="Secondary.TButton",
-    ).pack(fill="x", pady=(0, 8))
-    ttk.Button(
-        source_buttons,
+    )
+    remove_zip_button.grid(row=0, column=2, sticky="ew", pady=(0, 8))
+    clear_zip_button = ttk.Button(
+        source_right,
         text="Xóa nguồn",
         command=clear_invoice_sources,
         style="Secondary.TButton",
-    ).pack(fill="x")
+    )
+    clear_zip_button.grid(row=1, column=1, sticky="ew", padx=(0, 8))
+
+    # Khóa hai cụm nút về cùng bề rộng để ô nhập file và danh sách ZIP bằng nhau.
+    root.update_idletasks()
+    panel_width = max(file_buttons.winfo_reqwidth(), source_right.winfo_reqwidth())
+    file_frame.columnconfigure(1, minsize=panel_width)
+    source_frame.columnconfigure(1, minsize=panel_width)
 
     ttk.Button(actions, text="Chạy thống kê", command=run_report, style="Accent.TButton").grid(
         row=0, column=0, padx=(0, 8)
@@ -4213,9 +4763,6 @@ def run_desktop_app(args: argparse.Namespace) -> int:
     csv_button.grid(row=0, column=2, padx=(0, 8))
     ttk.Button(actions, text="Danh mục thuốc", command=open_catalog, style="Secondary.TButton").grid(
         row=0, column=3, padx=(0, 8)
-    )
-    ttk.Button(actions, text="Xóa file", command=clear_file, style="Secondary.TButton").grid(
-        row=0, column=4, padx=(0, 8)
     )
     ttk.Button(actions, text="Đóng", command=root.destroy, style="Secondary.TButton").grid(row=0, column=6, sticky="e")
 

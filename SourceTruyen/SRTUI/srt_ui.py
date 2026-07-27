@@ -8,6 +8,18 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
 class _LogRedirector:
     def __init__(self, log_queue):
         self._queue = log_queue
@@ -24,7 +36,7 @@ class SRTTranslatorUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("SRT Translator UI")
-        self.geometry("1100x720")
+        center_on_screen(self, 1100, 720)
         self.minsize(980, 640)
 
         self.repo_root = Path(__file__).resolve().parents[2]
@@ -468,7 +480,7 @@ class SRTTranslatorUI(tk.Tk):
             return
         viewer = tk.Toplevel(self)
         viewer.title(file_path.name)
-        viewer.geometry("900x650")
+        center_on_screen(viewer, 900, 650)
         viewer.columnconfigure(0, weight=1)
         viewer.rowconfigure(1, weight=1)
 

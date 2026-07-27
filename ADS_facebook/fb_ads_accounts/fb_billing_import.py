@@ -1235,8 +1235,10 @@ class App(tk.Tk):
                    command=_ok).pack(side="right", padx=(0, 8))
 
         dlg.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width()  - dlg.winfo_width())  // 2
-        y = self.winfo_y() + (self.winfo_height() - dlg.winfo_height()) // 2
+        w = max(dlg.winfo_width(), dlg.winfo_reqwidth())
+        h = max(dlg.winfo_height(), dlg.winfo_reqheight())
+        x = max(0, (dlg.winfo_screenwidth()  - w) // 2)
+        y = max(0, (dlg.winfo_screenheight() - h) // 2)
         dlg.geometry(f"+{x}+{y}")
         self.wait_window(dlg)
         return dlg.result

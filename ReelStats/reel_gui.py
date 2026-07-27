@@ -44,7 +44,7 @@ class ReelStatsGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Reel Stats — Crawl lượt thích/bình luận Reel Facebook")
-        self.geometry("1400x600")   # tỷ lệ 21:9
+        self._center_on_screen(1400, 600)   # tỷ lệ 21:9
         self.minsize(1120, 480)     # 21:9
 
         self.log_queue: "queue.Queue" = queue.Queue()
@@ -56,6 +56,15 @@ class ReelStatsGUI(tk.Tk):
         self._load_links()
         self.after(100, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _center_on_screen(self, w: int, h: int):
+        """Đặt cửa sổ kích thước w×h ngay giữa màn hình."""
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w, h = min(w, sw), min(h, sh)
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     # ── Dựng giao diện ───────────────────────────────────────────────────────
     def _build_ui(self):

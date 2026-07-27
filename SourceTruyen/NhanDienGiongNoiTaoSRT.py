@@ -32,6 +32,19 @@ except ImportError as e:
     print(f"❌ Cần cài đặt: pip install openai-whisper torch srt")
     sys.exit(1)
 
+
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
 # ================= CẤU HÌNH =================
 WHISPER_MODEL_PATH = "whisper_cache"
 MODEL_NAME = "medium"  # large-v3, medium, small
@@ -179,7 +192,7 @@ class NhanDienGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Nhận Diện Giọng Nói & Tạo SRT")
-        self.root.geometry("700x600")
+        center_on_screen(self.root, 700, 600)
         self.root.resizable(False, False)
         
         self.is_processing = False

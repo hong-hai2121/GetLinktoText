@@ -22,6 +22,19 @@ from shutil import which
 import re
 import threading
 
+
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
 DEFAULT_SPEED = 1.2  # hệ số tăng tốc mặc định
 OUTPUT_DIR = r"D:\Python\GetLinktoText\SourceTruyen\XuLyVideo\Video_TangToc"
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".m4v", ".flv", ".wmv")
@@ -213,7 +226,7 @@ class VideoProcessorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Video Processor - Tăng tốc & Ghép video")
-        self.root.geometry("900x750")
+        center_on_screen(self.root, 900, 750)
         
         self.folder_path = tk.StringVar()
         self.output_path = tk.StringVar(value=OUTPUT_DIR)

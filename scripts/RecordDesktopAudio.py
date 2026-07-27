@@ -38,6 +38,19 @@ except ImportError:
     print("❌ Cần cài đặt tkinter")
     sys.exit(1)
 
+
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
 # ================= CẤU HÌNH =================
 WHISPER_MODEL_PATH = "whisper_cache"
 MODEL_NAME = "large-v3"  # large-v3, medium, small
@@ -151,7 +164,7 @@ class RecorderGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Ghi Âm Desktop & Nhận Diện Tiếng Trung")
-        self.root.geometry("600x500")
+        center_on_screen(self.root, 600, 500)
         self.root.resizable(False, False)
         
         # Biến trạng thái

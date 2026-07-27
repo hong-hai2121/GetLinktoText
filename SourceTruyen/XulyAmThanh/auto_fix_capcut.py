@@ -5,6 +5,19 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 import threading
 
+
+def center_on_screen(win, w=None, h=None):
+    """Đưa cửa sổ ra giữa màn hình; bỏ trống w/h thì giữ kích thước hiện tại."""
+    win.update_idletasks()
+    w = w or max(win.winfo_width(), win.winfo_reqwidth())
+    h = h or max(win.winfo_height(), win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w, h = min(w, sw), min(h, sh)
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
 # =========================
 # Đọc danh sách project từ projects.txt
 # =========================
@@ -748,7 +761,7 @@ BASE_PROJECT_DIR = Path(
 def launch_gui():
     root = tk.Tk()
     root.title("CapCut Project Processor")
-    root.geometry("780x520")
+    center_on_screen(root, 780, 520)
     root.resizable(False, False)
 
     style = ttk.Style()
