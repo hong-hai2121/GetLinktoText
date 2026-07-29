@@ -1,3 +1,5 @@
+﻿# Luu file nay bang UTF-8 CO BOM. Windows PowerShell 5.1 doc .ps1 khong BOM theo ANSI,
+# lam hong ten file tieng Viet co dau ("Tên Sản Phẩm.xlsx") ben duoi.
 param(
     [switch]$SkipInstaller
 )
@@ -15,9 +17,14 @@ $DistDir = Join-Path $ProjectDir "dist"
 $BuildDir = Join-Path $ProjectDir "build"
 $SpecFile = Join-Path $ProjectDir "$AppName.spec"
 $InstallerScript = Join-Path $ProjectDir "packaging\installer.iss"
+$CatalogPath = Join-Path $ProjectDir "Tên Sản Phẩm.xlsx"
 
 if (-not (Test-Path $IconPath)) {
     throw "Khong tim thay icon: $IconPath"
+}
+
+if (-not (Test-Path -LiteralPath $CatalogPath)) {
+    throw "Khong tim thay danh muc thuoc: $CatalogPath"
 }
 
 if (-not (Test-Path $BuildVenv)) {
@@ -56,26 +63,41 @@ if (Test-Path $SpecFile) {
     --specpath $ProjectDir `
     $MainScript
 
+# Chep danh muc canh exe: ban portable (chay thang exe trong dist) cung co danh muc thuoc.
+Copy-Item -LiteralPath $CatalogPath -Destination $DistDir -Force
+
 Write-Host "Da tao file exe:" -ForegroundColor Green
 Write-Host (Join-Path $DistDir "$AppName.exe")
+Write-Host (Join-Path $DistDir (Split-Path -Leaf $CatalogPath))
 
 if ($SkipInstaller) {
     exit 0
 }
 
-$Inno = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
-if (-not $Inno) {
-    $DefaultInno = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-    if (Test-Path $DefaultInno) {
-        $Inno = Get-Item $DefaultInno
+$InnoPath = $null
+$InnoCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+if ($InnoCommand) {
+    $InnoPath = $InnoCommand.Source
+} else {
+    # winget cai Inno Setup vao localappdata (per-user), khong phai Program Files.
+    $Candidates = @(
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        "C:\Program Files\Inno Setup 6\ISCC.exe",
+        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
+    )
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path $Candidate) {
+            $InnoPath = $Candidate
+            break
+        }
     }
 }
 
-if (-not $Inno) {
-    throw "Chua cai Inno Setup. Cai Inno Setup 6, sau do chay lai script nay de tao file cai dat .exe."
+if (-not $InnoPath) {
+    throw "Chua cai Inno Setup. Cai Inno Setup 6 (winget install JRSoftware.InnoSetup), sau do chay lai script nay de tao file cai dat .exe."
 }
 
-& $Inno.Source $InstallerScript
+& $InnoPath $InstallerScript
 
 Write-Host "Da tao file cai dat:" -ForegroundColor Green
 Write-Host (Join-Path $ProjectDir "dist\installer\Setup_ThongKeHoaDonMISA.exe")
