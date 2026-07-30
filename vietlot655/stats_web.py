@@ -548,8 +548,10 @@ HTML_TEMPLATE = r"""<!doctype html>
   .sugnote ol{margin:6px 0;padding-left:18px}
   .sugnote li{margin:3px 0}
   .sugnote b{color:var(--text)}
-  .sugnote .wl{color:var(--warn);display:block;margin-top:8px}
-  #trackBody .wl{color:var(--warn);display:block;margin-top:8px}
+  /* Cảnh báo: dùng ở sugnote, sugStat, btBody và trackBody nên để selector chung.
+     .wl = cả dòng riêng; .wli = tô cảnh báo ngay giữa câu. */
+  .wl{color:var(--warn);display:block;margin-top:8px}
+  .wli{color:var(--warn);font-weight:650}
   .sugctl{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;margin-bottom:8px}
   .sugctl label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
   .sugctl select,.sugctl input{background:var(--surface);border:1px solid var(--border);
@@ -651,6 +653,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <option value="gan">Thiên số gan</option>
           <option value="pairs">Theo cặp hay đi cùng</option>
           <option value="payout">Tránh số đông</option>
+          <option value="spread">Phủ rộng (ít chồng lấn nhất)</option>
         </select>
       </label>
       <label>Số bộ<input id="sugCount" type="text" inputmode="numeric" value="5"
@@ -906,6 +909,54 @@ function popTournament(gen){
   return best || gen();
 }
 
+// --- Độ phủ: thứ DUY NHẤT cải thiện được khi mua cả một bội số ---------------
+// Xác suất trúng của TỪNG vé là cố định (không chế độ nào đổi được). Cái đổi được
+// là mức CHỒNG LẤN giữa các vé: hai vé chung 5 số thì gần như luôn cùng trúng hoặc
+// cùng trượt, tức tiền mua vé thứ hai bị phí. Đo bằng số bộ-3 KHÁC NHAU mà cả bội
+// số phủ được — mỗi vé có C(6,3)=20 bộ-3, nên k vé phủ tối đa 20k.
+// ĐỒNG BỘ: giống coverage3/gen_spread trong predict_track.py.
+const SPREAD_TRIES = 40;
+function tripleKeys(s, n){                     // s: 6 số đã sắp tăng dần
+  const out=[];
+  for(let i=0;i<4;i++) for(let j=i+1;j<5;j++) for(let m=j+1;m<6;m++)
+    out.push((s[i]*n + s[j])*n + s[m]);
+  return out;
+}
+function coverage3(sets, n){
+  const seen=new Set();
+  for(const s of sets){ if(!s||s.length<6) continue;
+    for(const k of tripleKeys(s,n)) seen.add(k); }
+  return seen.size;
+}
+// Trần độ phủ KHÔNG phải 20×số vé: cả trò chơi chỉ có C(n,3) bộ-3, nên khi 20k vượt
+// quá con số đó thì trần thật là C(n,3). Mega 6/45 với 1000 vé: C(45,3)=14.190 <
+// 20.000 — lấy 20k làm mẫu số sẽ khiến MỌI chế độ trông tệ đi một cách giả tạo.
+function coverageCap(k, n){ return Math.min(20*k, n*(n-1)*(n-2)/6); }
+function pickRandom(pool, k){                  // Fisher–Yates một phần
+  const a=pool.slice();
+  for(let i=0;i<k && i<a.length;i++){
+    const j=i+(Math.random()*(a.length-i)|0), t=a[i]; a[i]=a[j]; a[j]=t; }
+  return a.slice(0,k);
+}
+// Trả về hàm sinh 1 vé; `covered` sống suốt bội số nên MỖI lần tạo bội số phải gọi
+// makeSpread mới, không dùng chung một generator giữa các lần bấm Tạo.
+function makeSpread(n, pool, locked){
+  const covered=new Set(), need=Math.max(0, 6-locked.length);
+  return function(){
+    if(pool.length < need) return null;
+    let best=null, bestNew=-1;
+    for(let t=0;t<SPREAD_TRIES;t++){
+      const c=locked.concat(pickRandom(pool,need)).sort((a,b)=>a-b);
+      if(c.length<6) return null;
+      let nw=0; for(const k of tripleKeys(c,n)) if(!covered.has(k)) nw++;
+      if(nw>bestNew){ best=c; bestNew=nw; }
+      if(nw===20) break;                       // đã phủ toàn bộ-3 mới, khỏi thử tiếp
+    }
+    if(best) for(const k of tripleKeys(best,n)) covered.add(k);
+    return best;
+  };
+}
+
 function sugEngine(){
   const g = DATA[current], ex = g.extra, n = ex.n;
   const positions = g.positions || [], cooc = ex.cooc;
@@ -987,14 +1038,24 @@ function sugEngine(){
     }
     return s.sort((a,b)=>a-b);
   }
-  const rawGen = mode==='pairs'? genPair : sampleWeighted;
+  const spreadPool = (()=>{ const p=[];
+    for(let x=1;x<=n;x++) if(!exclSet.has(x) && !locked.includes(x)) p.push(x);
+    return p; })();
+  const rawGen = mode==='spread' ? makeSpread(n, spreadPool, locked)
+               : mode==='pairs'  ? genPair : sampleWeighted;
   // payout: bốc ở mức BỘ (giữ bộ ít người đánh nhất) + loại thẳng dạng đụng hàng nặng.
   const gen = mode==='payout' ? (()=>popTournament(rawGen)) : rawGen;
   const crowded = mode==='payout' ? isCrowdedSet : (()=>false);
+  // "Phủ rộng" cố tình BỎ ràng buộc điển hình: ràng buộc thu hẹp không gian bốc nên
+  // bóp chính độ phủ mà chế độ này đang tối ưu, trong khi KHÔNG nâng kỳ vọng trúng
+  // của từng vé (luôn là 36/n dù chọn bộ nào).
+  const typical = mode==='spread' ? (()=>true) : passes;
 
   // Bội số: ngân sách phải co giãn theo count, nếu không xin 1000 bộ sẽ chỉ ra vài chục.
   const bulk = count > 20;
-  const poolTarget = bulk ? Math.ceil(count*1.4) : count*10;
+  // spread lấy đúng count bộ: sinh dư rồi cắt theo điểm sẽ vứt mất chính các vé
+  // được chọn để lấp chỗ trống, làm hỏng độ phủ.
+  const poolTarget = mode==='spread' ? count : (bulk ? Math.ceil(count*1.4) : count*10);
   const tries1 = Math.max(9000, count*40), tries2 = Math.max(4000, count*20);
   // Chống "cày không ra": chế độ pairs bốc tham lam nên số bộ DUY NHẤT có hạn
   // (~1.6k với 6/55); hết bộ mới thì thoát sớm thay vì quay vòng vô ích.
@@ -1005,7 +1066,7 @@ function sugEngine(){
     const s=gen(); if(!s||s.length<6){ stall++; continue; }
     const key=s.join(','); if(seen.has(key)){ stall++; continue; }
     if(crowded(s)){ stall++; continue; }
-    const m=score(s); if(!passes(m)){ stall++; continue; }
+    const m=score(s); if(!typical(m)){ stall++; continue; }
     seen.add(key); pool.push(m); stall=0;
   }
   if(pool.length<count){ relaxed=true; stall=0;
@@ -1016,7 +1077,7 @@ function sugEngine(){
       seen.add(key); pool.push(score(s)); stall=0;
     }
   }
-  pool.sort((a,b)=>b.score-a.score);
+  if(mode!=='spread') pool.sort((a,b)=>b.score-a.score);
   let out;
   if(bulk){
     // Với bội số, ràng buộc "khác nhau ≥2 số" là O(n²) và gần như bất khả thi —
@@ -1032,7 +1093,7 @@ function sugEngine(){
 }
 
 const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
-  pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông'};
+  pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông',spread:'Phủ rộng'};
 function renderSuggest(){
   const ex = DATA[current].extra;
   const panel = document.getElementById('sugPanel');
@@ -1066,12 +1127,23 @@ function renderSuggest(){
     const pops = res.out.map(c=>popOfSet(c.set));
     const avgPop = pops.reduce((a,b)=>a+b,0)/(pops.length||1);
     const avgScore = res.out.reduce((a,c)=>a+c.score,0)/(res.out.length||1);
+    // Độ phủ: chỉ số quan trọng nhất của một BỘI SỐ — càng gần trần (xem coverageCap) thì
+    // các vé càng ít chồng lấn, tức tiền bỏ ra càng ít bị phí.
+    const cov = coverage3(res.out.map(c=>c.set), ex.n),
+          cap = coverageCap(res.out.length, ex.n);
+    const covPct = cap ? cov/cap*100 : 0;
+    const covCol = covPct>=80 ? 'var(--good)' : covPct<50 ? 'var(--warn)' : '';
     stat.innerHTML = 'Đã tạo <b>'+res.out.length.toLocaleString('vi')+'</b> bộ'+
       (uniq<res.out.length ? ' (chỉ <b>'+uniq.toLocaleString('vi')+'</b> bộ khác nhau — '+
         'chế độ này không bốc thêm được bộ mới)' : ' · tất cả khác nhau')+
+      ' · <b'+(covCol?' style="color:'+covCol+'"':'')+'>độ phủ '+covPct.toFixed(0)+'%</b> ('+
+      cov.toLocaleString('vi')+'/'+cap.toLocaleString('vi')+' bộ-3)'+
       ' · điểm điển hình TB <b>'+avgScore.toFixed(0)+'</b>'+
       ' · độ phổ biến TB <b>'+avgPop.toFixed(2)+'</b> (thấp = ít người đánh trùng)'+
-      ' · tổng tiền <b>'+(res.out.length*10000).toLocaleString('vi')+'đ</b> nếu mua hết.';
+      ' · tổng tiền <b>'+(res.out.length*10000).toLocaleString('vi')+'đ</b> nếu mua hết.'+
+      (covPct<50 ? '<br><span class="wl">⚠ Độ phủ thấp: các vé chồng lấn nhau nhiều nên '+
+        'phần lớn số tiền này không mở thêm cơ hội trúng. Chế độ <b>Phủ rộng</b> đạt ~84% '+
+        'với cùng số vé.</span>' : '');
   }else{
     wrap.style.display='none'; ta.value=''; stat.innerHTML='';
   }
@@ -1084,16 +1156,33 @@ function renderSuggest(){
     '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
     '<b>Điểm điển hình</b> = mức bộ số khớp với thói quen lịch sử ở 5 mặt: '+
     'tổng, chẵn/lẻ, thấp/cao, số liên tiếp, số lặp kỳ trước (100 = giống nhất).'+
-    '<div style="margin-top:6px">Bộ còn phải qua ràng buộc: tổng trong '+
-    ex.sum.p10+'–'+ex.sum.p90+', 2–4 lẻ, 2–4 thấp, ≤1 cặp liên tiếp, trải ≥3 hàng chục, '+
-    'mỗi vị trí x1–x6 trong dải lịch sử, lặp kỳ trước ≤2.</div>'+
+    (res.mode==='spread'
+      ? '<div style="margin-top:6px">Chế độ này <b>không áp</b> ràng buộc điển hình — '+
+        'xem giải thích bên dưới.</div>'
+      : '<div style="margin-top:6px">Bộ còn phải qua ràng buộc: tổng trong '+
+        ex.sum.p10+'–'+ex.sum.p90+', 2–4 lẻ, 2–4 thấp, ≤1 cặp liên tiếp, trải ≥3 hàng chục, '+
+        'mỗi vị trí x1–x6 trong dải lịch sử, lặp kỳ trước ≤2.</div>')+
     '<div style="margin-top:6px"><b>Chế độ '+MODE_NAME[res.mode]+':</b> '+
-    ({balanced:'bốc đều, chỉ cần điển hình.',hot:'thiên số về nhiều.',
-      gan:'thiên số lâu chưa về.',pairs:'ghép theo cặp hay đi cùng.',
+    ({balanced:'bốc đều, chỉ cần điển hình. Độ phủ ~68%.',
+      hot:'thiên số về nhiều. Độ phủ ~68%.',
+      gan:'thiên số lâu chưa về. <b class="wli">Độ phủ chỉ ~46%</b> — dồn vào nhóm số ít.',
+      pairs:'ghép theo cặp hay đi cùng. <b class="wli">Độ phủ chỉ ~20%</b> — bốc tham lam '+
+            'nên các vé rất giống nhau, gần 80% tiền vé không mở thêm cơ hội trúng.',
       payout:'né số nhiều người đánh (ngày sinh 1–31, tháng 1–12, đuôi 8/6), '+
              'ưu tiên đuôi 0/9 và số &gt;31; loại bộ toàn ngày sinh, cấp số cộng, '+
-             'cùng một hàng chục. Mỗi lần bốc '+POP_TOURNAMENT+' bộ rồi giữ bộ ít người đánh nhất.'
+             'cùng một hàng chục. Mỗi lần bốc '+POP_TOURNAMENT+' bộ rồi giữ bộ ít người đánh nhất. '+
+             'Độ phủ ~55%.',
+      spread:'mỗi lần bốc '+SPREAD_TRIES+' bộ ứng viên, giữ bộ phủ được nhiều <b>bộ-3 mới</b> '+
+             'nhất so với các vé đã chọn. <b>Độ phủ ~84%</b> — cao nhất trong các chế độ. '+
+             'Cố tình BỎ ràng buộc điển hình vì ràng buộc đó thu hẹp không gian bốc, '+
+             'làm giảm độ phủ mà không nâng kỳ vọng trúng của từng vé.'
     }[res.mode])+'</div>'+
+    (res.mode==='spread'
+      ? '<div style="margin-top:6px"><b>Vì sao chế độ này khác hẳn:</b> nó KHÔNG cố đoán số. '+
+        'Xác suất của từng vé vẫn y hệt các chế độ khác. Nó chỉ giảm mức <b>chồng lấn</b> '+
+        'giữa các vé trong cùng bội số — hai vé chung 5 số thì gần như luôn cùng trúng hoặc '+
+        'cùng trượt, nên vé thứ hai phí tiền. Đây là thứ duy nhất cải thiện được bằng cách '+
+        'chọn số, và nó chỉ có ý nghĩa khi bạn mua <b>nhiều vé cùng kỳ</b>.</div>' : '')+
     (res.mode==='payout'
       ? '<div style="margin-top:6px"><b>Độ phổ biến</b> = ước lượng mức đông người cùng đánh '+
         '(1,0 ≈ trung bình; thấp hơn là tốt). Dựa trên nghiên cứu hành vi chọn số; phần '+
@@ -1104,8 +1193,8 @@ function renderSuggest(){
 }
 
 // --- So sánh 5 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
-const BT_MODES = [['balanced','Cân đối'],['hot','Thiên số nóng'],['gan','Thiên số gan'],
-  ['pairs','Theo cặp hay đi cùng'],['payout','Tránh số đông']];
+const BT_MODES = [['spread','Phủ rộng'],['balanced','Cân đối'],['hot','Thiên số nóng'],
+  ['gan','Thiên số gan'],['pairs','Theo cặp hay đi cùng'],['payout','Tránh số đông']];
 
 function btBuildGen(){
   const g = DATA[current], ex = g.extra, n = ex.n;
@@ -1162,7 +1251,14 @@ function btBuildGen(){
     }
     return mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
   };
-  return {n, gen};
+  // "Phủ rộng" phải nhớ các bộ-3 đã phủ trong SUỐT bội số, nên không dùng chung
+  // `gen` không trạng thái được — mỗi lần tạo bội số gọi makeGen('spread') một lần
+  // rồi gọi hàm trả về cho từng vé.
+  const pool = (()=>{ const p=[]; for(let x=1;x<=n;x++) p.push(x); return p; })();
+  const makeGen = mode => mode==='spread'
+    ? makeSpread(n, pool, [])
+    : (()=>gen(mode));
+  return {n, gen, makeGen};
 }
 
 // --- Lưu / nạp bội số đã tạo (localStorage — sống qua F5 & mở lại trình duyệt) ---
@@ -1222,8 +1318,8 @@ function btGenerate(){
   document.getElementById('btBody').innerHTML='';         // kết quả so sánh cũ không còn đúng
   setTimeout(()=>{
     const eng = btBuildGen(), sets={};
-    BT_MODES.forEach(([k])=>{ const a=new Array(count);
-      for(let i=0;i<count;i++) a[i]=eng.gen(k); sets[k]=a; });
+    BT_MODES.forEach(([k])=>{ const g=eng.makeGen(k), a=new Array(count);
+      for(let i=0;i<count;i++) a[i]=g(); sets[k]=a; });
     const batch = {game:DATA[current].game_type, n:ex.n, count, created:btNow(), sets};
     btSaved = batch;
     const ok = btSave(batch);
@@ -1240,16 +1336,22 @@ function btGenerate(){
 }
 
 // Thống kê mức trùng của MỘT tập bộ ĐÃ LƯU với kết quả win.
-function btStatsFromSets(mode, sets, win){
+function btStatsFromSets(mode, sets, win, n){
   const dist=[0,0,0,0,0,0,0], numHit={}, wins={3:[],4:[],5:[],6:[]};
   let sumMatched=0, best=0;
+  const ok=[];
   for(const s of sets){
+    if(!s || s.length<6) continue;
+    ok.push(s);
     let c=0; for(const x of s) if(win.has(x)){ c++; numHit[x]=(numHit[x]||0)+1; }
     dist[c]++; sumMatched+=c; if(c>best) best=c;
     if(c>=3) wins[c].push(s);
   }
-  const made=sets.length;
-  return {mode, made, dist, best, numHit, wins,
+  const made=ok.length;
+  const uniq=new Set(ok.map(s=>s.join(','))).size;
+  const cov=coverage3(ok, n), cap=coverageCap(made, n);
+  return {mode, made, dist, best, numHit, wins, uniq, cov, cap,
+    covPct: cap ? cov/cap*100 : 0,
     avg: made ? sumMatched/made : 0,
     hit3: dist[3]+dist[4]+dist[5]+dist[6],
     hit4: dist[4]+dist[5]+dist[6],
@@ -1270,19 +1372,24 @@ function btCompare(){
     msg.textContent='Bội số đã lưu thuộc game khác ('+batch.game+') — bấm "Tạo & lưu" lại.'; return; }
   msg.textContent='';
   const win = new Set(target);
-  const stats = BT_MODES.map(([k])=>btStatsFromSets(k, batch.sets[k]||[], win));
+  const stats = BT_MODES.map(([k])=>btStatsFromSets(k, batch.sets[k]||[], win, ex.n));
   renderBtResult(target, stats, batch.count, batch.created);
 }
 
 function renderBtResult(target, stats, count, created){
   const ex = DATA[current].extra, n = ex.n;
   const baseline = Math.round(36/n*1000)/1000;
-  const bestAvg = Math.max(...stats.map(s=>s.avg));
+  // ★ theo ĐỘ PHỦ, không theo TB trùng: TB trùng của mọi giải thuật đều dao động
+  // quanh 36/n do may rủi, gắn sao cho nó là gắn sao cho nhiễu — và với 1 kỳ duy
+  // nhất thì càng vô nghĩa. Độ phủ mới là khác biệt thật, đo được, không phụ thuộc
+  // kết quả kỳ nào.
+  const bestCov = Math.max(...stats.map(s=>s.covPct));
   const nameOf = {}; BT_MODES.forEach(([k,nm])=>nameOf[k]=nm);
 
   let cols='';
   stats.forEach(s=>{
-    const lead = s.avg===bestAvg;
+    const lead = s.covPct===bestCov;
+    const covCol = s.covPct>=80 ? 'var(--good)' : s.covPct<50 ? 'var(--warn)' : '';
     const rates = target.map(x=>({x, r: s.made ? (s.numHit[x]||0)/s.made*100 : 0}))
                         .sort((a,b)=>b.r-a.r);
     let mini='';
@@ -1292,9 +1399,13 @@ function renderBtResult(target, stats, count, created){
       '<span class="pct">'+o.r.toFixed(0)+'%</span></div>'; });
     cols += '<div class="btcol'+(lead?' lead':'')+'">'+
       '<div class="nm"><span>'+esc(nameOf[s.mode])+'</span>'+(lead?'<span class="star">★</span>':'')+'</div>'+
-      '<div class="k">TB trùng / vé</div>'+
-      '<div class="big">'+s.avg.toFixed(3)+'</div>'+
-      '<div class="k" style="margin-top:4px">≥3: <b>'+s.hit3+'</b> · ≥4: <b>'+s.hit4+
+      '<div class="k">Độ phủ (bộ-3 khác nhau)</div>'+
+      '<div class="big"'+(covCol?' style="color:'+covCol+'"':'')+'>'+s.covPct.toFixed(0)+'%</div>'+
+      '<div class="k">'+s.cov.toLocaleString('vi')+' / '+s.cap.toLocaleString('vi')+
+        (s.uniq<s.made ? ' · chỉ <b>'+s.uniq.toLocaleString('vi')+'</b> bộ khác nhau' : '')+'</div>'+
+      '<div class="k" style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'+
+        'TB trùng / vé <b>'+s.avg.toFixed(3)+'</b></div>'+
+      '<div class="k">≥3: <b>'+s.hit3+'</b> · ≥4: <b>'+s.hit4+
         '</b> · ≥5: <b>'+s.hit5+'</b> · 6: <b>'+s.hit6+'</b></div>'+
       '<div class="k">Tốt nhất <b>'+s.best+'</b> số · '+s.made.toLocaleString('vi')+' bộ</div>'+
       '<div class="mini"><div class="k" style="margin-bottom:4px">Số KQ có trong bộ (tỉ lệ)</div>'+mini+'</div>'+
@@ -1332,9 +1443,16 @@ function renderBtResult(target, stats, count, created){
     ' · ngẫu nhiên lý thuyết TB <b>'+baseline+'</b> số trùng/vé.';
   document.getElementById('btBody').innerHTML =
     '<div class="btgrid">'+cols+'</div>'+ latestNote +
-    '<div class="pc" style="margin-top:10px">Mỗi cột là 1 giải thuật: <b>TB trùng/vé</b> = trung bình số trùng với kết quả; '+
-    '<b>≥3…6</b> = số bộ đạt mức đó; hàng dưới là tỉ lệ mỗi số kết quả xuất hiện trong '+count.toLocaleString('vi')+' bộ. '+
-    '★ = TB cao nhất. So sánh dùng <b>đúng bộ đã lưu</b> nên kết quả cố định; bấm <b>Tạo &amp; lưu</b> để bốc bộ mới. Chênh lệch giữa các giải thuật hầu như chỉ là nhiễu.</div>'+
+    '<div class="pc" style="margin-top:10px">Mỗi cột là 1 giải thuật. <b>Độ phủ</b> = số bộ-3 khác nhau '+
+    'mà cả bội số phủ được, chia cho trần lý thuyết (nhỏ hơn giữa 20×số vé và C(n,3)) — '+
+    'phủ càng cao thì các vé càng ít chồng lấn, '+
+    'tức cùng số tiền mà mở được nhiều cơ hội hơn. <b>★ = độ phủ cao nhất.</b> '+
+    '<b>TB trùng/vé</b> = trung bình số trùng với kết quả; <b>≥3…6</b> = số bộ đạt mức đó; '+
+    'hàng dưới là tỉ lệ mỗi số kết quả xuất hiện trong '+count.toLocaleString('vi')+' bộ. '+
+    'So sánh dùng <b>đúng bộ đã lưu</b> nên kết quả cố định; bấm <b>Tạo &amp; lưu</b> để bốc bộ mới.'+
+    '<span class="wl">⚠ Đừng xếp hạng giải thuật theo TB trùng hay số bộ trúng: với 1 kỳ duy nhất '+
+    'thì chênh lệch đó gần như hoàn toàn là may rủi, kỳ sau sẽ đảo thứ tự. Chỉ <b>độ phủ</b> là '+
+    'ổn định và không phụ thuộc kết quả kỳ nào.</span></div>'+
     '<details open style="margin-top:12px"><summary>Bộ số trúng của từng giải thuật (nhóm theo 3/4/5/6 số · số trúng tô xanh)</summary>'+
     winHtml+'</details>';
 }
@@ -1383,9 +1501,10 @@ function renderTrack(){
     return;
   }
 
-  // Cột mỗi giải thuật — tr.methods đã xếp sẵn theo TB trùng giảm dần.
+  // Cột mỗi giải thuật — tr.methods đã xếp sẵn theo ĐỘ PHỦ giảm dần (không theo TB
+  // trùng: TB trùng chỉ dao động quanh mức ngẫu nhiên nên xếp theo nó là xếp nhiễu).
   const withData = tr.methods.filter(m=>m.sets);
-  const bestAvg  = Math.max.apply(null, withData.map(m=>m.avg));
+  const bestCov  = Math.max.apply(null, withData.map(m=>m.cov_rate||0));
   const bestWins = Math.max.apply(null, withData.map(m=>m.wins));
   let cols='';
   tr.methods.forEach(m=>{
@@ -1394,12 +1513,17 @@ function renderTrack(){
         '<div class="k" style="margin-top:8px">chưa có dữ liệu</div></div>';
       return;
     }
-    const lead = m.avg === bestAvg;
+    const cov = m.cov_rate || 0;
+    const lead = cov>0 && cov === bestCov;
+    const covCol = cov>=80 ? 'var(--good)' : cov>0 && cov<50 ? 'var(--warn)' : '';
     cols += '<div class="btcol'+(lead?' lead':'')+'">'+
       '<div class="nm"><span>'+esc(m.name)+'</span>'+(lead?'<span class="star">★</span>':'')+'</div>'+
-      '<div class="k">TB trùng / vé</div>'+
-      '<div class="big">'+m.avg.toFixed(3)+'</div>'+
-      '<div class="k" style="margin-top:4px">Thắng kỳ: <b>'+m.wins+
+      '<div class="k">Độ phủ (bộ-3 khác nhau)</div>'+
+      '<div class="big"'+(covCol?' style="color:'+covCol+'"':'')+'>'+
+        (cov ? cov.toFixed(0)+'%' : '—')+'</div>'+
+      '<div class="k" style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'+
+        'TB trùng / vé <b>'+m.avg.toFixed(3)+'</b></div>'+
+      '<div class="k">Thắng kỳ: <b>'+m.wins+
         '</b>/'+tr.scored_batches+(m.wins===bestWins&&bestWins>0?' 🏆':'')+'</div>'+
       '<div class="k">≥3: <b>'+m.hit3+'</b> · ≥4: <b>'+m.hit4+
         '</b> · ≥5: <b>'+m.hit5+'</b> · 6: <b>'+m.hit6+'</b></div>'+
@@ -1477,10 +1601,13 @@ function renderTrack(){
         'Đáng xem tiếp — nhưng hãy chạy thêm kỳ trước khi tin, và kiểm tra xem có lỗi '+
         'rò rỉ kết quả trong cách sinh số không.</div>'
       : '<div class="banner" style="margin-top:10px">✓ Sau <b>'+tr.scored_batches+
-        '</b> kỳ: <b>không chế độ nào</b> vượt ngẫu nhiên. Chế độ dẫn đầu bảng chỉ đang '+
-        'gặp may — chênh lệch nằm trong sai số. Đúng như lý thuyết: kỳ vọng mỗi vé luôn '+
+        '</b> kỳ: <b>không chế độ nào</b> vượt ngẫu nhiên. Chế độ có TB trùng cao nhất chỉ '+
+        'đang gặp may — chênh lệch nằm trong sai số. Đúng như lý thuyết: kỳ vọng mỗi vé luôn '+
         'là 6×6/'+DATA[current].extra.n+' = <b>'+tr.baseline.avg+'</b> số trùng, '+
-        '<b>bất kể chọn số nào</b>.</div>';
+        '<b>bất kể chọn số nào</b>.'+
+        '<div style="margin-top:6px">Nên thứ đáng so giữa các chế độ không phải "đoán trúng hơn" '+
+        '(không chế độ nào làm được) mà là <b>độ phủ</b>: cùng số vé, bội số ít chồng lấn hơn thì '+
+        'nhiều cơ hội hơn. Đó là lý do bảng này xếp theo độ phủ.</div></div>';
 
   status.innerHTML = 'Đã chấm <b>'+tr.scored_batches+'</b> kỳ thật'+
     (tr.pending?' · đang chờ <b>'+tr.pending+'</b> kỳ':'')+
@@ -1490,8 +1617,13 @@ function renderTrack(){
     'bảng này dùng <b>bộ số đã chốt trong DB trước khi kỳ mới về</b> nên không thể "nhìn trước kết quả". '+
     '<b>TB trùng/vé</b> = trung bình số trùng trên toàn bộ vé đã chấm; <b>Thắng kỳ</b> = số kỳ giải thuật đó '+
     'có TB cao nhất (hoà thì chia đôi). '+
-    '<span class="wl">⚠ Cần vài chục kỳ chênh lệch mới có ý nghĩa — ít kỳ thì thứ hạng chủ yếu là nhiễu, '+
-    'và không giải thuật nào làm tăng xác suất trúng.</span></div>';
+    '<b>Bảng xếp theo Độ phủ, không theo TB trùng</b> — TB trùng của mọi giải thuật đều dao động quanh '+
+    'mức ngẫu nhiên, nên xếp theo nó là xếp theo may rủi và đẩy nhầm giải thuật chồng lấn nặng lên đầu. '+
+    (withData.some(m=>!m.cov_rate)
+      ? '<span class="wl">⚠ Các kỳ đã chấm bằng bản cũ chưa lưu độ phủ (hiện "—"). '+
+        'Chạy lại backtest để có số liệu này.</span>' : '')+
+    '<span class="wl">⚠ Cần vài chục kỳ chênh lệch mới có ý nghĩa — ít kỳ thì thứ hạng theo TB trùng chủ yếu là nhiễu, '+
+    'và không giải thuật nào làm tăng xác suất trúng của từng vé.</span></div>';
 }
 
 // --- mô phỏng: cần bao nhiêu vé để trúng 3/4/5/6 số --------------------------

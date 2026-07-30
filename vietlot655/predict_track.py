@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Backtest thực cho 5 chế độ "Bộ số gợi ý": mỗi chế độ tạo 1000 vé (bộ 6 số),
+Backtest thực cho 6 chế độ "Bộ số gợi ý": mỗi chế độ tạo 1000 vé (bộ 6 số),
 LƯU lại kèm kỳ gốc, rồi khi kỳ tiếp theo có kết quả thật (crawl về DB) sẽ TỰ CHẤM
 xem chế độ nào trùng nhiều số hơn — tích luỹ qua nhiều kỳ thành bảng xếp hạng.
 
@@ -14,6 +14,10 @@ Quy trình:
 LƯU Ý TRUNG THỰC: xổ số độc lập từng kỳ. Không chế độ nào tăng xác suất trúng;
 kỳ vọng lý thuyết ~36/n số trùng mỗi vé (≈0,65 với Power 6/55). Chênh lệch giữa
 các chế độ hầu như chỉ là nhiễu — bảng này để KIỂM CHỨNG điều đó bằng dữ liệu thật.
+
+THỨ DUY NHẤT CẢI THIỆN ĐƯỢC là ĐỘ PHỦ của cả bội số (xem coverage3): xác suất của
+từng vé thì cố định, nhưng nếu các vé chồng lấn nhau thì tiền mua vé sau bị phí.
+Vì vậy bảng xếp hạng sắp theo độ phủ, không theo TB trùng (vốn chỉ là nhiễu).
 """
 
 import argparse
@@ -31,16 +35,21 @@ from pathlib import Path
 import gap_stats
 from crawl import DB_PATH, ensure_dirs
 
-# 5 chế độ đúng như dropdown "Bộ số gợi ý" trong stats_web.py.
-METHODS = ["balanced", "hot", "gan", "pairs", "payout"]
+# 6 chế độ đúng như dropdown "Bộ số gợi ý" trong stats_web.py.
+METHODS = ["balanced", "hot", "gan", "pairs", "payout", "spread"]
 MODE_NAME = {
     "balanced": "Cân đối",
     "hot": "Thiên số nóng",
     "gan": "Thiên số gan",
     "pairs": "Theo cặp hay đi cùng",
     "payout": "Tránh số đông",
+    "spread": "Phủ rộng",
 }
 DEFAULT_SETS = 1000
+
+# Chế độ "Phủ rộng": mỗi lần bốc SPREAD_TRIES bộ ứng viên, giữ bộ phủ được NHIỀU
+# bộ-3 MỚI nhất so với các vé đã chọn. Xem giải thích ở coverage3()/gen_spread().
+SPREAD_TRIES = 40
 
 
 # --------------------------------------------------------------------------- #
@@ -173,10 +182,17 @@ def init_tables(conn: sqlite3.Connection) -> None:
             c4 INTEGER NOT NULL DEFAULT 0,
             c5 INTEGER NOT NULL DEFAULT 0,
             c6 INTEGER NOT NULL DEFAULT 0,
+            cov3 INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (batch_id, method)
         )
         """
     )
+    # DB tạo bằng bản cũ chưa có cột cov3 — CREATE TABLE IF NOT EXISTS không thêm cột.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(prediction_stats)")}
+    if "cov3" not in cols:
+        conn.execute(
+            "ALTER TABLE prediction_stats ADD COLUMN cov3 INTEGER NOT NULL DEFAULT 0"
+        )
     conn.commit()
 
 
@@ -184,13 +200,17 @@ _CCOLS = "c0,c1,c2,c3,c4,c5,c6"
 
 
 def _write_stats(
-    conn: sqlite3.Connection, batch_id: int, counts: dict[str, list[int]]
+    conn: sqlite3.Connection,
+    batch_id: int,
+    counts: dict[str, list[int]],
+    covs: dict[str, int] | None = None,
 ) -> None:
-    """Ghi phân bố số trùng của 1 batch rồi vứt các vé chi tiết đi."""
+    """Ghi phân bố số trùng + độ phủ của 1 batch rồi vứt các vé chi tiết đi."""
+    covs = covs or {}
     conn.executemany(
-        f"INSERT OR REPLACE INTO prediction_stats (batch_id, method, n_sets, {_CCOLS}) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
-        [(batch_id, m, sum(c), *c) for m, c in counts.items()],
+        f"INSERT OR REPLACE INTO prediction_stats (batch_id, method, n_sets, {_CCOLS}, cov3) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        [(batch_id, m, sum(c), *c, covs.get(m, 0)) for m, c in counts.items()],
     )
     conn.execute("DELETE FROM prediction_sets WHERE batch_id=?", (batch_id,))
 
@@ -201,8 +221,9 @@ def _derive(row: sqlite3.Row) -> dict:
     n = row["n_sets"] or sum(c)
     total = sum(k * c[k] for k in range(7))
     best = max((k for k in range(7) if c[k]), default=0)
+    cov = row["cov3"] if "cov3" in row.keys() else 0
     return {
-        "n": n, "dist": c, "sum": total,
+        "n": n, "dist": c, "sum": total, "cov3": cov or 0,
         "avg": (total / n) if n else 0.0,
         "hit3": c[3] + c[4] + c[5] + c[6],
         "hit4": c[4] + c[5] + c[6],
@@ -388,6 +409,66 @@ def _make_generator(method: str, prof: dict):
     return gen_unpopular
 
 
+# --------------------------------------------------------------------------- #
+# Độ phủ — thước đo DUY NHẤT thật sự cải thiện được khi mua nhiều vé
+# --------------------------------------------------------------------------- #
+# Xác suất trúng của TỪNG vé là cố định (6/n mỗi số, không chế độ nào đổi được).
+# Cái đổi được là mức CHỒNG LẤN giữa các vé trong cùng một bội số: hai vé chung 5 số
+# thì gần như luôn cùng trúng hoặc cùng trượt, tức là tiền mua vé thứ hai bị phí.
+#
+# Đo bằng số bộ-3 KHÁC NHAU mà cả bội số phủ được (mỗi vé có C(6,3)=20 bộ-3, nên
+# k vé phủ tối đa 20k bộ-3). Càng gần mức trần, cơ hội "có ít nhất 1 vé trúng ≥3/≥4
+# số" càng cao — với cùng số tiền bỏ ra.
+def coverage3(sets: list[list[int]]) -> int:
+    """Số bộ-3 khác nhau mà cả bội số phủ được."""
+    seen: set[tuple[int, ...]] = set()
+    for s in sets:
+        seen.update(combinations(sorted(s), 3))
+    return len(seen)
+
+
+def coverage_cap(k: int, n: int) -> int:
+    """Trần độ phủ của k vé trên dải 1..n.
+
+    Không phải 20k: cả trò chơi chỉ có C(n,3) bộ-3, nên khi 20k vượt quá con số đó
+    thì trần thật là C(n,3). Với Mega 6/45 và 1000 vé, C(45,3)=14.190 < 20.000 —
+    lấy 20k làm mẫu số sẽ khiến MỌI chế độ trông tệ đi một cách giả tạo.
+    """
+    return min(20 * k, comb(n, 3))
+
+
+def gen_spread(prof: dict, k: int) -> list[list[int]]:
+    """k vé bốc tham lam theo ĐỘ PHỦ: mỗi bước giữ ứng viên phủ nhiều bộ-3 mới nhất.
+
+    KHÔNG áp ràng buộc `passes` — ràng buộc "điển hình" thu hẹp không gian bốc nên
+    làm giảm chính thứ chế độ này đang tối ưu, trong khi không hề nâng kỳ vọng trúng
+    của từng vé (kỳ vọng luôn là 36/n dù chọn bộ nào).
+    """
+    n = prof["n"]
+    pool = list(range(1, n + 1))
+    covered: set[tuple[int, ...]] = set()
+    out: list[list[int]] = []
+    seen: set[tuple[int, ...]] = set()
+    for _ in range(k):
+        best: tuple[int, ...] | None = None
+        best_new = -1
+        for _ in range(SPREAD_TRIES):
+            cand = tuple(sorted(random.sample(pool, 6)))
+            if cand in seen:
+                continue
+            new = sum(1 for c in combinations(cand, 3) if c not in covered)
+            if new > best_new:
+                best, best_new = cand, new
+            if new == 20:          # đã phủ toàn bộ-3 mới, không cần thử tiếp
+                break
+        if best is None:           # cực hiếm: mọi ứng viên đều trùng vé đã có
+            best = tuple(sorted(random.sample(pool, 6)))
+        seen.add(best)
+        covered.update(combinations(best, 3))
+        out.append(list(best))
+    return out
+
+
 def passes(s: list[int], prof: dict) -> bool:
     ssum = sum(s)
     if ssum < prof["p10"] or ssum > prof["p90"]:
@@ -410,6 +491,8 @@ def passes(s: list[int], prof: dict) -> bool:
 
 def generate_sets(method: str, prof: dict, k: int) -> list[list[int]]:
     """k bộ theo chế độ: ưu tiên qua ràng buộc 'điển hình' + không trùng, nới dần nếu bí."""
+    if method == "spread":
+        return gen_spread(prof, k)
     gen = _make_generator(method, prof)
     out: list[list[int]] = []
     seen: set[tuple[int, ...]] = set()
@@ -547,6 +630,7 @@ def evaluate(db_path: Path | str, game_type: str | None = None) -> dict:
                 continue
             win = set(_row_numbers(target))
             counts: dict[str, list[int]] = {}
+            by_method: dict[str, list[list[int]]] = {}
             for r in conn.execute(
                 "SELECT method, numbers FROM prediction_sets WHERE batch_id=?",
                 (b["id"],),
@@ -554,7 +638,9 @@ def evaluate(db_path: Path | str, game_type: str | None = None) -> dict:
                 nums = [int(x) for x in r["numbers"].split(",")]
                 hit = sum(1 for x in nums if x in win)
                 counts.setdefault(r["method"], [0] * 7)[hit] += 1
-            _write_stats(conn, b["id"], counts)
+                by_method.setdefault(r["method"], []).append(nums)
+            covs = {m: coverage3(v) for m, v in by_method.items()}
+            _write_stats(conn, b["id"], counts, covs)
             conn.execute(
                 """
                 UPDATE prediction_batches
@@ -597,6 +683,7 @@ def backfill(
     periods: int = 300,
     n_sets: int = DEFAULT_SETS,
     progress=None,
+    redo: bool = False,
 ) -> dict:
     """Dựng bảng xếp hạng ngay từ lịch sử thay vì chờ từng kỳ mới về.
 
@@ -616,6 +703,23 @@ def backfill(
         periods = max(1, min(periods, total - 50))
         n = gap_stats.resolve_n(None, game_type)
         start = total - periods
+
+        if redo:
+            # Xoá các kỳ ĐÃ CHẤM để dựng lại từ đầu (cần khi thêm chế độ mới hoặc khi
+            # DB cũ chưa lưu độ phủ). Batch 'pending' được giữ: vé của nó đã chốt
+            # trước khi kỳ mới về, xoá đi là mất bằng chứng "không nhìn trước kết quả".
+            conn.execute(
+                """
+                DELETE FROM prediction_stats WHERE batch_id IN
+                    (SELECT id FROM prediction_batches WHERE game_type=? AND status='scored')
+                """,
+                (game_type,),
+            )
+            conn.execute(
+                "DELETE FROM prediction_batches WHERE game_type=? AND status='scored'",
+                (game_type,),
+            )
+            conn.commit()
 
         existing = {
             r[0]
@@ -649,12 +753,15 @@ def backfill(
             batch_id = cur.lastrowid
             # Chấm ngay trong bộ nhớ, chỉ ghi phân bố xuống DB.
             counts: dict[str, list[int]] = {}
+            covs: dict[str, int] = {}
             for method in METHODS:
                 c = [0] * 7
-                for s in generate_sets(method, prof, n_sets):
+                sets = generate_sets(method, prof, n_sets)
+                for s in sets:
                     c[sum(1 for x in s if x in win)] += 1
                 counts[method] = c
-            _write_stats(conn, batch_id, counts)
+                covs[method] = coverage3(sets)
+            _write_stats(conn, batch_id, counts, covs)
             conn.commit()
             done += 1
             if progress:
@@ -785,7 +892,8 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
         dist: dict[str, list[int]] = {k: [0] * 7 for k in METHODS}
         for row in conn.execute(
             f"""
-            SELECT ps.batch_id AS bid, ps.method AS method, ps.n_sets AS n_sets, {_CCOLS}
+            SELECT ps.batch_id AS bid, ps.method AS method, ps.n_sets AS n_sets,
+                   {_CCOLS}, ps.cov3 AS cov3
             FROM prediction_stats ps
             JOIN prediction_batches b ON b.id = ps.batch_id
             WHERE b.game_type=? AND b.status='scored'
@@ -796,18 +904,27 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             m = row["method"]
             per_batch.setdefault(row["bid"], {})[m] = d["avg"]
             a = agg.setdefault(
-                m, {"sets": 0, "sum": 0, "hit3": 0, "hit4": 0, "hit5": 0, "hit6": 0, "best": 0}
+                m, {"sets": 0, "sum": 0, "hit3": 0, "hit4": 0, "hit5": 0, "hit6": 0,
+                    "best": 0, "cov_sum": 0, "cov_cap": 0, "cov_batches": 0}
             )
             a["sets"] += d["n"]
             a["sum"] += d["sum"]
             for k in ("hit3", "hit4", "hit5", "hit6"):
                 a[k] += d[k]
             a["best"] = max(a["best"], d["best"])
+            # Độ phủ là thuộc tính của TỪNG bội số, không cộng dồn được giữa các kỳ —
+            # lấy trung bình, kèm trần lý thuyết (coverage_cap) để quy ra %.
+            if d["cov3"]:
+                a["cov_sum"] += d["cov3"]
+                a["cov_cap"] += coverage_cap(d["n"], n)
+                a["cov_batches"] += 1
             if m in dist:
                 for k in range(7):
                     dist[m][k] += d["dist"][k]
         for a in agg.values():
             a["avg"] = a["sum"] / a["sets"] if a["sets"] else 0.0
+            a["cov"] = (a["cov_sum"] / a["cov_batches"]) if a["cov_batches"] else 0.0
+            a["cov_rate"] = (a["cov_sum"] / a["cov_cap"] * 100) if a["cov_cap"] else 0.0
 
         wins = {key: 0.0 for key in METHODS}
         for per in per_batch.values():
@@ -860,10 +977,16 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
                 "best": r["best"],
                 "wins": round(wins.get(key, 0.0), 2),
                 "dist": dist[key],
+                "cov": round(r["cov"]),
+                "cov_rate": round(r["cov_rate"], 1),
                 **stats_by_method.get(key, {}),
             })
-        # xếp hạng: chế độ có dữ liệu, TB trùng cao lên trước
-        methods.sort(key=lambda m: (m["sets"] == 0, -(m.get("avg") or 0)))
+        # Xếp hạng theo ĐỘ PHỦ, không theo TB trùng.
+        # TB trùng của mọi chế độ đều dao động quanh 36/n do may rủi (xem `beats_random`
+        # — chưa chế độ nào vượt ngưỡng t=2,58), nên xếp theo nó là xếp theo nhiễu và
+        # đẩy nhầm chế độ chồng lấn nặng lên đầu bảng. Độ phủ mới là thứ khác nhau thật
+        # giữa các chế độ, đo được, và quyết định cơ hội có vé trúng khi mua cả bội số.
+        methods.sort(key=lambda m: (m["sets"] == 0, -(m.get("cov") or 0)))
 
         recent = []
         for b in conn.execute(
@@ -908,15 +1031,18 @@ def _print_board(db_path: Path | str, game_type: str) -> None:
     print(f"Đã chấm {sb['scored_batches']} kỳ · đang chờ {sb['pending']} kỳ")
     print(f"Ngẫu nhiên lý thuyết: TB {sb['baseline']['avg']} số trùng/vé · "
           f"≥3 số {sb['baseline']['hit3_rate']}%\n")
-    print(f"{'Chế độ':<20}{'Vé':>8}{'TB':>8}{'Thắng kỳ':>10}"
+    print(f"{'Chế độ':<20}{'Phủ':>8}{'Vé':>8}{'TB':>8}{'Thắng kỳ':>10}"
           f"{'≥3':>7}{'≥4':>6}{'≥5':>5}{'6':>4}{'Tốt':>5}")
-    print("-" * 73)
+    print("-" * 81)
     for m in sb["methods"]:
         if not m.get("sets"):
             print(f"{m['name']:<20}{'—':>8}{'(chưa có dữ liệu)':>40}")
             continue
-        print(f"{m['name']:<20}{m['sets']:>8}{m['avg']:>8.3f}{m['wins']:>10}"
+        cov = f"{m['cov_rate']:.0f}%" if m.get("cov") else "—"
+        print(f"{m['name']:<20}{cov:>8}{m['sets']:>8}{m['avg']:>8.3f}{m['wins']:>10}"
               f"{m['hit3']:>7}{m['hit4']:>6}{m['hit5']:>5}{m['hit6']:>4}{m['best']:>5}")
+    print("\nXếp theo ĐỘ PHỦ (bộ-3 khác nhau / trần lý thuyết). TB trùng của mọi chế độ\n"
+          "đều quanh mức ngẫu nhiên — chênh lệch ở cột TB là nhiễu, không phải thứ hạng.")
     print()
 
 
@@ -945,6 +1071,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     bf.add_argument("--game", default="power655")
     bf.add_argument("--periods", type=int, default=300, help="Số kỳ gần nhất (mặc định 300).")
     bf.add_argument("-n", "--sets", type=int, default=DEFAULT_SETS)
+    bf.add_argument(
+        "--redo",
+        action="store_true",
+        help="Xoá các kỳ đã chấm rồi dựng lại từ đầu (cần khi thêm chế độ mới).",
+    )
 
     sub.add_parser(
         "compact",
@@ -999,7 +1130,10 @@ def main() -> int:
 
         print(f"Chạy lại {args.periods} kỳ gần nhất, {args.sets} bộ/chế độ "
               f"({args.sets*len(METHODS):,} vé/kỳ)…", flush=True)
-        res = backfill(args.db, args.game, args.periods, args.sets, progress=show)
+        if args.redo:
+            print("--redo: xoá các kỳ ĐÃ CHẤM của game này rồi dựng lại từ đầu.", flush=True)
+        res = backfill(args.db, args.game, args.periods, args.sets,
+                       progress=show, redo=args.redo)
         if not res["ok"]:
             print(res["msg"])
             return 1

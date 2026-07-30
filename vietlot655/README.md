@@ -59,18 +59,18 @@ Local HTML mode parses that file only. To follow `NextPage(n)` automatically,
 run from the full Vietlott web URL so the crawler can read the Ajax key from the
 page.
 
-## Backtest 5 giai thuat tren ket qua that
+## Backtest 6 giai thuat tren ket qua that
 
 Moi lan chay `crawl.py`, truoc khi cao ve, chuong trinh tu chot 1000 bo so cho
-moi giai thuat (`balanced` / `hot` / `gan` / `pairs` / `payout`) dua tren lich su
-hien co, luu vao `prediction_batches` + `prediction_sets`. Cao xong, ky moi da
-nam trong DB thi cac bo do duoc cham diem ngay.
+moi giai thuat (`balanced` / `hot` / `gan` / `pairs` / `payout` / `spread`) dua tren
+lich su hien co, luu vao `prediction_batches` + `prediction_sets`. Cao xong, ky moi
+da nam trong DB thi cac bo do duoc cham diem ngay.
 
 Vi bo so duoc chot TRUOC khi ky moi ve nen khong the "nhin truoc ket qua" —
 diem cham tich luy qua nhieu ky cho biet giai thuat nao dang trung nhieu nhat.
 
 ```text
-Du doan: power655: da chot batch #7 (1000 bo x 5 che do) sau ky 01372
+Du doan: power655: da chot batch #7 (1000 bo x 6 che do) sau ky 01372
 ... (cao) ...
 Da cham diem 1 ky du doan (con 0 ky dang cho ket qua).
 ```
@@ -86,6 +86,60 @@ python predict_track.py board          # bang tren console
 python stats_web.py                    # muc "Giai thuat nao dang trung nhieu nhat?"
 ```
 
+### DOC KY: bang xep theo DO PHU, khong theo TB trung
+
+Sau 305 ky Power (1,83 trieu ve) va 304 ky Mega (1,82 trieu ve): **khong giai thuat
+nao vuot ngau nhien**. TB trung cua ca 6 che do deu bam sat ky vong ly thuyet
+36/n (0,655 voi Power 6/55; 0,800 voi Mega 6/45), `beats_random = False` toan bo.
+
+Vi vay xep hang theo TB trung la **xep hang theo nhieu**. Truoc day bang lam dung
+the va no day "Theo cap" — che do TE NHAT — len hang nhat kem dau sao. Bang chung
+ro nhat o Mega: "So gan" thang 100/304 ky va la che do DUY NHAT trung tron 6/6 so,
+nhung do phu chi 44%. Ai theo no la theo mot chuoi may rui.
+
+Thu **cai thien duoc** la DO PHU. Xac suat cua TUNG ve thi co dinh, nhung muc CHONG
+LAN giua cac ve trong cung mot boi so thi khong: hai ve chung 5 so gan nhu luon cung
+trung hoac cung truot, tuc tien mua ve thu hai bi phi. Do bang so **bo-3 khac nhau**
+ma ca boi so phu duoc (moi ve co C(6,3)=20 bo-3).
+
+Do phu do duoc voi 1000 ve:
+
+| Che do | Power 6/55 | Mega 6/45 |
+|---|---|---|
+| **Phu rong** | **84,1%** | **90,8%** |
+| Can doi | 68,4% | 73,1% |
+| Thien so nong | 68,0% | 72,8% |
+| Tranh so dong | 54,3% | 56,7% |
+| Thien so gan | 42,3% | 43,8% |
+| Theo cap | 20,5% | 24,1% |
+
+Y nghia thuc te — mo phong 4.000 ky ngau nhien, Power 6/55, 1000 ve (10 trieu dong):
+P(co it nhat 1 ve trung >=4 so) la **50,9%** voi Phu rong, 45,5% voi Can doi,
+**17,0% voi Theo cap**. Cung so tien bo ra, chenh gan 3 lan.
+
+**Che do `spread` ("Phu rong")** moi lan boc `SPREAD_TRIES=40` bo ung vien roi giu bo
+phu duoc nhieu **bo-3 MOI** nhat so voi cac ve da chon. No **KHONG co doan so** —
+xac suat tung ve y het cac che do khac. No chi giam chong lan, va vi the chi co y
+nghia khi mua NHIEU ve trong cung mot ky.
+
+Che do nay **co tinh BO rang buoc "dien hinh"** (`passes()`): rang buoc do thu hep
+khong gian boc nen bop chinh do phu ma no dang toi uu, trong khi khong he nang ky
+vong trung cua tung ve.
+
+**Tran do phu = `min(20 x so ve, C(n,3))`, KHONG phai `20 x so ve`.** Ca tro choi chi
+co C(n,3) bo-3; Mega 6/45 co C(45,3) = 14.190 < 20.000 nen 1000 ve khong the vuot
+14.190. Lay 20.000 lam mau so khien MOI che do trong te di gia tao (Phu rong bi bao
+64% thay vi 90,8%). Xem `coverage_cap()` trong `predict_track.py` va `coverageCap()`
+trong JS — sua mot noi thi phai sua ca hai.
+
+Cot `cov3` trong `prediction_stats` luu do phu cua tung batch. DB tao bang ban cu
+duoc `ALTER TABLE` tu dong trong `init_tables()`.
+
+**Luu y ve `Theo cap`:** tren web no chi sinh duoc ~610-670 bo KHAC NHAU trong 1000 ve
+(hon 300 ve trung lap hoan toan) vi thuat toan boc tham lam top-3. Hanh vi nay duoc
+giu nguyen vi no phan anh dung ban chat che do, nhung cot cua no gio hien thang
+"chi N bo khac nhau" thay vi im lang.
+
 ### Chay lai lich su (backfill) — co bang xep hang ngay
 
 Doi tung ky moi ve thi rat lau (moi tuan 3 ky). Lenh `backfill` duyet nguoc lich su:
@@ -96,9 +150,21 @@ chinh ky do.
 python predict_track.py backfill --periods 300 -n 1000
 ```
 
-300 ky x 5 che do x 1000 bo = 1,5 trieu ve, mat ~15-20 phut, DB tang ~100MB.
+300 ky x 6 che do x 1000 bo = 1,8 trieu ve, mat ~20-27 phut moi game.
 Khong ky nao nhin thay ket qua cua chinh no nen van trung thuc nhu chay that.
 Idempotent: ky nao da co batch thi bo qua, chay lai khong tao chong.
+
+Muon dung lai TU DAU (khi them che do moi, hoac DB cu chua co cot do phu) thi them
+`--redo` — no xoa cac ky da cham roi tinh lai:
+
+```powershell
+python predict_track.py --db vietlott_data.db backfill --game power655 --periods 305 --redo
+python predict_track.py --db vietlott_mega645_data.db backfill --game mega645 --periods 304 --redo
+```
+
+`--redo` chi xoa batch `status='scored'`. Batch dang `pending` duoc GIU vi ve cua no
+la bang chung da chot truoc khi ky moi ve — xoa di la mat tinh "khong nhin truoc
+ket qua".
 
 **KHONG can xoa lich su draw_results de "chay lai".** `crawl.py` chi chot 1 batch
 moi lan chay, nen xoa 300 ky roi cao lai chi cho ra 1 ky co diem, khong phai 300.
@@ -108,9 +174,11 @@ moi lan chay, nen xoa 300 ky roi cao lai chi cho ra 1 ky co diem, khong phai 300
 - `prediction_sets` (ve chi tiet) chi ton tai trong luc CHO cham: sinh truoc khi ky
   moi ve, giu 5.000 ve lam bang chung da chot truoc.
 - Cham xong, ket qua duoc gom vao `prediction_stats` — moi che do 1 dong voi so dem
-  theo muc trung `c0..c6` (bao nhieu ve trung 0,1,2,3,4,5,6 so) — roi **xoa het ve**.
-- 1 ky: 5.000 dong -> 5 dong. Moi so lieu cua bang xep hang (TB, >=3/4/5/6, tot nhat,
-  phan bo, t-test) deu suy ra duoc tu c0..c6.
+  theo muc trung `c0..c6` (bao nhieu ve trung 0,1,2,3,4,5,6 so) va `cov3` (do phu) —
+  roi **xoa het ve**.
+- 1 ky: 6.000 dong -> 6 dong. Moi so lieu cua bang xep hang (TB, >=3/4/5/6, tot nhat,
+  phan bo, t-test) deu suy ra duoc tu c0..c6; rieng do phu phai tinh luc con ve nen
+  duoc luu san vao `cov3`.
 
 DB tao bang ban cu (luu tung ve) thu nho bang:
 
@@ -121,11 +189,18 @@ python predict_track.py compact
 Da kiem chung khong mat so lieu: 301 ky, 1.505.000 dong -> 1.505 dong, DB 71MB -> 0,5MB,
 moi con so trong bang xep hang giu nguyen.
 
-**Doi cong thuc sinh so = phai reset bang theo doi.** Neu sua thuat toan cua bat ky
-che do nao, bang xep hang cu se tron 2 phien ban khac nhau duoi cung mot ten:
+**Doi cong thuc sinh so = phai dung lai bang theo doi.** Neu sua thuat toan cua bat ky
+che do nao, bang xep hang cu se tron 2 phien ban khac nhau duoi cung mot ten. Cach
+dung la chay lai backfill voi `--redo` (xem tren) — no vua xoa vua dung lai ngay:
 
 ```powershell
-python -c "import sqlite3;c=sqlite3.connect('vietlott_data.db');c.execute('delete from prediction_sets');c.execute('delete from prediction_batches');c.commit()"
+python predict_track.py --db vietlott_data.db backfill --game power655 --periods 305 --redo
+```
+
+Neu chi muon xoa sach ma khong dung lai:
+
+```powershell
+python -c "import sqlite3;c=sqlite3.connect('vietlott_data.db');c.execute('delete from prediction_stats');c.execute('delete from prediction_sets');c.execute('delete from prediction_batches');c.commit()"
 ```
 
 ## Boi so goi y & che do "Tranh so dong"
@@ -134,6 +209,11 @@ O muc **Bo so goi y** tren trang, o "So bo" nhan tu do 1–5000. Tu 21 bo tro le
 che do **boi so**: bo qua rang buoc "cac bo phai khac nhau >=2 so" (O(n^2), bat kha
 thi o quy mo lon), chi dam bao khong trung lap, va hien them o van ban de chep/in
 toan bo danh sach.
+
+Dong thong ke duoi o nhap hien **do phu** cua boi so vua tao (to vang khi < 50%,
+xanh khi >= 80%) kem canh bao neu cac ve chong lan nhau qua nhieu. Neu dinh mua ca
+boi so thi day la con so dang nhin nhat — xem muc "bang xep theo DO PHU" o tren.
+Muon phu cao nhat thi chon che do **Phu rong**.
 
 Che do **Tranh so dong** dung mo hinh do pho bien: ne so nhieu nguoi danh (ngay sinh
 1–31, thang 1–12, duoi 8/6), uu tien duoi 0/9 va so >31, loai thang bo toan ngay
