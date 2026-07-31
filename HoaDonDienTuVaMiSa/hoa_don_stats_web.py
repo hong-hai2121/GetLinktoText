@@ -218,7 +218,7 @@ PRODUCT_PREFIX_RE = re.compile(
 # "sl"/"hd" bắt buộc có dấu hai chấm, nếu không sẽ nuốt luôn "HĐ 00004914" trong dòng điều chỉnh.
 BATCH_RES = (
     re.compile(r"\b(?:sl|hd)\s*:\s*\d[0-9a-z/.\-]*"),
-    re.compile(r"\b(?:hsd|nsx|so lo|lo sx|han dung|ngay sx)\s*[:.]?\s*\d[0-9a-z/.\-]*"),
+    re.compile(r"\b(?:hsd|nsx|lsx|so lo|lo sx|han dung|ngay sx)\s*[:.]?\s*\d[0-9a-z/.\-]*"),
     re.compile(r"\b[th]\s*/\s*\d+"),
 )
 # Số phải nằm sát sau từ vật chứa mới tính là quy cách: "Hộp 1 lọ x 50 viên" chứ không
@@ -390,6 +390,7 @@ class ProductMatcher:
         self._groups: dict[str, ProductGroup] = {}
         self._full_anchors: list[tuple[str, int]] = []
         self._core_anchors: dict[str, set[int]] = {}
+        self._catalog_packs: dict[int, set[str]] = {}
         self._catalog_hit: dict[str, CatalogProduct | None] = {}
         self._build_anchors()
         self._build([name for name in raw_names if not self._match_catalog(name)])
@@ -398,6 +399,8 @@ class ProductMatcher:
         for index, product in enumerate(self.catalog.products):
             for name in product.all_names:
                 parsed = self._parse(name)
+                if parsed.pack:
+                    self._catalog_packs.setdefault(index, set()).add(parsed.pack)
                 if len(parsed.core) < CATALOG_MIN_ANCHOR:
                     continue
                 self._full_anchors.append((catalog_anchor(name), index))
@@ -422,7 +425,8 @@ class ProductMatcher:
             if anchor in target_full:
                 return self.catalog.products[index]
 
-        # Tầng 2: chỉ khớp lõi tên, dành cho tên hóa đơn không ghi quy cách.
+        # Tầng 2: khớp lõi tên cho tên hóa đơn không ghi quy cách, hoặc ghi quy cách
+        # trùng khớp với danh mục.
         hits = sorted((core for core in self._core_anchors if core in parsed.core), key=len, reverse=True)
         if not hits:
             return None
@@ -430,7 +434,13 @@ class ProductMatcher:
         if len(owners) != 1:
             # Lõi tên này thuộc nhiều thuốc khác quy cách, không đoán bừa.
             return None
-        return self.catalog.products[next(iter(owners))]
+        index = next(iter(owners))
+        if parsed.pack and parsed.pack not in self._catalog_packs.get(index, set()):
+            # Tên ghi quy cách mà danh mục không có đúng quy cách đó thì phải báo
+            # "chưa có trong danh mục" chứ không gán theo lõi tên, nếu không
+            # "P - Gast (Hộp 20 gói)" sẽ bị gộp vào "P-Gast (hộp 15 gói)".
+            return None
+        return self.catalog.products[index]
 
     def _parse(self, raw: object) -> ProductName:
         text = clean_cell(raw)
