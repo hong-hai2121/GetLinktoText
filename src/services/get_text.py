@@ -40,7 +40,9 @@ class GetTextService:
         skip_long_videos: bool = False,
         skip_gpt_processing: bool = False,
         move_processed_links: bool = True,
+        language: str = "auto",
     ):
+        config.TRANSCRIBE_LANGUAGE = language or "auto"
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
         config.MAX_CHUNKS_RUNTIME = max(1, int(max_chunks))

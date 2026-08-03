@@ -10,6 +10,8 @@ from src.services.get_text import GetTextService, StopRequestedError
 
 
 class GetTextApp:
+    LANGUAGE_CODES = ("auto", "vi", "en")
+
     def __init__(self, root):
         self.root = root
         self.root.title("GetTextFromLink — Trích xuất nội dung")
@@ -20,6 +22,9 @@ class GetTextApp:
         self.root.minsize(1080, 640)
 
         self.selected_model = tk.StringVar(value=config.MODEL_NAME)
+        self.selected_language = tk.StringVar(
+            value=config.LANGUAGE_LABELS.get(config.TRANSCRIBE_LANGUAGE, config.LANGUAGE_LABELS["auto"])
+        )
 
         self.title_mode_var = tk.BooleanVar(value=False)
         self.title_submode_var = tk.StringVar(value="full")
@@ -252,6 +257,19 @@ class GetTextApp:
             state="readonly",
             width=20,
         ).pack(anchor="w", fill="x", pady=(3, 10))
+        ttk.Label(c0, text="Ngôn ngữ video", style="TLabel").pack(anchor="w")
+        ttk.Combobox(
+            c0,
+            textvariable=self.selected_language,
+            values=[config.LANGUAGE_LABELS[code] for code in self.LANGUAGE_CODES],
+            state="readonly",
+            width=20,
+        ).pack(anchor="w", fill="x", pady=(3, 2))
+        ttk.Label(
+            c0,
+            text="Giữ nguyên tiếng gốc, không dịch",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(0, 10))
         ttk.Label(c0, text="Số link mỗi lần (0 = tất cả)", style="TLabel").pack(anchor="w")
         ttk.Spinbox(
             c0, from_=0, to=100000, textvariable=self.max_links_per_run_var, width=20
@@ -676,6 +694,8 @@ class GetTextApp:
     # ── Worker thread ──────────────────────────────────────────────────────
     def run_pipeline_thread(self):
         selected = self.selected_model.get()
+        label_to_code = {config.LANGUAGE_LABELS[code]: code for code in self.LANGUAGE_CODES}
+        language = label_to_code.get(self.selected_language.get(), "auto")
         use_title_mode = self.title_mode_var.get()
         title_submode = self.title_submode_var.get() if use_title_mode else "full"
 
@@ -714,6 +734,7 @@ class GetTextApp:
             skip_long_videos=self.skip_long_video_var.get(),
             skip_gpt_processing=self.skip_gpt_var.get(),
             move_processed_links=self.move_processed_links_var.get(),
+            language=language,
         )
 
         try:

@@ -9,18 +9,84 @@ from pydub import AudioSegment
 from src import config
 from src.notifications import play_sound
 
-# Tham số cố định cho faster-whisper — module-level để không tái tạo mỗi lần gọi
-_TRANSCRIBE_OPTS = dict(
-    language="vi",
+# Tham số không phụ thuộc ngôn ngữ — module-level để không tái tạo mỗi lần gọi
+_BASE_TRANSCRIBE_OPTS = dict(
     condition_on_previous_text=False,
     temperature=0,
     beam_size=5,
-    initial_prompt="Đây là nội dung tiếng Việt.",
     no_speech_threshold=0.6,
     compression_ratio_threshold=2.4,
     vad_filter=True,
     vad_parameters=dict(min_silence_duration_ms=500),
 )
+
+
+def build_transcribe_opts(language):
+    """Ghép tham số cố định với ngôn ngữ và câu mồi tương ứng."""
+    opts = dict(_BASE_TRANSCRIBE_OPTS)
+    # language=None -> để faster-whisper tự dò trên từng lần gọi
+    opts["language"] = None if language in (None, "auto") else language
+    prompt = config.LANGUAGE_PROMPTS.get(language)
+    if prompt:
+        opts["initial_prompt"] = prompt
+    return opts
+
+
+def _make_language_probe(audio_path, seconds=30):
+    """Cắt đoạn đầu ra file tạm để dò ngôn ngữ — tránh nạp cả file dài vào RAM."""
+    probe_path = f"{audio_path}_langprobe.wav"
+    command = [
+        config.FFMPEG_PATH, "-y",
+        "-t", str(seconds),
+        "-i", audio_path,
+        "-ac", "1", "-ar", "16000", "-vn",
+        probe_path,
+    ]
+    try:
+        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return probe_path
+    except Exception as e:
+        print(f"⚠️ Không cắt được đoạn mẫu để dò ngôn ngữ: {e}")
+        return None
+
+
+def detect_language(audio_path):
+    """Dò ngôn ngữ dựa trên đoạn đầu của audio; thất bại hoặc thiếu tin cậy -> DEFAULT_LANGUAGE."""
+    from faster_whisper.audio import decode_audio
+    from faster_whisper.vad import VadOptions
+
+    fallback = config.DEFAULT_LANGUAGE
+    fallback_label = config.LANGUAGE_LABELS.get(fallback, fallback)
+    probe_path = _make_language_probe(audio_path)
+    try:
+        audio = decode_audio(probe_path or audio_path, sampling_rate=16000)
+        # vad_filter: bỏ nhạc nền / khoảng lặng, chỉ dò trên phần có giọng nói
+        language, probability, _ = config.model.detect_language(
+            audio,
+            vad_filter=True,
+            vad_parameters=VadOptions(min_silence_duration_ms=500),
+        )
+    except Exception as e:
+        print(f"⚠️ Không dò được ngôn ngữ ({e}), dùng {fallback_label}.")
+        return fallback
+    finally:
+        if probe_path and os.path.exists(probe_path):
+            try:
+                os.remove(probe_path)
+            except Exception:
+                pass
+
+    label = config.LANGUAGE_LABELS.get(language, language)
+    threshold = (
+        config.LANGUAGE_DETECT_MIN_PROB
+        if language in config.LANGUAGE_PROMPTS
+        else config.LANGUAGE_DETECT_OTHER_MIN_PROB
+    )
+    if probability < threshold:
+        print(f"⚠️ Dò ra {label} nhưng độ tin cậy thấp ({probability:.0%}), dùng {fallback_label}.")
+        return fallback
+    print(f"🌐 Ngôn ngữ nhận diện: {label} ({probability:.0%})")
+    return language
 
 
 def _segments_to_text(segments) -> str:
@@ -195,8 +261,16 @@ def transcribe_whisper(
         )
         print("✅ Model đã tải thành công.")
 
+    # Khóa ngôn ngữ một lần cho cả video: các chunk của cùng video không bị nhận nhầm khác nhau
+    language = config.TRANSCRIBE_LANGUAGE
+    if language == "auto":
+        language = detect_language(audio_path)
+    else:
+        print(f"🌐 Ngôn ngữ đã chọn: {config.LANGUAGE_LABELS.get(language, language)}")
+    opts = build_transcribe_opts(language)
+
     def transcribe_one(path):
-        segments, _ = config.model.transcribe(path, **_TRANSCRIBE_OPTS)
+        segments, _ = config.model.transcribe(path, **opts)
         text_local = _segments_to_text(segments)
         # Chuyển model khi lặp từ - hiện tắt (đặt ENABLE_MODEL_SWITCH_ON_REPEAT=True để bật lại)
         if config.ENABLE_MODEL_SWITCH_ON_REPEAT and detect_repetition(text_local):
@@ -228,7 +302,7 @@ def transcribe_whisper(
                     )
                     return text_local.strip()
             print("🔄 Đang nhận diện lại với model large-v3...")
-            segments2, _ = config.model2.transcribe(path, **_TRANSCRIBE_OPTS)
+            segments2, _ = config.model2.transcribe(path, **opts)
             text_local = _segments_to_text(segments2)
             if config.device == "cuda":
                 config.torch.cuda.empty_cache()

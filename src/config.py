@@ -20,6 +20,21 @@ FFPROBE_PATH = shutil.which("ffprobe")
 CHUNK_LENGTH_MS = 3 * 60 * 1000  # 3 phút/đoạn
 DEFAULT_MAX_CHUNKS = 2  # Mặc định nhận diện 5 đoạn đầu
 
+# Ngôn ngữ nhận diện: "auto" = dò theo audio, hoặc mã ngôn ngữ Whisper ("vi", "en", ...)
+TRANSCRIBE_LANGUAGE = "auto"
+DEFAULT_LANGUAGE = "vi"  # Dùng khi dò ngôn ngữ thất bại hoặc độ tin cậy thấp
+LANGUAGE_DETECT_MIN_PROB = 0.5  # Ngưỡng cho tiếng Việt / tiếng Anh
+LANGUAGE_DETECT_OTHER_MIN_PROB = 0.85  # Ngôn ngữ lạ phải chắc hơn mới nhận (tránh audio nhiễu)
+LANGUAGE_PROMPTS = {
+    "vi": "Đây là nội dung tiếng Việt.",
+    "en": "This is English content.",
+}
+LANGUAGE_LABELS = {
+    "auto": "Tự động nhận diện",
+    "vi": "Tiếng Việt",
+    "en": "Tiếng Anh",
+}
+
 USE_TITLE_MODE = False
 MAX_CHUNKS_RUNTIME = DEFAULT_MAX_CHUNKS
 
