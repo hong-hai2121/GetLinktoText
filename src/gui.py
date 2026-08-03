@@ -16,10 +16,11 @@ class GetTextApp:
         self.root = root
         self.root.title("GetTextFromLink — Trích xuất nội dung")
         # Cửa sổ gọn, không ép tỉ lệ 21:9
-        w, h = 1200, 720
+        w, h = 1260, 740
         self.root.geometry(f"{w}x{h}")
         self.center_window(w, h)
-        self.root.minsize(1080, 640)
+        # Không cho hẹp hơn bề ngang thiết kế, nếu không chữ ở cột 3 sẽ bị cắt
+        self.root.minsize(1200, 660)
 
         self.selected_model = tk.StringVar(value=config.MODEL_NAME)
         self.selected_language = tk.StringVar(
@@ -47,11 +48,12 @@ class GetTextApp:
         self.service = GetTextService(logger=self.log)
 
     def center_window(self, w: int = 1200, h: int = 720):
+        """Canh giữa màn hình, nhô cao hơn tâm 10px cho cân mắt."""
         self.root.update_idletasks()
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 2)
+        y = max(0, (sh - h) // 2 - 10)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
     # ── Theme / Styles ──────────────────────────────────────────────────────
@@ -73,15 +75,27 @@ class GetTextApp:
             "muted": "#6b7280",
             "header": "#4f46e5",
             "header_text": "#ffffff",
+            # Header chuyển sắc chàm -> tím
+            "grad_from": "#4338ca",
+            "grad_to": "#7c3aed",
+            "grad_sub": "#dcdefb",
+            # Màu cho nhật ký
+            "log_error": "#dc2626",
+            "log_warn": "#d97706",
+            "log_ok": "#15803d",
+            "log_head": "#4f46e5",
         }
         self.F = {
             "title": ("Segoe UI", 16, "bold"),
             "subtitle": ("Segoe UI", 10),
+            "header_line": ("Segoe UI", 12),
             "h": ("Segoe UI", 11, "bold"),
             "body": ("Segoe UI", 10),
             "small": ("Segoe UI", 9),
             "section": ("Segoe UI", 9, "bold"),
             "btn": ("Segoe UI", 10, "bold"),
+            "btn_lg": ("Segoe UI", 11, "bold"),
+            "badge": ("Segoe UI", 10, "bold"),
             "mono": ("Consolas", 10),
         }
         self.root.configure(bg=self.C["bg"])
@@ -111,6 +125,10 @@ class GetTextApp:
         style.configure("Muted.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
         style.configure("Badge.TLabel", background=C["primary_dk"], foreground="#ffffff", font=F["small"], padding=(10, 4))
         style.configure("Status.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
+        style.configure(
+            "Count.TLabel", background=C["primary_lt"], foreground=C["primary_dk"],
+            font=F["section"], padding=(12, 5),
+        )
 
         # Cards (labelframe)
         style.configure(
@@ -154,6 +172,23 @@ class GetTextApp:
             bordercolor=[("active", C["primary"])],
             foreground=[("active", C["primary_dk"]), ("disabled", "#adb3c2")],
         )
+
+        # Nút trong tab Danh sách link: ấn xuống thì phồng to ra (không lún xuống)
+        style.configure(
+            "Grow.TButton", background=C["surface_alt"], foreground=C["text"],
+            font=F["btn"], borderwidth=1, bordercolor=C["border"], padding=(14, 9),
+        )
+        style.map(
+            "Grow.TButton",
+            background=[("active", C["primary_lt"])],
+            bordercolor=[("active", C["primary"])],
+            foreground=[("active", C["primary_dk"])],
+        )
+        style.configure(
+            "GrowPressed.TButton", background=C["primary_lt"], foreground=C["primary_dk"],
+            font=F["btn_lg"], borderwidth=2, bordercolor=C["primary"], padding=(20, 12),
+        )
+        style.map("GrowPressed.TButton", background=[("active", C["primary_lt"])])
 
         # Checkbutton / Radiobutton trên nền card
         style.configure("Card.TCheckbutton", background=C["surface"], foreground=C["text"], font=F["body"])
@@ -203,6 +238,69 @@ class GetTextApp:
             foreground=[("selected", C["primary_dk"])],
         )
 
+    # ── Header vẽ tay ──────────────────────────────────────────────────────
+    @staticmethod
+    def _hex_to_rgb(value: str):
+        value = value.lstrip("#")
+        return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
+
+    @staticmethod
+    def _mix_hex(rgb_from, rgb_to, ratio: float) -> str:
+        return "#%02x%02x%02x" % tuple(
+            round(a + (b - a) * ratio) for a, b in zip(rgb_from, rgb_to)
+        )
+
+    @staticmethod
+    def _round_rect(canvas, x0, y0, x1, y1, radius, **kwargs):
+        points = [
+            x0 + radius, y0, x1 - radius, y0, x1, y0,
+            x1, y0 + radius, x1, y1 - radius, x1, y1,
+            x1 - radius, y1, x0 + radius, y1, x0, y1,
+            x0, y1 - radius, x0, y0 + radius, x0, y0,
+        ]
+        return canvas.create_polygon(points, smooth=True, **kwargs)
+
+    def draw_header(self, event=None):
+        """Vẽ lại header: nền chuyển sắc + tiêu đề + huy hiệu thiết bị."""
+        canvas = self.header_canvas
+        width = event.width if event else canvas.winfo_width()
+        height = event.height if event else canvas.winfo_height()
+        if width <= 1 or height <= 1:
+            return
+
+        canvas.delete("all")
+        C, F = self.C, self.F
+
+        rgb_from = self._hex_to_rgb(C["grad_from"])
+        rgb_to = self._hex_to_rgb(C["grad_to"])
+        steps = 120
+        for i in range(steps):
+            color = self._mix_hex(rgb_from, rgb_to, i / (steps - 1))
+            canvas.create_rectangle(
+                width * i / steps, 0, width * (i + 1) / steps + 1, height,
+                outline="", fill=color,
+            )
+
+        canvas.create_text(
+            26, height / 2, anchor="w",
+            text="🎬  Trích xuất & chuyển video / link thành văn bản bằng Whisper",
+            fill=C["header_text"], font=F["header_line"],
+        )
+
+        import tkinter.font as tkfont
+
+        badge_text = f"💻  {'GPU · CUDA' if config.device == 'cuda' else 'CPU'}"
+        text_width = tkfont.Font(font=F["badge"]).measure(badge_text)
+        right, pad = width - 24, 14
+        self._round_rect(
+            canvas, right - text_width - pad * 2, height / 2 - 17, right, height / 2 + 17,
+            16, fill="#ffffff", outline="",
+        )
+        canvas.create_text(
+            right - pad, height / 2, anchor="e", text=badge_text,
+            fill=C["grad_from"], font=F["badge"],
+        )
+
     def build_ui(self):
         for child in self.root.winfo_children():
             child.destroy()
@@ -215,39 +313,30 @@ class GetTextApp:
         self.root.grid_rowconfigure(2, weight=1)  # notebook
         self.root.grid_rowconfigure(3, weight=0)  # status
 
-        # ── Header ───────────────────────────────────────────────────────────
-        header = ttk.Frame(self.root, style="Header.TFrame", padding=(24, 16))
-        header.grid(row=0, column=0, sticky="ew")
-        header.grid_columnconfigure(0, weight=1)
-        header.grid_columnconfigure(1, weight=0)
-
-        htext = ttk.Frame(header, style="Header.TFrame")
-        htext.grid(row=0, column=0, sticky="w")
-        ttk.Label(htext, text="🎬  GetTextFromLink", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
-            htext,
-            text="Trích xuất & chuyển video / link thành văn bản bằng Whisper",
-            style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
-
-        device_label = "GPU · CUDA" if config.device == "cuda" else "CPU"
-        ttk.Label(header, text=f"💻  {device_label}", style="Badge.TLabel").grid(row=0, column=1, sticky="e")
+        # ── Header (canvas để vẽ nền chuyển sắc) ─────────────────────────────
+        self.header_canvas = tk.Canvas(
+            self.root, height=68, highlightthickness=0, bd=0, bg=C["header"]
+        )
+        self.header_canvas.grid(row=0, column=0, sticky="ew")
+        self.header_canvas.bind("<Configure>", self.draw_header)
 
         # ── Controls band (config + actions) ─────────────────────────────────
         band = ttk.Frame(self.root, style="App.TFrame", padding=(16, 14, 16, 6))
         band.grid(row=1, column=0, sticky="ew")
         band.grid_columnconfigure(0, weight=1)
-        band.grid_columnconfigure(1, weight=0, minsize=330)
+        band.grid_columnconfigure(1, weight=0, minsize=300)
 
         # ── Config card ───────────────────────────────────────────────────
         cfg = ttk.LabelFrame(band, text="  Cấu hình  ", style="Card.TLabelframe")
         cfg.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        for i in range(3):
-            cfg.grid_columnconfigure(i, weight=1, uniform="cfg")
+        # Cột rộng theo nội dung thật, không chia đều — cột 3 có nhãn dài nhất
+        cfg.grid_columnconfigure(0, weight=0, minsize=215)
+        cfg.grid_columnconfigure(1, weight=1, minsize=245)
+        cfg.grid_columnconfigure(2, weight=2, minsize=330)
 
         # Cột 0 — Nhận diện
         c0 = ttk.Frame(cfg, style="Surface.TFrame")
-        c0.grid(row=0, column=0, sticky="nw", padx=(0, 18))
+        c0.grid(row=0, column=0, sticky="nw", padx=(0, 14))
         ttk.Label(c0, text="NHẬN DIỆN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Label(c0, text="Model Whisper", style="TLabel").pack(anchor="w")
         ttk.Combobox(
@@ -277,7 +366,7 @@ class GetTextApp:
 
         # Cột 1 — Tùy chọn
         c1 = ttk.Frame(cfg, style="Surface.TFrame")
-        c1.grid(row=0, column=1, sticky="nw", padx=(0, 18))
+        c1.grid(row=0, column=1, sticky="nw", padx=(0, 14))
         ttk.Label(c1, text="TÙY CHỌN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
             c1, text="Bỏ qua video dài hơn 15 phút",
@@ -309,9 +398,10 @@ class GetTextApp:
         )
         self.max_chunks_spin.pack(side="left")
 
+        # "Chế độ con" nằm trên một dòng riêng để 3 nút radio đủ chỗ
+        ttk.Label(c2, text="Chế độ con:", style="Muted.TLabel").pack(anchor="w", padx=(8, 0))
         sub = ttk.Frame(c2, style="Surface.TFrame")
-        sub.pack(anchor="w", padx=(8, 0))
-        ttk.Label(sub, text="Chế độ con:", style="Muted.TLabel").pack(side="left", padx=(0, 8))
+        sub.pack(anchor="w", padx=(8, 0), pady=(3, 0))
         self._submode_radios = []
         for label, value in [("Tiêu đề", "title_only"), ("Mô tả", "full"), ("Nội dung", "content_only")]:
             rb = ttk.Radiobutton(
@@ -328,7 +418,7 @@ class GetTextApp:
             f"📄 Word: {config.OUTPUT_WORD_FILE}      "
             f"📋 Processed: {config.PROCESSED_LINKS_FILE}"
         )
-        ttk.Label(cfg, text=info_text, style="Muted.TLabel", wraplength=980, justify="left").grid(
+        ttk.Label(cfg, text=info_text, style="Muted.TLabel", wraplength=1060, justify="left").grid(
             row=2, column=0, columnspan=3, sticky="w"
         )
 
@@ -365,16 +455,43 @@ class GetTextApp:
         self.nb.grid(row=0, column=0, sticky="nsew")
 
         tab_log = ttk.Frame(self.nb, style="Card.TFrame", padding=2)
-        tab_links = ttk.Frame(self.nb, style="Card.TFrame", padding=2)
+        tab_links = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
         tab_result = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
 
         self.nb.add(tab_log, text="  📜  Nhật ký  ")
         self.nb.add(tab_links, text="  🔗  Danh sách link  ")
         self.nb.add(tab_result, text="  📄  Nội dung Word  ")
 
-        for tab in (tab_log, tab_links):
-            tab.grid_rowconfigure(0, weight=1)
-            tab.grid_columnconfigure(0, weight=1)
+        tab_log.grid_rowconfigure(0, weight=1)
+        tab_log.grid_columnconfigure(0, weight=1)
+
+        # Tab "Danh sách link": thanh công cụ (row 0) + ô nhập link (row 1)
+        tab_links.grid_rowconfigure(0, weight=0)
+        tab_links.grid_rowconfigure(1, weight=1)
+        tab_links.grid_columnconfigure(0, weight=1)
+
+        links_toolbar = ttk.Frame(tab_links, style="Card.TFrame")
+        links_toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.paste_links_btn = ttk.Button(
+            links_toolbar, text="📋  Dán link", command=self.paste_links, style="Grow.TButton"
+        )
+        self.paste_links_btn.pack(side="left")
+        self.clear_links_btn = ttk.Button(
+            links_toolbar, text="🗑  Xóa trắng", command=self.clear_links, style="Grow.TButton"
+        )
+        self.clear_links_btn.pack(side="left", padx=(8, 0))
+        for button in (self.paste_links_btn, self.clear_links_btn):
+            self._bind_grow_effect(button)
+
+        self._link_count_var = tk.StringVar(value="0 link")
+        ttk.Label(links_toolbar, textvariable=self._link_count_var, style="Count.TLabel").pack(
+            side="right"
+        )
+        ttk.Label(
+            links_toolbar,
+            text="Dán từ clipboard, mỗi link một dòng — link trùng sẽ tự bỏ qua.",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(12, 0))
 
         # Tab "Nội dung Word": thanh công cụ (row 0) + nội dung (row 1)
         tab_result.grid_rowconfigure(0, weight=0)
@@ -421,7 +538,9 @@ class GetTextApp:
         self.result_text = scrolledtext.ScrolledText(tab_result, font=F["body"], **text_kwargs)
 
         self.log_text.grid(row=0, column=0, sticky="nsew")
-        self.links_text.grid(row=0, column=0, sticky="nsew")
+        self.links_text.grid(row=1, column=0, sticky="nsew")
+        self.links_text.bind("<KeyRelease>", lambda _event: self.update_link_count())
+        self._init_log_tags()
         self.result_text.grid(row=1, column=0, sticky="nsew")
 
         self.nb.select(tab_log)
@@ -438,6 +557,77 @@ class GetTextApp:
         ttk.Label(status_bar, textvariable=self._status_var, style="Status.TLabel").pack(
             side="left", fill="x", expand=True
         )
+
+    # ── Hiệu ứng nút: ấn xuống thì phồng to ────────────────────────────────
+    def _bind_grow_effect(self, button, base_style="Grow.TButton"):
+        def on_press(_event=None):
+            if str(button["state"]) != "disabled":
+                button.configure(style="GrowPressed.TButton")
+
+        def on_release(_event=None):
+            # Giữ trạng thái phồng thêm chút để thấy rõ, rồi trả về như cũ
+            self.root.after(120, lambda: button.configure(style=base_style))
+
+        button.bind("<ButtonPress-1>", on_press, add="+")
+        button.bind("<ButtonRelease-1>", on_release, add="+")
+
+    # ── Danh sách link ─────────────────────────────────────────────────────
+    def _current_links(self):
+        return [line.strip() for line in self.links_text.get("1.0", tk.END).splitlines() if line.strip()]
+
+    def update_link_count(self):
+        count = len(self._current_links())
+        self._link_count_var.set(f"{count} link")
+
+    def paste_links(self):
+        """Dán link từ clipboard vào cuối danh sách, bỏ dòng trống và link trùng."""
+        try:
+            clipboard = self.root.clipboard_get()
+        except Exception:
+            self.log("⚠️ Clipboard trống hoặc không phải dạng chữ, không dán được.")
+            return
+
+        pasted = [line.strip() for line in clipboard.splitlines() if line.strip()]
+        if not pasted:
+            self.log("⚠️ Clipboard không có nội dung để dán.")
+            return
+
+        existing = self._current_links()
+        seen = set(existing)
+        added = []
+        for line in pasted:
+            if line not in seen:
+                seen.add(line)
+                added.append(line)
+
+        if not added:
+            self.log(f"ℹ️ {len(pasted)} link trong clipboard đều đã có sẵn trong danh sách.")
+            return
+
+        self.links_text.delete("1.0", tk.END)
+        self.links_text.insert("1.0", "\n".join(existing + added) + "\n")
+        self.links_text.see(tk.END)
+        self.update_link_count()
+
+        skipped = len(pasted) - len(added)
+        note = f" (bỏ qua {skipped} link trùng)" if skipped else ""
+        self.log(f"📋 Đã dán thêm {len(added)} link{note}. Tổng: {len(existing) + len(added)} link.")
+        self.update_status(f"Đã dán {len(added)} link", "green")
+
+    def clear_links(self):
+        if not self._current_links():
+            self.log("ℹ️ Danh sách link đang trống.")
+            return
+        if not messagebox.askyesno(
+            "Xóa trắng danh sách",
+            "Xóa toàn bộ link đang hiển thị?\n\n"
+            "File trên đĩa chỉ thay đổi khi bạn bấm 'Lưu danh sách'. "
+            "Bấm 'Tải lại' để lấy lại danh sách cũ.",
+        ):
+            return
+        self.links_text.delete("1.0", tk.END)
+        self.update_link_count()
+        self.log("🗑 Đã xóa trắng ô danh sách link (chưa ghi vào file).")
 
     # ── Tab switching ──────────────────────────────────────────────────────
     def on_tab_changed(self, event=None):
@@ -469,6 +659,7 @@ class GetTextApp:
             return
         try:
             self.links_text.insert(1.0, content)
+            self.update_link_count()
             self.log(f"✅ Đã tải {link_count} link từ {path}")
         except Exception as e:
             self.log(f"❌ Lỗi khi tải link: {e}")
@@ -477,6 +668,7 @@ class GetTextApp:
         try:
             content = self.links_text.get(1.0, tk.END).strip()
             link_count = io.write_links(config.LINKS_FILE, content)
+            self.update_link_count()
             self.log(f"💾 Đã lưu {link_count} link vào {os.path.abspath(config.LINKS_FILE)}")
         except Exception as e:
             self.log(f"❌ Lỗi khi lưu link: {e}")
@@ -641,9 +833,36 @@ class GetTextApp:
             self.root.after(0, lambda: self.restart_firefox_btn.config(state="normal"))
 
     # ── Logging & status ───────────────────────────────────────────────────
+    def _init_log_tags(self):
+        C = self.C
+        import tkinter.font as tkfont
+
+        head_font = tkfont.Font(font=self.F["mono"])
+        head_font.configure(weight="bold")
+        self.log_text.tag_configure("log_error", foreground=C["log_error"])
+        self.log_text.tag_configure("log_warn", foreground=C["log_warn"])
+        self.log_text.tag_configure("log_ok", foreground=C["log_ok"])
+        self.log_text.tag_configure("log_head", foreground=C["log_head"], font=head_font)
+        self.log_text.tag_configure("log_muted", foreground=C["muted"])
+
+    @staticmethod
+    def _log_tag(message: str) -> str:
+        if message.startswith("===") or message.strip().startswith("==="):
+            return "log_head"
+        if "❌" in message or "⛔" in message:
+            return "log_error"
+        if "⚠" in message:
+            return "log_warn"
+        if any(mark in message for mark in ("✅", "🎉", "💾", "⬇")):
+            return "log_ok"
+        if any(mark in message for mark in ("🗑", "ℹ️", "⏭")):
+            return "log_muted"
+        return ""
+
     def log(self, message: str):
         def _append():
-            self.log_text.insert(tk.END, message + "\n")
+            tag = self._log_tag(message)
+            self.log_text.insert(tk.END, message + "\n", tag or ())
             self.log_text.see(tk.END)
 
         self.root.after(0, _append)
