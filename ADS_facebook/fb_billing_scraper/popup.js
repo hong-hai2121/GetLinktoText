@@ -154,6 +154,14 @@
   function showError(msg) { errorMsg.style.display = 'block'; errorMsg.textContent = msg; }
   function clearError()   { errorMsg.style.display = 'none';  errorMsg.textContent = ''; }
 
+  // Facebook đã đổi chỗ trang Hoạt động thanh toán nhiều lần:
+  // business.facebook.com → adsmanager.facebook.com/adsmanager/billing_hub/payment_activity/
+  // Vì vậy chấp nhận MỌI subdomain facebook.com và để content script tự nhận
+  // diện bằng DOM (có bảng giao dịch hay không) thay vì đoán theo URL.
+  function isFacebookUrl(url) {
+    return /^https?:\/\/([a-z0-9-]+\.)*facebook\.com(\/|$)/i.test(url || '');
+  }
+
   function getActiveTab() {
     return new Promise((resolve, reject) => {
       chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
@@ -271,8 +279,8 @@
     clearError();
     try {
       const tab = await getActiveTab();
-      if (!tab.url?.includes('business.facebook.com')) {
-        showError('Hãy mở trang Facebook Business trước.');
+      if (!isFacebookUrl(tab.url)) {
+        showError('Hãy mở trang Hoạt động thanh toán của Trình quản lý quảng cáo trước.');
         return;
       }
       await ensureContentScript(tab.id);
@@ -360,7 +368,7 @@
   async function pollStatus() {
     try {
       const tab = await getActiveTab();
-      if (!tab.url?.includes('business.facebook.com')) {
+      if (!isFacebookUrl(tab.url)) {
         renderUI({
           running: false, phase: 'idle',
           listCount: 0, detailCount: 0, processed: 0, total: 0,

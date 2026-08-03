@@ -107,6 +107,7 @@ NAV = [
     ("KIỂM TRA", [
         ("checkspend", "✓  Check Spend", "check_spend.py"),
         ("checkbill",  "✓  Check Billing vs Camp", "check_billing_vs_campaigns.py"),
+        ("checkactive", "🎨  Tô màu TK hoạt động", "check_activity.py"),
     ]),
 ]
 
@@ -162,6 +163,11 @@ FUNC_INFO = [
      "Đối chiếu tab Chi tiết (billing) với tab tài khoản: (1) tên chiến dịch có trong "
      "billing nhưng THIẾU ở tab tài khoản; (2) tổng \"Số tiền phân bổ\" (billing) so với "
      "\"Spend Tháng Này\" theo từng chiến dịch, chỉ ra phần lệch và chỉ-có-một-bên."),
+    ("checkactive", "🎨  Tô màu TK hoạt động", "check_activity.py",
+     "Chạy SAU Phase 1. Với mỗi tài khoản ở sheet \"TKQC API\", dò tab campaign tương ứng: "
+     "tab có nhiều hơn 1 hàng (tức có dữ liệu dưới hàng tiêu đề) = CÓ hoạt động → tô cả hàng "
+     "nền XANH; tab rỗng, chỉ có hàng tiêu đề, hoặc không có tab = KHÔNG hoạt động → nền ĐỎ. "
+     "In kèm số campaign + tổng Spend từng tài khoản. Chạy lại main.py sẽ ghi đè màu này."),
 ]
 
 
@@ -603,6 +609,22 @@ class Hub(tk.Tk):
             self.content, "▶  Đối chiếu Billing vs Campaigns", self._run_checkbill
         ).pack(anchor="w")
 
+    def _page_checkactive(self):
+        self._set_header("Tô màu TK hoạt động",
+                         "Chạy sau Phase 1: tài khoản có dữ liệu campaign → hàng xanh, không có → hàng đỏ.")
+        card = self._card()
+        self._desc(card, "Dò tab campaign của từng tài khoản trong \"TKQC API\". Tab có NHIỀU HƠN 1 hàng "
+                         "(hàng 1 là tiêu đề) = có hoạt động → tô cả hàng nền xanh nhạt; tab rỗng, chỉ có "
+                         "hàng tiêu đề, hoặc chưa có tab = không hoạt động → nền đỏ nhạt. "
+                         "Lưu ý: chạy lại \"Cập nhật TKQC\" (main.py) sẽ ghi đè màu này.")
+        row = tk.Frame(self.content, bg=BG)
+        row.pack(anchor="w")
+        self._primary_btn(row, "🎨  Tô màu TKQC API", self._run_checkactive).pack(side="left")
+        tk.Button(row, text="👁  Xem trước (không tô)", bg=SURFACE, fg=TEXT,
+                  activebackground=BORDER, font=("Segoe UI", 10), relief="flat", bd=0,
+                  padx=18, pady=10, cursor="hand2",
+                  command=lambda: self._run_checkactive(dry_run=True)).pack(side="left", padx=(10, 0))
+
     # ── Khoảng thời gian → config.py ──────────────────────────────────────────
     def _write_config_from_bar(self) -> bool:
         if self.mode_var.get() == "preset":
@@ -676,6 +698,12 @@ class Hub(tk.Tk):
         self._run_stream(
             [sys.executable, "-u", "check_billing_vs_campaigns.py", detail, camp],
             "Check Billing vs Campaigns")
+
+    def _run_checkactive(self, dry_run: bool = False):
+        cmd = [sys.executable, "-u", "check_activity.py"]
+        if dry_run:
+            cmd.append("--dry-run")
+        self._run_stream(cmd, "Tô màu TK hoạt động" + (" (xem trước)" if dry_run else ""))
 
     def _stream_worker(self, cmd: list[str]):
         env = os.environ.copy()
