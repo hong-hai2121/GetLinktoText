@@ -12,13 +12,18 @@ from src.notifications import play_sound
 # Tham số không phụ thuộc ngôn ngữ — module-level để không tái tạo mỗi lần gọi
 _BASE_TRANSCRIBE_OPTS = dict(
     condition_on_previous_text=False,
-    temperature=0,
+    temperature=config.TEMPERATURE_FALLBACK,
     beam_size=5,
     no_speech_threshold=0.6,
     compression_ratio_threshold=2.4,
+    log_prob_threshold=config.LOG_PROB_THRESHOLD,
+    repetition_penalty=config.REPETITION_PENALTY,
+    no_repeat_ngram_size=config.NO_REPEAT_NGRAM_SIZE,
     vad_filter=True,
     vad_parameters=dict(min_silence_duration_ms=500),
 )
+
+_PUNCT = " \t\r\n.,!?;:…\"'“”‘’()-–—"
 
 
 def build_transcribe_opts(language):
@@ -89,8 +94,54 @@ def detect_language(audio_path):
     return language
 
 
+def collapse_repetitions(text, max_repeat=None, max_phrase_len=6):
+    """Rút gọn chuỗi từ/cụm từ lặp liên tiếp do Whisper kẹt vòng lặp.
+
+    "giả giả giả ... giả" -> "giả giả giả". Lưới an toàn cuối cùng: tham số giải mã đã
+    chặn phần lớn vòng lặp, nhưng segment ở nhiệt độ cao nhất vẫn có thể lọt.
+    """
+    if max_repeat is None:
+        max_repeat = config.MAX_WORD_REPEAT
+    words = text.split()
+    total = len(words)
+    if total < 2:
+        return text
+
+    # So khớp bỏ qua hoa/thường và dấu câu: "giả" và "giả." là cùng một từ khi xét lặp
+    keys = [w.lower().strip(_PUNCT) or w.lower() for w in words]
+    out = []
+    i = 0
+    while i < total:
+        best_len, best_reps = 1, 1
+        for plen in range(1, max_phrase_len + 1):
+            if i + 2 * plen > total:
+                break
+            unit = keys[i:i + plen]
+            reps = 1
+            j = i + plen
+            while j + plen <= total and keys[j:j + plen] == unit:
+                reps += 1
+                j += plen
+            if reps >= 2 and reps * plen > best_reps * best_len:
+                best_len, best_reps = plen, reps
+        if best_reps > 1:
+            # Từ đơn: giữ tối đa max_repeat lần. Cụm nhiều từ: lặp từ 3 lần trở lên
+            # gần như chắc chắn là ảo giác, giữ lại 2 cho an toàn.
+            keep = max_repeat if best_len == 1 else 2
+            keep = min(best_reps, keep)
+            out.extend(words[i:i + best_len * keep])
+            i += best_len * best_reps
+        else:
+            out.append(words[i])
+            i += 1
+
+    if len(out) < total:
+        print(f"🧹 Đã dọn {total - len(out)} từ lặp do model kẹt vòng lặp.")
+    return " ".join(out)
+
+
 def _segments_to_text(segments) -> str:
-    return " ".join(seg.text.strip() for seg in segments)
+    return collapse_repetitions(" ".join(seg.text.strip() for seg in segments))
 
 
 def extract_audio(video_path, output_wav):

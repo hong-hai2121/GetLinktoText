@@ -34,6 +34,16 @@ FFPROBE_PATH = _find_binary("ffprobe")
 CHUNK_LENGTH_MS = 3 * 60 * 1000  # 3 phút/đoạn
 DEFAULT_MAX_CHUNKS = 2  # Mặc định nhận diện 5 đoạn đầu
 
+# --- Chống lặp từ (hallucination loop) của Whisper ---
+# temperature phải là DÃY, không phải 0. Whisper chỉ tự giải cứu khỏi vòng lặp bằng cách
+# giải mã lại ở nhiệt độ cao hơn khi segment không đạt compression_ratio/log_prob threshold.
+# Để temperature=0 là tắt hẳn cơ chế này -> segment lặp bị giữ nguyên và nuốt mất 30s tiếng nói.
+TEMPERATURE_FALLBACK = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+LOG_PROB_THRESHOLD = -1.0  # Segment tệ hơn mức này -> giải mã lại ở nhiệt độ cao hơn
+REPETITION_PENALTY = 1.1  # >1 phạt token đã sinh, chặn vòng lặp ngay từ lúc giải mã (chỉ faster-whisper)
+NO_REPEAT_NGRAM_SIZE = 0  # >0 cấm lặp n-gram (4 là hợp lý); 0 = tắt vì có thể hạ nhẹ độ chính xác
+MAX_WORD_REPEAT = 3  # Dọn hậu kỳ: giữ tối đa bấy nhiêu lần lặp liên tiếp của một từ
+
 USE_TITLE_MODE = False
 MAX_CHUNKS_RUNTIME = DEFAULT_MAX_CHUNKS
 
