@@ -32,14 +32,14 @@ Sau khi double-click, chương trình sẽ mở một cửa sổ desktop. Trong 
 Hoặc chạy bằng PowerShell/CMD:
 
 ```powershell
-cd /d D:\Python\GetLinktoText\HoaDonDienTuVaMiSa
+cd /d D:\Python\GetLinktoText\HoaDonMISA\HoaDonDienTuVaMiSa
 python hoa_don_stats_web.py
 ```
 
 Khi bấm `Chạy thống kê`, chương trình sẽ tạo báo cáo HTML và CSV. Báo cáo luôn được lưu vào thư mục `exports` của phần mềm:
 
 ```text
-D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\exports
+D:\Python\GetLinktoText\HoaDonMISA\HoaDonDienTuVaMiSa\exports
 ```
 
 Cửa sổ desktop vẫn mở để bạn chạy lại file/ZIP khác hoặc mở kết quả.
@@ -464,7 +464,7 @@ Trên máy dùng để build cần có:
 Chạy lệnh build:
 
 ```powershell
-cd /d D:\Python\GetLinktoText\HoaDonDienTuVaMiSa
+cd /d D:\Python\GetLinktoText\HoaDonMISA\HoaDonDienTuVaMiSa
 powershell -ExecutionPolicy Bypass -File .\packaging\build_installer.ps1
 ```
 
@@ -477,7 +477,7 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build_installer.ps1 -SkipIn
 Sau khi build xong, lấy file này đem sang máy khác để cài:
 
 ```text
-D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\dist\installer\Setup_ThongKeHoaDonMISA.exe
+D:\Python\GetLinktoText\HoaDonMISA\HoaDonDienTuVaMiSa\dist\installer\Setup_ThongKeHoaDonMISA.exe
 ```
 
 Khi chạy file cài đặt, app được cài vào thư mục người dùng:
@@ -491,7 +491,7 @@ Chọn tùy chọn `Tao bieu tuong ngoai Desktop` để tạo biểu tượng ng
 Chạy thống kê một thư mục hóa đơn:
 
 ```powershell
-python hoa_don_stats_web.py --no-dialog --invoice-folder "D:\Python\GetLinktoText\HoaDonDienTuVaMiSa\invoice"
+python hoa_don_stats_web.py --no-dialog --invoice-folder "D:\Python\GetLinktoText\HoaDonMISA\HoaDonDienTuVaMiSa\invoice"
 ```
 
 Chạy thống kê một file ZIP hóa đơn:
