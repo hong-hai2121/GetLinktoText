@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "ReelStats — Gom link video Facebook",
+  "version": "1.0.0",
+  "description": "Cuộn trang Facebook (reels / videos / search) và gom danh sách link video kèm lượt xem. Xuất CSV hoặc reel_links.txt cho GetReelStats.py.",
+  "permissions": ["scripting", "activeTab", "storage", "unlimitedStorage", "downloads"],
+  "host_permissions": ["https://*.facebook.com/*"],
+  "action": {
+    "default_title": "ReelStats — gom link video",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.facebook.com/*"],
+      "js": ["scraper.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

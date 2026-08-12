@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>ReelStats</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1c1e21;
+      --muted: #65676b;
+      --line: #dddfe2;
+      --accent: #1877f2;
+      --accent-fg: #ffffff;
+      --soft: #f0f2f5;
+      --danger: #d93025;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #242526;
+        --fg: #e4e6eb;
+        --muted: #b0b3b8;
+        --line: #3e4042;
+        --accent: #2d88ff;
+        --soft: #3a3b3c;
+        --danger: #ff7b72;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 360px;
+      margin: 0;
+      padding: 12px;
+      background: var(--bg);
+      color: var(--fg);
+      font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    h1 { font-size: 15px; margin: 0 0 2px; }
+    .sub { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+    fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 10px; margin: 0 0 10px; }
+    legend { font-size: 11px; color: var(--muted); padding: 0 4px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; }
+    .row label { flex: 1; }
+    input[type="number"] {
+      width: 78px; padding: 3px 6px; text-align: right;
+      border: 1px solid var(--line); border-radius: 5px;
+      background: var(--bg); color: var(--fg);
+    }
+    .btns { display: flex; gap: 6px; }
+    button {
+      flex: 1; padding: 7px 8px; border: 0; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-weight: 600; background: var(--soft); color: var(--fg);
+    }
+    button.primary { background: var(--accent); color: var(--accent-fg); }
+    button.danger { background: var(--danger); color: #fff; }
+    button:disabled { opacity: .45; cursor: default; }
+    #status { margin: 8px 0; font-size: 12px; color: var(--muted); min-height: 17px; }
+    #status.err { color: var(--danger); }
+    #result { font-size: 12px; }
+    #preview { margin: 6px 0 0; padding: 0; list-style: none; max-height: 132px; overflow: auto; }
+    #preview li {
+      display: flex; gap: 6px; padding: 3px 0; border-top: 1px solid var(--line);
+      font-size: 11px; color: var(--muted);
+    }
+    #preview b { color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .note { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .mode {
+      margin: 0 0 8px; padding: 6px 8px; border-radius: 6px;
+      background: var(--soft); font-size: 12px;
+    }
+    .mode b { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>ReelStats — gom link video</h1>
+  <div class="sub">Mở trang <code>/reels/</code>, <code>/videos/</code> hoặc <code>/search/videos</code> rồi bấm Bắt đầu.</div>
+
+  <fieldset>
+    <legend>Tuỳ chọn</legend>
+    <div class="row"><label for="pauseMs">Chờ mỗi lần cuộn (ms)</label><input type="number" id="pauseMs" min="300" max="10000" step="100" value="1800" /></div>
+    <div class="row"><label for="onlyReels">Chỉ lấy Reel (bỏ video watch)</label><input type="checkbox" id="onlyReels" /></div>
+    <div class="row"><label for="getFollowers">Lấy số người theo dõi <i>(chậm)</i></label><input type="checkbox" id="getFollowers" /></div>
+    <div class="note">
+      Cuộn tới khi Facebook báo hết kết quả, hoặc tới khi bấm Dừng.<br />
+      Số người theo dõi phải hover lên từng tên để Facebook vẽ thẻ thông tin —
+      mỗi trang chỉ hover 1 lần, nhưng vẫn làm phiên chạy lâu hơn nhiều.
+    </div>
+    <div class="btns" style="margin-top: 6px;">
+      <button id="testfl">Thử lấy người theo dõi</button>
+    </div>
+  </fieldset>
+
+  <div id="mode" class="mode">Đang nhận diện trang…</div>
+
+  <div class="btns">
+    <button id="start" class="primary">Bắt đầu</button>
+    <button id="stop" disabled>Dừng</button>
+  </div>
+
+  <div id="status">Đang kiểm tra tab…</div>
+
+  <fieldset>
+    <legend>Kết quả</legend>
+    <div id="result">Chưa có dữ liệu.</div>
+    <ul id="preview"></ul>
+  </fieldset>
+
+  <div class="btns">
+    <button id="csv" disabled>Tải CSV</button>
+    <button id="txt" disabled>reel_links.txt</button>
+    <button id="copy" disabled>Chép link</button>
+  </div>
+
+  <div class="btns" style="margin-top: 6px;">
+    <button id="clear" disabled>Xóa kết quả</button>
+  </div>
+
+  <div class="hint">
+    <code>reel_links.txt</code> lưu vào thư mục <code>ReelStats\</code> để chạy tiếp
+    <code>GetReelStats.py</code> hoặc <code>reel_gui.py</code>.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
