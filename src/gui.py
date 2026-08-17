@@ -15,12 +15,12 @@ class GetTextApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GetTextFromLink — Trích xuất nội dung")
-        # Cửa sổ gọn, không ép tỉ lệ 21:9
-        w, h = 1260, 740
+        # Cửa sổ gọn (đã bỏ header nên thấp hơn trước)
+        w, h = 1260, 680
         self.root.geometry(f"{w}x{h}")
         self.center_window(w, h)
         # Không cho hẹp hơn bề ngang thiết kế, nếu không chữ ở cột 3 sẽ bị cắt
-        self.root.minsize(1200, 660)
+        self.root.minsize(1200, 600)
 
         self.selected_model = tk.StringVar(value=config.MODEL_NAME)
         self.selected_language = tk.StringVar(
@@ -58,27 +58,24 @@ class GetTextApp:
 
     # ── Theme / Styles ──────────────────────────────────────────────────────
     def _init_theme(self):
-        # Bảng màu hiện đại (light)
+        # Bảng màu hiện đại (light, mỗi khu một màu nhấn riêng)
         self.C = {
-            "bg": "#eef1f7",
+            "bg": "#edf1fb",
             "surface": "#ffffff",
-            "surface_alt": "#f4f6fb",
-            "border": "#d8e0ec",
+            "surface_alt": "#f3f5fc",
+            "border": "#dbe2f1",
             "primary": "#4f46e5",
             "primary_dk": "#4338ca",
-            "primary_lt": "#e9eafe",
-            "success": "#16a34a",
-            "success_dk": "#128a3f",
+            "primary_lt": "#e8eafe",
+            "accent_action": "#db2777",  # hồng — card Thao tác
+            "accent_opt": "#0d9488",     # teal — cột Tùy chọn
+            "accent_title": "#d97706",   # cam — cột Chia nhỏ & tiêu đề
+            "success": "#10b981",
+            "success_dk": "#059669",
             "danger": "#e11d48",
             "danger_dk": "#be123c",
             "text": "#1e293b",
-            "muted": "#6b7280",
-            "header": "#4f46e5",
-            "header_text": "#ffffff",
-            # Header chuyển sắc chàm -> tím
-            "grad_from": "#4338ca",
-            "grad_to": "#7c3aed",
-            "grad_sub": "#dcdefb",
+            "muted": "#64748b",
             # Màu cho nhật ký
             "log_error": "#dc2626",
             "log_warn": "#d97706",
@@ -86,15 +83,11 @@ class GetTextApp:
             "log_head": "#4f46e5",
         }
         self.F = {
-            "title": ("Segoe UI", 16, "bold"),
-            "subtitle": ("Segoe UI", 10),
-            "header_line": ("Segoe UI", 12),
             "h": ("Segoe UI", 11, "bold"),
             "body": ("Segoe UI", 10),
             "small": ("Segoe UI", 9),
             "section": ("Segoe UI", 9, "bold"),
             "btn": ("Segoe UI", 10, "bold"),
-            "btn_lg": ("Segoe UI", 11, "bold"),
             "badge": ("Segoe UI", 10, "bold"),
             "mono": ("Consolas", 10),
         }
@@ -113,33 +106,20 @@ class GetTextApp:
         style.configure("App.TFrame", background=C["bg"])
         style.configure("Card.TFrame", background=C["surface"])
         style.configure("Surface.TFrame", background=C["surface"])
-        style.configure("Header.TFrame", background=C["header"])
         style.configure("Status.TFrame", background=C["surface"])
 
         # Labels
         style.configure("TLabel", background=C["surface"], foreground=C["text"], font=F["body"])
-        style.configure("Title.TLabel", background=C["header"], foreground=C["header_text"], font=F["title"])
-        style.configure("Subtitle.TLabel", background=C["header"], foreground="#dcdefb", font=F["subtitle"])
-        style.configure("Heading.TLabel", background=C["surface"], foreground=C["primary_dk"], font=F["h"])
-        style.configure("Section.TLabel", background=C["surface"], foreground=C["muted"], font=F["section"])
+        style.configure("SecIndigo.TLabel", background=C["surface"], foreground=C["primary"], font=F["section"])
+        style.configure("SecTeal.TLabel", background=C["surface"], foreground=C["accent_opt"], font=F["section"])
+        style.configure("SecAmber.TLabel", background=C["surface"], foreground=C["accent_title"], font=F["section"])
         style.configure("Muted.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
-        style.configure("Badge.TLabel", background=C["primary_dk"], foreground="#ffffff", font=F["small"], padding=(10, 4))
+        style.configure("Device.TLabel", background=C["primary_lt"], foreground=C["primary_dk"], font=F["badge"], padding=(12, 4))
         style.configure("Status.TLabel", background=C["surface"], foreground=C["muted"], font=F["small"])
         style.configure(
             "Count.TLabel", background=C["primary_lt"], foreground=C["primary_dk"],
             font=F["section"], padding=(12, 5),
         )
-
-        # Cards (labelframe)
-        style.configure(
-            "Card.TLabelframe",
-            background=C["surface"],
-            bordercolor=C["border"],
-            relief="solid",
-            borderwidth=1,
-            padding=14,
-        )
-        style.configure("Card.TLabelframe.Label", background=C["surface"], foreground=C["primary_dk"], font=F["h"])
 
         # Buttons
         style.configure(
@@ -150,6 +130,16 @@ class GetTextApp:
             "Primary.TButton",
             background=[("active", C["primary_dk"]), ("disabled", "#c3c7dc")],
             foreground=[("disabled", "#eef0f7")],
+        )
+
+        style.configure(
+            "Start.TButton", background=C["success"], foreground="#ffffff",
+            font=F["btn"], borderwidth=0, padding=(12, 9),
+        )
+        style.map(
+            "Start.TButton",
+            background=[("active", C["success_dk"]), ("disabled", "#b9e5d4")],
+            foreground=[("disabled", "#f0faf6")],
         )
 
         style.configure(
@@ -172,23 +162,6 @@ class GetTextApp:
             bordercolor=[("active", C["primary"])],
             foreground=[("active", C["primary_dk"]), ("disabled", "#adb3c2")],
         )
-
-        # Nút trong tab Danh sách link: ấn xuống thì phồng to ra (không lún xuống)
-        style.configure(
-            "Grow.TButton", background=C["surface_alt"], foreground=C["text"],
-            font=F["btn"], borderwidth=1, bordercolor=C["border"], padding=(14, 9),
-        )
-        style.map(
-            "Grow.TButton",
-            background=[("active", C["primary_lt"])],
-            bordercolor=[("active", C["primary"])],
-            foreground=[("active", C["primary_dk"])],
-        )
-        style.configure(
-            "GrowPressed.TButton", background=C["primary_lt"], foreground=C["primary_dk"],
-            font=F["btn_lg"], borderwidth=2, bordercolor=C["primary"], padding=(20, 12),
-        )
-        style.map("GrowPressed.TButton", background=[("active", C["primary_lt"])])
 
         # Checkbutton / Radiobutton trên nền card
         style.configure("Card.TCheckbutton", background=C["surface"], foreground=C["text"], font=F["body"])
@@ -226,80 +199,37 @@ class GetTextApp:
         # Separator
         style.configure("TSeparator", background=C["border"])
 
-        # Notebook
-        style.configure("Modern.TNotebook", background=C["bg"], borderwidth=0, tabmargins=(2, 4, 2, 0))
+        # Notebook: tab kiểu pill, tab đang chọn tô màu đặc; expand=0 để tab không phồng to khi chọn
+        style.configure("Modern.TNotebook", background=C["bg"], borderwidth=0, tabmargins=(2, 6, 2, 0))
         style.configure(
-            "Modern.TNotebook.Tab", background=C["surface_alt"], foreground=C["muted"],
-            font=F["btn"], padding=(20, 10), borderwidth=0,
+            "Modern.TNotebook.Tab", background="#e2e7f6", foreground=C["muted"],
+            font=F["btn"], padding=(20, 9), borderwidth=0,
         )
+        # padding/expand map đè lên map mặc định của theme clam — nếu không,
+        # tab đang chọn bị cộng padding nên các tab to/nhỏ theo mỗi lần click
         style.map(
             "Modern.TNotebook.Tab",
-            background=[("selected", C["surface"]), ("active", C["primary_lt"])],
-            foreground=[("selected", C["primary_dk"])],
+            background=[("selected", C["primary"]), ("active", C["primary_lt"])],
+            foreground=[("selected", "#ffffff"), ("active", C["primary_dk"])],
+            padding=[("selected", (20, 9))],
+            expand=[("selected", (0, 0, 0, 0))],
         )
 
-    # ── Header vẽ tay ──────────────────────────────────────────────────────
-    @staticmethod
-    def _hex_to_rgb(value: str):
-        value = value.lstrip("#")
-        return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
-
-    @staticmethod
-    def _mix_hex(rgb_from, rgb_to, ratio: float) -> str:
-        return "#%02x%02x%02x" % tuple(
-            round(a + (b - a) * ratio) for a, b in zip(rgb_from, rgb_to)
-        )
-
-    @staticmethod
-    def _round_rect(canvas, x0, y0, x1, y1, radius, **kwargs):
-        points = [
-            x0 + radius, y0, x1 - radius, y0, x1, y0,
-            x1, y0 + radius, x1, y1 - radius, x1, y1,
-            x1 - radius, y1, x0 + radius, y1, x0, y1,
-            x0, y1 - radius, x0, y0 + radius, x0, y0,
-        ]
-        return canvas.create_polygon(points, smooth=True, **kwargs)
-
-    def draw_header(self, event=None):
-        """Vẽ lại header: nền chuyển sắc + tiêu đề + huy hiệu thiết bị."""
-        canvas = self.header_canvas
-        width = event.width if event else canvas.winfo_width()
-        height = event.height if event else canvas.winfo_height()
-        if width <= 1 or height <= 1:
-            return
-
-        canvas.delete("all")
+    # ── Card có thanh màu nhấn ─────────────────────────────────────────────
+    def _make_card(self, parent, title, accent):
+        """Card trắng viền mảnh, thanh màu nhấn trên cùng; trả về (khung ngoài, khung ruột)."""
         C, F = self.C, self.F
-
-        rgb_from = self._hex_to_rgb(C["grad_from"])
-        rgb_to = self._hex_to_rgb(C["grad_to"])
-        steps = 120
-        for i in range(steps):
-            color = self._mix_hex(rgb_from, rgb_to, i / (steps - 1))
-            canvas.create_rectangle(
-                width * i / steps, 0, width * (i + 1) / steps + 1, height,
-                outline="", fill=color,
-            )
-
-        canvas.create_text(
-            26, height / 2, anchor="w",
-            text="🎬  Trích xuất & chuyển video / link thành văn bản bằng Whisper",
-            fill=C["header_text"], font=F["header_line"],
+        outer = tk.Frame(
+            parent, bg=C["surface"], highlightbackground=C["border"],
+            highlightthickness=1, bd=0,
         )
-
-        import tkinter.font as tkfont
-
-        badge_text = f"💻  {'GPU · CUDA' if config.device == 'cuda' else 'CPU'}"
-        text_width = tkfont.Font(font=F["badge"]).measure(badge_text)
-        right, pad = width - 24, 14
-        self._round_rect(
-            canvas, right - text_width - pad * 2, height / 2 - 17, right, height / 2 + 17,
-            16, fill="#ffffff", outline="",
+        tk.Frame(outer, bg=accent, height=4).pack(fill="x")
+        tk.Label(outer, text=title, bg=C["surface"], fg=accent, font=F["h"], anchor="w").pack(
+            fill="x", padx=16, pady=(10, 0)
         )
-        canvas.create_text(
-            right - pad, height / 2, anchor="e", text=badge_text,
-            fill=C["grad_from"], font=F["badge"],
-        )
+        body = tk.Frame(outer, bg=C["surface"])
+        body.pack(fill="both", expand=True, padx=16, pady=(8, 14))
+        return outer, body
 
     def build_ui(self):
         for child in self.root.winfo_children():
@@ -308,27 +238,19 @@ class GetTextApp:
         C, F = self.C, self.F
 
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(0, weight=0)  # header
-        self.root.grid_rowconfigure(1, weight=0)  # controls band
-        self.root.grid_rowconfigure(2, weight=1)  # notebook
-        self.root.grid_rowconfigure(3, weight=0)  # status
-
-        # ── Header (canvas để vẽ nền chuyển sắc) ─────────────────────────────
-        self.header_canvas = tk.Canvas(
-            self.root, height=68, highlightthickness=0, bd=0, bg=C["header"]
-        )
-        self.header_canvas.grid(row=0, column=0, sticky="ew")
-        self.header_canvas.bind("<Configure>", self.draw_header)
+        self.root.grid_rowconfigure(0, weight=0)  # controls band
+        self.root.grid_rowconfigure(1, weight=1)  # notebook
+        self.root.grid_rowconfigure(2, weight=0)  # status
 
         # ── Controls band (config + actions) ─────────────────────────────────
         band = ttk.Frame(self.root, style="App.TFrame", padding=(16, 14, 16, 6))
-        band.grid(row=1, column=0, sticky="ew")
+        band.grid(row=0, column=0, sticky="ew")
         band.grid_columnconfigure(0, weight=1)
         band.grid_columnconfigure(1, weight=0, minsize=300)
 
         # ── Config card ───────────────────────────────────────────────────
-        cfg = ttk.LabelFrame(band, text="  Cấu hình  ", style="Card.TLabelframe")
-        cfg.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        cfg_card, cfg = self._make_card(band, "⚙  Cấu hình", C["primary"])
+        cfg_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         # Cột rộng theo nội dung thật, không chia đều — cột 3 có nhãn dài nhất
         cfg.grid_columnconfigure(0, weight=0, minsize=215)
         cfg.grid_columnconfigure(1, weight=1, minsize=245)
@@ -337,7 +259,7 @@ class GetTextApp:
         # Cột 0 — Nhận diện
         c0 = ttk.Frame(cfg, style="Surface.TFrame")
         c0.grid(row=0, column=0, sticky="nw", padx=(0, 14))
-        ttk.Label(c0, text="NHẬN DIỆN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(c0, text="▎ NHẬN DIỆN", style="SecIndigo.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Label(c0, text="Model Whisper", style="TLabel").pack(anchor="w")
         ttk.Combobox(
             c0,
@@ -367,7 +289,7 @@ class GetTextApp:
         # Cột 1 — Tùy chọn
         c1 = ttk.Frame(cfg, style="Surface.TFrame")
         c1.grid(row=0, column=1, sticky="nw", padx=(0, 14))
-        ttk.Label(c1, text="TÙY CHỌN", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(c1, text="▎ TÙY CHỌN", style="SecTeal.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
             c1, text="Bỏ qua video dài hơn 15 phút",
             variable=self.skip_long_video_var, style="Card.TCheckbutton",
@@ -384,7 +306,7 @@ class GetTextApp:
         # Cột 2 — Chia nhỏ & tiêu đề
         c2 = ttk.Frame(cfg, style="Surface.TFrame")
         c2.grid(row=0, column=2, sticky="nw")
-        ttk.Label(c2, text="CHIA NHỎ & TIÊU ĐỀ", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(c2, text="▎ CHIA NHỎ & TIÊU ĐỀ", style="SecAmber.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
             c2, text="Chia nhỏ audio + lấy Tiêu đề / Mô tả / Tag",
             variable=self.title_mode_var, command=self.on_title_toggle, style="Card.TCheckbutton",
@@ -423,12 +345,12 @@ class GetTextApp:
         )
 
         # ── Action card ───────────────────────────────────────────────────
-        action = ttk.LabelFrame(band, text="  Thao tác  ", style="Card.TLabelframe")
-        action.grid(row=0, column=1, sticky="nsew")
+        action_card, action = self._make_card(band, "⚡  Thao tác", C["accent_action"])
+        action_card.grid(row=0, column=1, sticky="nsew")
         action.grid_columnconfigure(0, weight=1, uniform="act")
         action.grid_columnconfigure(1, weight=1, uniform="act")
 
-        self.start_btn = ttk.Button(action, text="▶  Bắt đầu", command=self.start_process, style="Primary.TButton")
+        self.start_btn = ttk.Button(action, text="▶  Bắt đầu", command=self.start_process, style="Start.TButton")
         self.start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 8))
         self.stop_btn = ttk.Button(
             action, text="⏹  Dừng", command=self.stop_process, style="Danger.TButton", state="disabled"
@@ -447,7 +369,7 @@ class GetTextApp:
 
         # ── Main notebook ────────────────────────────────────────────────────
         main = ttk.Frame(self.root, style="App.TFrame", padding=(16, 4, 16, 10))
-        main.grid(row=2, column=0, sticky="nsew")
+        main.grid(row=1, column=0, sticky="nsew")
         main.grid_rowconfigure(0, weight=1)
         main.grid_columnconfigure(0, weight=1)
 
@@ -473,17 +395,15 @@ class GetTextApp:
         links_toolbar = ttk.Frame(tab_links, style="Card.TFrame")
         links_toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.paste_links_btn = ttk.Button(
-            links_toolbar, text="📋  Dán link", command=self.paste_links, style="Grow.TButton"
+            links_toolbar, text="📋  Dán link", command=self.paste_links, style="Primary.TButton"
         )
         self.paste_links_btn.pack(side="left")
         self.clear_links_btn = ttk.Button(
-            links_toolbar, text="🗑  Xóa trắng", command=self.clear_links, style="Grow.TButton"
+            links_toolbar, text="🗑  Xóa trắng", command=self.clear_links, style="Ghost.TButton"
         )
         self.clear_links_btn.pack(side="left", padx=(8, 0))
-        for button in (self.paste_links_btn, self.clear_links_btn):
-            self._bind_grow_effect(button)
 
-        self._link_count_var = tk.StringVar(value="0 link")
+        self._link_count_var = tk.StringVar(value="🔗  0 link")
         ttk.Label(links_toolbar, textvariable=self._link_count_var, style="Count.TLabel").pack(
             side="right"
         )
@@ -539,7 +459,8 @@ class GetTextApp:
 
         self.log_text.grid(row=0, column=0, sticky="nsew")
         self.links_text.grid(row=1, column=0, sticky="nsew")
-        self.links_text.bind("<KeyRelease>", lambda _event: self.update_link_count())
+        # <<Modified>> bắt được mọi kiểu thay đổi (gõ, Ctrl+V, dán bằng chuột, code chèn)
+        self.links_text.bind("<<Modified>>", self._on_links_modified)
         self._init_log_tags()
         self.result_text.grid(row=1, column=0, sticky="nsew")
 
@@ -549,35 +470,31 @@ class GetTextApp:
         # ── Status bar ────────────────────────────────────────────────────
         self._status_var = tk.StringVar(value="Sẵn sàng")
         status_bar = ttk.Frame(self.root, style="Status.TFrame", padding=(16, 7))
-        status_bar.grid(row=3, column=0, sticky="ew")
+        status_bar.grid(row=2, column=0, sticky="ew")
         self._status_indicator = ttk.Label(
             status_bar, text="●", foreground=C["success"], background=C["surface"], font=F["body"]
         )
         self._status_indicator.pack(side="left", padx=(0, 8))
+        device_text = f"💻  {'GPU · CUDA' if config.device == 'cuda' else 'CPU'}"
+        ttk.Label(status_bar, text=device_text, style="Device.TLabel").pack(side="right")
         ttk.Label(status_bar, textvariable=self._status_var, style="Status.TLabel").pack(
             side="left", fill="x", expand=True
         )
-
-    # ── Hiệu ứng nút: ấn xuống thì phồng to ────────────────────────────────
-    def _bind_grow_effect(self, button, base_style="Grow.TButton"):
-        def on_press(_event=None):
-            if str(button["state"]) != "disabled":
-                button.configure(style="GrowPressed.TButton")
-
-        def on_release(_event=None):
-            # Giữ trạng thái phồng thêm chút để thấy rõ, rồi trả về như cũ
-            self.root.after(120, lambda: button.configure(style=base_style))
-
-        button.bind("<ButtonPress-1>", on_press, add="+")
-        button.bind("<ButtonRelease-1>", on_release, add="+")
 
     # ── Danh sách link ─────────────────────────────────────────────────────
     def _current_links(self):
         return [line.strip() for line in self.links_text.get("1.0", tk.END).splitlines() if line.strip()]
 
+    def _on_links_modified(self, _event=None):
+        # edit_modified(False) cũng phát <<Modified>> lần nữa — chặn bằng cờ
+        if not self.links_text.edit_modified():
+            return
+        self.links_text.edit_modified(False)
+        self.update_link_count()
+
     def update_link_count(self):
         count = len(self._current_links())
-        self._link_count_var.set(f"{count} link")
+        self._link_count_var.set(f"🔗  {count} link")
 
     def paste_links(self):
         """Dán link từ clipboard vào cuối danh sách, bỏ dòng trống và link trùng."""
@@ -618,16 +535,10 @@ class GetTextApp:
         if not self._current_links():
             self.log("ℹ️ Danh sách link đang trống.")
             return
-        if not messagebox.askyesno(
-            "Xóa trắng danh sách",
-            "Xóa toàn bộ link đang hiển thị?\n\n"
-            "File trên đĩa chỉ thay đổi khi bạn bấm 'Lưu danh sách'. "
-            "Bấm 'Tải lại' để lấy lại danh sách cũ.",
-        ):
-            return
         self.links_text.delete("1.0", tk.END)
         self.update_link_count()
-        self.log("🗑 Đã xóa trắng ô danh sách link (chưa ghi vào file).")
+        self.log("🗑 Đã xóa trắng ô danh sách link (chưa ghi vào file — bấm 'Tải lại' để lấy lại).")
+        self.update_status("Đã xóa trắng danh sách link", "green")
 
     # ── Tab switching ──────────────────────────────────────────────────────
     def on_tab_changed(self, event=None):

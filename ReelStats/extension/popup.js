@@ -72,7 +72,7 @@ async function download(text, filename, mime) {
 // ── Hiển thị ────────────────────────────────────────────────────────────────
 function render(meta) {
   const has = rows.length > 0;
-  for (const id of ['csv', 'txt', 'copy', 'clear']) $(id).disabled = !has;
+  for (const id of ['csv', 'txt', 'copy', 'clear', 'pages']) $(id).disabled = !has;
 
   if (!has) {
     $('result').textContent = 'Chưa có dữ liệu.';
@@ -208,15 +208,57 @@ $('stop').addEventListener('click', async () => {
   setStatus('Đang dừng…');
 });
 
+const cell = v => {
+  const s = (v ?? '').toString().replace(/\r?\n/g, ' ').trim();
+  return /[",;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
 $('csv').addEventListener('click', () => {
-  const cell = v => {
-    const s = (v ?? '').toString().replace(/\r?\n/g, ' ').trim();
-    return /[",;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
   // BOM để Excel mở đúng tiếng Việt.
   const csv = '﻿' + COLS.join(',') + '\n' +
               rows.map(r => COLS.map(c => cell(r[c])).join(',')).join('\n');
   download(csv, `fb_videos_${stamp()}.csv`, 'text/csv');
+});
+
+// Cùng một trang nhưng link viết khác nhau (thừa '/', web./m., còn tham số, khác
+// hoa thường) phải gộp về một dòng — giống chuan_hoa_page_url trong gop_csv.py.
+function normPageUrl(u) {
+  let s = (u || '').trim();
+  if (!s) return ['', ''];
+  s = s.split('#')[0].replace(/\/+$/, '');
+  s = s.replace(/^https?:\/\/(?:www\.|web\.|m\.|mbasic\.|touch\.)?facebook\.com/i,
+                'https://www.facebook.com');
+  const hoi = s.indexOf('?');
+  if (hoi >= 0) {                                  // bỏ tham số, trừ profile.php?id=
+    const goc = s.slice(0, hoi);
+    const pid = s.slice(hoi + 1).split('&').find(p => p.toLowerCase().startsWith('id='));
+    s = goc + (pid && goc.toLowerCase().endsWith('profile.php') ? `?${pid}` : '');
+    s = s.replace(/\/+$/, '');
+  }
+  return [s.toLowerCase(), s];
+}
+
+$('pages').addEventListener('click', () => {
+  const theoTrang = new Map();                     // khoá chuẩn hoá -> {page, page_url}
+  for (const r of rows) {
+    const [khoa, hienThi] = normPageUrl(r.page_url);
+    const ten = (r.page || '').trim();
+    const k = khoa || (ten ? 'ten:' + ten.toLowerCase() : '');
+    if (!k) continue;                              // không rõ trang nào -> bỏ
+    const cu = theoTrang.get(k);
+    if (!cu) {
+      theoTrang.set(k, { page: ten, page_url: hienThi });
+    } else {                                       // gặp lại -> bù thông tin thiếu
+      if (!cu.page && ten) cu.page = ten;
+      if (!cu.page_url && hienThi) cu.page_url = hienThi;
+    }
+  }
+  const list = [...theoTrang.values()];
+  if (!list.length) { setStatus('Dữ liệu không có trang (page/page_url) nào.', true); return; }
+  const csv = '﻿page,page_url\n' +
+              list.map(r => `${cell(r.page)},${cell(r.page_url)}`).join('\n');
+  download(csv, `fb_pages_${stamp()}.csv`, 'text/csv');
+  setStatus(`Đã xuất ${list.length} trang, lọc trùng từ ${rows.length} mục.`);
 });
 
 $('txt').addEventListener('click', () => {

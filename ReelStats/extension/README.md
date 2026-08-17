@@ -39,6 +39,8 @@ content script (popup vẫn tự tiêm được, nhưng F5 chắc ăn hơn).
    - **reel_links.txt** — chỉ link Reel, mỗi dòng 1 link. Lưu vào thư mục
      `ReelStats\` rồi chạy `GetReelStats.py` / `reel_gui.py`.
    - **Chép link** — copy toàn bộ URL vào clipboard.
+   - **Tải Trang** — CSV 2 cột `page, page_url`, mỗi trang 1 dòng đã lọc trùng
+     (link chuẩn hoá: bỏ `/` thừa, `web.`/`m.`, tham số — giống `gop_csv.py`).
 
 Kết quả lần chạy gần nhất được giữ trong `chrome.storage.local`, mở lại popup
 vẫn xuất được mà không cần gom lại. Dòng kết quả ghi rõ **từ khoá** của dữ liệu

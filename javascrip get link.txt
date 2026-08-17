@@ -10,7 +10,7 @@ BS CHIỀU: /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/di
 
 // Lấy phần tử <div> dựa trên XPath
 let divElement = document.evaluate(
-  '//*[@id="mount_0_0_Ry"]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]',
+  '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div/div[3]/div[1]',
   document,
   null,
   XPathResult.FIRST_ORDERED_NODE_TYPE,
