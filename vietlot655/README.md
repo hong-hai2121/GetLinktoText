@@ -19,6 +19,16 @@ draw period already exists in SQLite. Vietlott uses links like
 `javascript:NextPage(1);`; `crawl.py` calls the same AjaxPro endpoint directly
 with `PageIndex=1,2,3...`.
 
+`crawl.py` cao duoc CA HAI game (`--game power655|mega645|all`);
+`crawl_mega645.py` chi la wrapper mong tro san `--game mega645` + DB rieng
+(xem `README_MEGA645.md`). HTTP co retry 3 lan (backoff 1s/2s/4s) cho loi mang
+va 5xx/52x (Cloudflare); so trung cao ve duoc validate dai 1..55 (Power) /
+1..45 (Mega) — so ngoai dai hay trung nhau la bo qua ky do + ghi warning vao
+log thay vi nap du lieu ban vao DB.
+
+Exit code: `0` = tron ven, `2` = partial (loi giua chung nhung DA luu duoc
+trang moi), `1` = fail trang — Task Scheduler dat canh bao theo ma nay duoc.
+
 Or pass a custom URL:
 
 ```powershell
@@ -150,9 +160,14 @@ chinh ky do.
 python predict_track.py backfill --periods 300 -n 1000
 ```
 
-300 ky x 6 che do x 1000 bo = 1,8 trieu ve, mat ~20-27 phut moi game.
+300 ky x 6 che do x 1000 bo = 1,8 trieu ve, mat ~5-7 phut moi game (truoc
+2026-08-22 la 20-27 phut; da tien tinh bang trong so trong `_make_generator` va
+cap nhat cong don diem cooc trong `gen_pair` — kiem chung cung seed cho ket qua
+GIONG HET tung bit, nen khong phai `--redo` vi toi uu nay).
 Khong ky nao nhin thay ket qua cua chinh no nen van trung thuc nhu chay that.
 Idempotent: ky nao da co batch thi bo qua, chay lai khong tao chong.
+Them `--seed 123` de tai lap duoc ket qua (dung khi doi thuat toan va muon so
+truoc/sau).
 
 Muon dung lai TU DAU (khi them che do moi, hoac DB cu chua co cot do phu) thi them
 `--redo` — no xoa cac ky da cham roi tinh lai:
@@ -229,6 +244,12 @@ lech voi backtest chay tren trang:
 - `predict_track.py`: `pop_of_number` / `pop_of_set` / `is_crowded_set`
 - `stats_web.py` (JS): `popOfNumber` / `popOfSet` / `isCrowdedSet`
 
+Rang buoc nay duoc KHOA bang bo golden vectors (`GOLDEN_SETS` / `GOLDEN_CAPS`
+trong `predict_track.py`): `python predict_track.py selftest` kiem ban Python
+(stats_web.py cung tu goi luc sinh trang), va trang HTML nhung dung bo do de JS
+tu doi chieu khi mo — lech ben nao la ben do bao ngay (console + banner vang),
+khoi phai backfill --redo oan. DOI HE SO POP_* LA PHAI TINH LAI GOLDEN_SETS.
+
 He so theo duoi 8/6/4 la GIA DINH thoi quen VN (phat/loc/tu), khong lay tu nghien
 cuu — Vietlott khong cong bo du lieu ve ban ra nen khong kiem chung duoc.
 
@@ -266,6 +287,12 @@ muc nao hien thi chung. `sugEngine` dung `count`/`gap` cho che do so nong/so gan
 dung min/max tung vi tri lam rang buoc, va phan Mo phong doc `extra`. Bo di thi
 bo so sinh tren web se LECH voi `predict_track.py` sinh cho DB.
 
+Tu 2026-08-22 `extra` da duoc CAT GON dung phan sugEngine/score doc: `total`,
+`n`, `low_max`, `latest`, `sum`, `odd`, `low`, `consecutive`, `repeat_prev`,
+`cooc`. Cac truong chi phuc vu muc hien thi da bo (decade, last_digit, overdue,
+hot, pairs, exp_pair, repeat_mean...) khong con tinh nua — muon hien thi lai
+thi lay ban cu trong git history.
+
 Vi the `crawl.py` / `crawl_mega645.py` VAN phai chay `number_stats.py` sau khi
 cao — cac bang `number_frequency` / `position_*` van can, chi la khong ve ra nua.
 
@@ -276,8 +303,10 @@ python stats_web.py --tao-shortcut
 ```
 
 Tao `Thống kê Vietlott.lnk` ra Desktop. Bam vao no se: cao ky moi (Power qua
-`crawl.py`, Mega qua `crawl_mega645.py`) -> sinh lai `exports\stats.html` +
-`exports\stats_mega645.html` -> mo trinh duyet.
+`crawl.py`, Mega qua `crawl_mega645.py` — hai game chay SONG SONG, Power in
+truc tiep con output cua Mega in tron ven ngay sau) -> sinh lai
+`exports\stats.html` + `exports\stats_mega645.html` -> mo trinh duyet.
+Cao partial (loi giua chung nhung da luu duoc ky moi) khong bi coi la fail.
 
 Shortcut chi TRO toi `stats_web.py`, khong copy code — sua file la ap dung ngay.
 No dung chinh interpreter dang chay luc tao shortcut (nen chay lenh tren trong

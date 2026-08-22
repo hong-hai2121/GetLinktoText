@@ -27,17 +27,16 @@ import statistics
 import sys
 from pathlib import Path
 
-from crawl import DB_PATH, EXPORT_DIR, ensure_dirs
+from crawl import DB_PATH, EXPORT_DIR, GAME_CONFIGS, ensure_dirs
 
 NUM_COLUMNS = ["num1", "num2", "num3", "num4", "num5", "num6"]
 K = 6  # số lượng số được chọn mỗi kỳ
 NUM_GAPS = K - 1  # = 5 khoảng cách
 
-# Tổng số quả cầu (n) theo từng loại hình -> quyết định giá trị lý thuyết.
-GAME_NUMBER_RANGE = {
-    "power655": 55,
-    "mega645": 45,
-}
+# Tổng số quả cầu (n) theo từng loại hình — nguồn DUY NHẤT là
+# GameConfig.max_number trong crawl.py; thêm game mới chỉ cần khai báo ở đó.
+# (number_stats.py cũng import dict này — đừng khai báo lại nơi khác.)
+GAME_NUMBER_RANGE = {g: c.max_number for g, c in GAME_CONFIGS.items()}
 DEFAULT_N = 55  # mặc định Power 6/55 nếu không xác định được
 
 
@@ -52,6 +51,7 @@ def fetch_draws(
     """
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")  # crawler có thể đang ghi cùng DB
     try:
         query = f"SELECT {', '.join(NUM_COLUMNS)} FROM draw_results"
         params: list[object] = []

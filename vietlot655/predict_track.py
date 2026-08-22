@@ -6,7 +6,7 @@ LƯU lại kèm kỳ gốc, rồi khi kỳ tiếp theo có kết quả thật (c
 xem chế độ nào trùng nhiều số hơn — tích luỹ qua nhiều kỳ thành bảng xếp hạng.
 
 Quy trình:
-  1. Trước mỗi kỳ:   python predict_track.py generate            (lưu 5×1000 bộ vào DB)
+  1. Trước mỗi kỳ:   python predict_track.py generate            (lưu 6×1000 bộ vào DB)
   2. Sau khi có KQ:  python predict_track.py evaluate            (tự chấm các kỳ đang chờ)
   3. Xem bảng:       python predict_track.py board               (in bảng xếp hạng)
      (stats_web.py cũng tự gọi evaluate + hiện bảng ngay trên trang)
@@ -133,6 +133,56 @@ def is_crowded_set(s: list[int]) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# Golden vectors — trọng tài đồng bộ Python <-> JS
+# --------------------------------------------------------------------------- #
+# pop_of_number/pop_of_set/is_crowded_set/coverage_cap tồn tại 2 bản tay đôi
+# (Python ở đây, JS trong stats_web.py) và bắt buộc phải giống hệt nhau. Bộ giá
+# trị chuẩn dưới đây là trọng tài: selftest() so bản Python với nó (stats_web
+# gọi lúc sinh trang), và stats_web nhúng đúng bộ này vào trang để JS tự đối
+# chiếu khi mở. Lệch bên nào là bên đó báo ngay — khỏi phải backfill --redo oan.
+# ĐỔI HỆ SỐ POP_* LÀ PHẢI TÍNH LẠI BẢNG NÀY (chạy pop_of_set cho từng bộ).
+GOLDEN_SETS = [
+    # (bộ số đã sort, pop_of_set, is_crowded_set)
+    ([1, 2, 3, 4, 5, 6], 72.50976562500001, True),
+    ([5, 12, 19, 26, 33, 40], 4.469, True),
+    ([2, 8, 15, 23, 28, 31], 4.011333333333334, True),
+    ([7, 13, 22, 34, 41, 53], 1.3266666666666669, False),
+    ([10, 20, 30, 39, 40, 49], 2.1781249999999996, False),
+    ([4, 14, 24, 34, 44, 54], 5.658, True),
+    ([33, 35, 38, 42, 47, 55], 1.0250000000000001, False),
+    ([6, 8, 16, 18, 26, 28], 4.251866666666667, True),
+    ([1, 12, 13, 31, 32, 45], 2.354166666666667, False),
+    ([36, 37, 43, 44, 50, 51], 1.904296875, False),
+]
+GOLDEN_CAPS = [
+    # (k vé, n, coverage_cap) — có cả ca bị chặn bởi C(n,3) lẫn ca 20k
+    (1000, 45, 14190),
+    (1000, 55, 20000),
+    (3, 55, 60),
+    (500, 45, 10000),
+]
+
+
+def selftest() -> list[str]:
+    """So bản Python với GOLDEN — trả danh sách lệch (rỗng = khớp)."""
+    errs: list[str] = []
+    for s, want_pop, want_crowded in GOLDEN_SETS:
+        got_pop = pop_of_set(list(s))
+        if abs(got_pop - want_pop) > 1e-6 * max(1.0, abs(want_pop)):
+            errs.append(f"pop_of_set({s}) = {got_pop!r}, golden = {want_pop!r}")
+        got_crowded = is_crowded_set(list(s))
+        if got_crowded != want_crowded:
+            errs.append(
+                f"is_crowded_set({s}) = {got_crowded}, golden = {want_crowded}"
+            )
+    for k, n, want in GOLDEN_CAPS:
+        got = coverage_cap(k, n)
+        if got != want:
+            errs.append(f"coverage_cap({k}, {n}) = {got}, golden = {want}")
+    return errs
+
+
+# --------------------------------------------------------------------------- #
 # DB
 # --------------------------------------------------------------------------- #
 def init_tables(conn: sqlite3.Connection) -> None:
@@ -236,6 +286,8 @@ def _derive(row: sqlite3.Row) -> dict:
 def _connect(db_path: Path | str) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
+    # Crawler / stats_web có thể đang mở cùng DB — chờ thay vì nổ "locked".
+    conn.execute("PRAGMA busy_timeout=10000")
     init_tables(conn)
     return conn
 
@@ -246,7 +298,7 @@ def _latest_draw(conn: sqlite3.Connection, game_type: str) -> sqlite3.Row | None
         SELECT draw_period, draw_date, num1, num2, num3, num4, num5, num6
         FROM draw_results
         WHERE game_type = ?
-        ORDER BY draw_date DESC, draw_period DESC
+        ORDER BY draw_date DESC, CAST(draw_period AS INTEGER) DESC
         LIMIT 1
         """,
         (game_type,),
@@ -262,8 +314,9 @@ def _next_draw_after(
         SELECT draw_period, draw_date, num1, num2, num3, num4, num5, num6
         FROM draw_results
         WHERE game_type = ?
-          AND (draw_date > ? OR (draw_date = ? AND draw_period > ?))
-        ORDER BY draw_date ASC, draw_period ASC
+          AND (draw_date > ? OR (draw_date = ?
+               AND CAST(draw_period AS INTEGER) > CAST(? AS INTEGER)))
+        ORDER BY draw_date ASC, CAST(draw_period AS INTEGER) ASC
         LIMIT 1
         """,
         (game_type, after_date, after_date, after_period),
@@ -334,6 +387,14 @@ def _make_generator(method: str, prof: dict):
             return (1.0 / pop_of_number(x)) ** POP_WEIGHT_EXP
         return 1  # balanced (và seed cho pairs)
 
+    # Trọng số là HẰNG theo (method, profile) — tính sẵn 1 lần. Trước đây mỗi số
+    # bốc gọi weight(x) ~1,5×n lần (payout còn kèm pop_of_number + pow mỗi lần),
+    # là hotspot lớn nhất của backfill. Thứ tự cộng dồn giữ nguyên nên kết quả
+    # giống hệt bản cũ với cùng seed — không đổi phân phối, không phải --redo.
+    w = [0.0] * (n + 1)
+    for x in range(1, n + 1):
+        w[x] = weight(x)
+
     def sample_weighted() -> list[int]:
         used = [False] * (n + 1)
         chosen: list[int] = []
@@ -341,13 +402,13 @@ def _make_generator(method: str, prof: dict):
             tot = 0.0
             for x in range(1, n + 1):
                 if not used[x]:
-                    tot += weight(x)
+                    tot += w[x]
             r = random.random() * tot
             acc, pick = 0.0, 1
             for x in range(1, n + 1):
                 if used[x]:
                     continue
-                acc += weight(x)
+                acc += w[x]
                 if acc >= r:
                     pick = x
                     break
@@ -371,21 +432,23 @@ def _make_generator(method: str, prof: dict):
                     break
         s = [seed]
         used[seed] = True
+        # score[x] = tổng cooc của x với các số đã chọn. Cộng dồn khi thêm số mới
+        # (O(n)/vòng) thay vì tính lại từ đầu (O(n·|s|)) — giá trị y hệt bản cũ.
+        row = cooc[seed - 1]
+        score = [0] * (n + 1)
+        for x in range(1, n + 1):
+            score[x] = row[x - 1]
         while len(s) < 6:
-            cand = []
-            for x in range(1, n + 1):
-                if used[x]:
-                    continue
-                v = 0
-                for y in s:
-                    v += cooc[x - 1][y - 1]
-                cand.append((v, x))
+            cand = [(score[x], x) for x in range(1, n + 1) if not used[x]]
             if not cand:
                 break
             cand.sort(reverse=True)
             _, pk = cand[random.randrange(min(3, len(cand)))]
             s.append(pk)
             used[pk] = True
+            row = cooc[pk - 1]
+            for x in range(1, n + 1):
+                score[x] += row[x - 1]
         s.sort()
         return s
 
@@ -639,6 +702,19 @@ def evaluate(db_path: Path | str, game_type: str | None = None) -> dict:
                 hit = sum(1 for x in nums if x in win)
                 counts.setdefault(r["method"], [0] * 7)[hit] += 1
                 by_method.setdefault(r["method"], []).append(nums)
+            if not counts:
+                # Batch 'pending' khong con ve nao (DB bi sua tay / sinh voi n=0):
+                # danh dau 'empty' cho thay duoc, dung lang le thanh 'scored' rong.
+                print(
+                    f"Canh bao: batch #{b['id']} khong co ve nao — "
+                    "danh dau status='empty', khong cham.",
+                    flush=True,
+                )
+                conn.execute(
+                    "UPDATE prediction_batches SET status='empty' WHERE id=?",
+                    (b["id"],),
+                )
+                continue
             covs = {m: coverage3(v) for m, v in by_method.items()}
             _write_stats(conn, b["id"], counts, covs)
             conn.execute(
@@ -667,7 +743,7 @@ def _fetch_draws_chrono(conn: sqlite3.Connection, game_type: str) -> list[dict]:
         SELECT draw_period, draw_date, num1, num2, num3, num4, num5, num6
         FROM draw_results
         WHERE game_type = ?
-        ORDER BY draw_date ASC, draw_period ASC
+        ORDER BY draw_date ASC, CAST(draw_period AS INTEGER) ASC
         """,
         (game_type,),
     ).fetchall()
@@ -729,6 +805,14 @@ def backfill(
             )
         }
 
+        # ETA tính trên số kỳ THỰC chạy — lấy `periods` làm mẫu số thì khi skip
+        # nhiều kỳ ETA phóng đại và mốc done == total không bao giờ tới.
+        planned = sum(
+            1
+            for i in range(start, total)
+            if chrono[i - 1]["period"] not in existing
+        )
+
         done = skipped = 0
         for i in range(start, total):
             target, anchor = chrono[i], chrono[i - 1]
@@ -765,7 +849,7 @@ def backfill(
             conn.commit()
             done += 1
             if progress:
-                progress(done, periods, target)
+                progress(done, planned, target)
 
         return {"ok": True, "done": done, "skipped": skipped, "periods": periods}
     finally:
@@ -834,16 +918,24 @@ def compact(db_path: Path | str) -> dict:
         before = conn.execute("SELECT COUNT(*) FROM prediction_sets").fetchone()[0]
         for batch_id in todo:
             counts: dict[str, list[int]] = {}
+            by_method: dict[str, list[list[int]]] = {}
             for r in conn.execute(
-                "SELECT method, matched FROM prediction_sets WHERE batch_id=?",
+                "SELECT method, numbers, matched FROM prediction_sets WHERE batch_id=?",
                 (batch_id,),
             ):
                 m = r["matched"]
                 if m is None or not (0 <= m <= 6):
                     continue
                 counts.setdefault(r["method"], [0] * 7)[m] += 1
+                by_method.setdefault(r["method"], []).append(
+                    [int(x) for x in r["numbers"].split(",")]
+                )
             if counts:
-                _write_stats(conn, batch_id, counts)
+                # Độ phủ chỉ tính được khi CÒN vé — phải chốt ngay tại đây, sau khi
+                # _write_stats xoá vé là mất vĩnh viễn (cov3=0 bị hiểu là "không có
+                # dữ liệu" và batch bị loại khỏi thống kê độ phủ).
+                covs = {m: coverage3(v) for m, v in by_method.items()}
+                _write_stats(conn, batch_id, counts, covs)
         conn.commit()
         after = conn.execute("SELECT COUNT(*) FROM prediction_sets").fetchone()[0]
         conn.execute("VACUUM")
@@ -882,9 +974,27 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             (game_type,),
         ).fetchone()[0]
         scored_batches = conn.execute(
-            "SELECT COUNT(*) FROM prediction_batches WHERE game_type=? AND status='scored'",
+            """
+            SELECT COUNT(DISTINCT target_period) FROM prediction_batches
+            WHERE game_type=? AND status='scored'
+            """,
             (game_type,),
         ).fetchone()[0]
+
+        # `generate --force` có thể tạo 2 batch cho CÙNG một kỳ đích. Khi tổng hợp
+        # chỉ giữ batch ĐẦU TIÊN của mỗi kỳ — 2 batch chia cùng một kết quả không
+        # phải 2 quan sát độc lập, đếm cả hai là thổi phồng t-test và "Thắng kỳ".
+        keep = {
+            r[0]
+            for r in conn.execute(
+                """
+                SELECT MIN(id) FROM prediction_batches
+                WHERE game_type=? AND status='scored'
+                GROUP BY target_period
+                """,
+                (game_type,),
+            )
+        }
 
         # Mọi số liệu đều suy ra từ prediction_stats (c0..c6) — không cần vé chi tiết.
         agg: dict[str, dict] = {}
@@ -900,6 +1010,8 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             """,
             (game_type,),
         ):
+            if row["bid"] not in keep:
+                continue
             d = _derive(row)
             m = row["method"]
             per_batch.setdefault(row["bid"], {})[m] = d["avg"]
@@ -994,10 +1106,12 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
             SELECT id, target_period, target_date, target_numbers
             FROM prediction_batches
             WHERE game_type=? AND status='scored'
-            ORDER BY target_date DESC, id DESC LIMIT 30
+            ORDER BY target_date DESC, id DESC LIMIT 60
             """,
             (game_type,),
         ):
+            if b["id"] not in keep or len(recent) >= 30:
+                continue
             per = {
                 m: round(v, 3) for m, v in per_batch.get(b["id"], {}).items()
             }
@@ -1048,7 +1162,7 @@ def _print_board(db_path: Path | str, game_type: str) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Backtest 5 chế độ gợi ý số Vietlott (tạo/chấm/xếp hạng)."
+        description="Backtest 6 chế độ gợi ý số Vietlott (tạo/chấm/xếp hạng)."
     )
     p.add_argument("--db", default=str(DB_PATH), help="Đường dẫn SQLite.")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1057,6 +1171,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     g.add_argument("--game", default="power655")
     g.add_argument("-n", "--sets", type=int, default=DEFAULT_SETS)
     g.add_argument("--force", action="store_true", help="Tạo thêm dù kỳ này đã có batch.")
+    g.add_argument("--seed", type=int, default=None, help="Seed RNG để tái lập.")
 
     e = sub.add_parser("evaluate", help="Chấm các kỳ đang chờ đã có kết quả thật.")
     e.add_argument("--game", default=None, help="Bỏ trống = mọi game.")
@@ -1076,10 +1191,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Xoá các kỳ đã chấm rồi dựng lại từ đầu (cần khi thêm chế độ mới).",
     )
+    bf.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed RNG để tái lập kết quả (so trước/sau khi sửa thuật toán).",
+    )
 
     sub.add_parser(
         "compact",
         help="Gom vé chi tiết của các kỳ đã chấm thành số liệu rồi xoá vé (thu nhỏ DB).",
+    )
+    sub.add_parser(
+        "selftest",
+        help="So mô hình độ phổ biến/độ phủ với bộ golden (đồng bộ với JS).",
     )
     return p
 
@@ -1091,6 +1216,11 @@ def main() -> int:
         pass
 
     args = build_arg_parser().parse_args()
+    if getattr(args, "seed", None) is not None:
+        random.seed(args.seed)
+    if getattr(args, "sets", 1) < 1:
+        print("-n/--sets phải >= 1.")
+        return 1
     if args.cmd == "generate":
         res = generate(args.db, args.game, args.sets, args.force)
         if not res["ok"]:
@@ -1112,6 +1242,15 @@ def main() -> int:
         return 0
     if args.cmd == "board":
         _print_board(args.db, args.game)
+        return 0
+    if args.cmd == "selftest":
+        errs = selftest()
+        if errs:
+            print("LỆCH so với golden:")
+            for e in errs:
+                print(" -", e)
+            return 1
+        print(f"OK: {len(GOLDEN_SETS)} bộ + {len(GOLDEN_CAPS)} cap khớp golden.")
         return 0
     if args.cmd == "compact":
         res = compact(args.db)

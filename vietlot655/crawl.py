@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import logging.handlers
 import os
 import re
 import sqlite3
@@ -37,6 +38,7 @@ class GameConfig:
     ajax_draw_path: str
     has_special_num: bool
     number_bands: int
+    max_number: int  # so lon nhat cua game (55/45) — chot chan du lieu ban
 
 
 GAME_CONFIGS = {
@@ -53,6 +55,7 @@ GAME_CONFIGS = {
         ),
         has_special_num=True,
         number_bands=5,
+        max_number=55,
     ),
     "mega645": GameConfig(
         game_type="mega645",
@@ -67,6 +70,7 @@ GAME_CONFIGS = {
         ),
         has_special_num=False,
         number_bands=6,
+        max_number=45,
     ),
 }
 DEFAULT_GAME_TYPE = "power655"
@@ -112,6 +116,9 @@ def init_db(db_path: Path | str = DB_PATH) -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
+    # stats_web / GUI / task 2h sang co the mo DB cung luc — cho ghi cho 10s
+    # thay vi no "database is locked" ngay.
+    conn.execute("PRAGMA busy_timeout=10000")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS draw_results (
@@ -251,13 +258,37 @@ def get_logger() -> logging.Logger:
     logger.propagate = False
 
     if not logger.handlers:
-        handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+        # Rotation: chay hang ngay nhieu nam thi 1 file log se phinh mai.
+        handler = logging.handlers.RotatingFileHandler(
+            LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8"
+        )
         handler.setFormatter(
             logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
         )
         logger.addHandler(handler)
 
     return logger
+
+
+def save_file_log_only(
+    status: str,
+    total_found: int,
+    new_records: int,
+    duplicate_records: int,
+    error_message: str | None,
+) -> None:
+    message = (
+        f"status={status}; total_found={total_found}; "
+        f"new_records={new_records}; duplicate_records={duplicate_records}; "
+        f"error={error_message or ''}"
+    )
+    logger = get_logger()
+    if status == "success":
+        logger.info(message)
+    elif status == "partial":
+        logger.warning(message)
+    else:
+        logger.error(message)
 
 
 def save_log(
@@ -294,43 +325,41 @@ def save_log(
             created_at,
         ),
     )
+    # Bang log chi de tra cuu gan day — giu 1000 dong cuoi cho DB khoi phinh.
+    conn.execute(
+        """
+        DELETE FROM crawl_logs
+        WHERE id NOT IN (SELECT id FROM crawl_logs ORDER BY id DESC LIMIT 1000)
+        """
+    )
     conn.commit()
 
-    message = (
-        f"status={status}; total_found={total_found}; "
-        f"new_records={new_records}; duplicate_records={duplicate_records}; "
-        f"error={error_message or ''}"
+    save_file_log_only(
+        status, total_found, new_records, duplicate_records, error_message
     )
-    logger = get_logger()
-    if status == "success":
-        logger.info(message)
-    else:
-        logger.error(message)
-
-
-def save_file_log_only(
-    status: str,
-    total_found: int,
-    new_records: int,
-    duplicate_records: int,
-    error_message: str | None,
-) -> None:
-    message = (
-        f"status={status}; total_found={total_found}; "
-        f"new_records={new_records}; duplicate_records={duplicate_records}; "
-        f"error={error_message or ''}"
-    )
-    logger = get_logger()
-    if status == "success":
-        logger.info(message)
-    else:
-        logger.error(message)
 
 
 def build_http_session():
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 
     session = requests.Session()
+    # Retry 3 lan (backoff 1s/2s/4s) cho loi mang + 5xx thoang qua. POST AjaxPro
+    # o day chi DOC du lieu (khong ghi gi len server) nen retry an toan.
+    # 520-524: ma rieng cua Cloudflare (vietlott.vn dung CF) — da gap 522 thuc te.
+    retry_kwargs = dict(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=(500, 502, 503, 504, 520, 521, 522, 523, 524),
+    )
+    try:
+        retry = Retry(allowed_methods=frozenset({"GET", "POST"}), **retry_kwargs)
+    except TypeError:  # urllib3 < 1.26 dung ten tham so cu
+        retry = Retry(method_whitelist=frozenset({"GET", "POST"}), **retry_kwargs)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -490,6 +519,16 @@ def normalize_date(value: str) -> str:
             return datetime.strptime(value, fmt).date().isoformat()
         except ValueError:
             continue
+    # Format la (vd site them thu: "T4, 20/08/2025"): tach cum dd/mm/yyyy thu lai.
+    match = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", value)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%d/%m/%Y").date().isoformat()
+        except ValueError:
+            pass
+    # Luu nguyen van la duong cung — nhung phai keu len, vi draw_date khong phai
+    # ISO se lam moi cho sort theo ngay sai am tham.
+    get_logger().warning("normalize_date: khong parse duoc %r — luu nguyen van", value)
     return value
 
 
@@ -510,6 +549,14 @@ def extract_numbers(
         text = clean_text(span.get_text())
         if "bong_tron" in classes and re.fullmatch(r"\d{1,2}", text):
             numbers.append(normalize_number(text))
+
+    expected = 7 if has_special_num else 6
+    if len(numbers) > expected:
+        # Nhieu bong hon binh thuong = dau hieu layout doi, canh bao de con biet.
+        get_logger().warning(
+            "extract_numbers: thay %d bong (mong %d) — layout co the da doi: %s",
+            len(numbers), expected, numbers,
+        )
 
     if has_special_num and len(numbers) >= 7:
         return (tuple(numbers[:6]), numbers[6])  # type: ignore[return-value]
@@ -544,6 +591,7 @@ def parse_draw_rows(
     source_page_url: str | None = None,
     base_url: str = DEFAULT_BASE_URL,
     has_special_num: bool = True,
+    max_number: int | None = None,
 ) -> list[DrawResult]:
     soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("table tbody tr")
@@ -567,11 +615,24 @@ def parse_draw_rows(
         if not draw_period or not extracted_numbers:
             continue
 
+        main_numbers, special_num = extracted_numbers
+        if max_number is not None:
+            candidates = [int(v) for v in main_numbers]
+            if special_num:
+                candidates.append(int(special_num))
+            bad = [v for v in candidates if v < 1 or v > max_number]
+            if bad or len(set(main_numbers)) != 6:
+                # So ngoai dai / trung nhau = parse nham o tien thuong hoac
+                # layout doi — bo qua ky nay con hon nap du lieu ban vao DB.
+                get_logger().warning(
+                    "Bo qua ky %s (%s): so khong hop le (dai 1..%d): %s | %s",
+                    draw_period, draw_date, max_number, main_numbers, special_num,
+                )
+                continue
+
         source_url = source_page_url
         if period_link and period_link.get("href"):
             source_url = urljoin(page_or_base_url, period_link["href"])
-
-        main_numbers, special_num = extracted_numbers
         draws.append(
             DrawResult(
                 game_type=game_type,
@@ -703,77 +764,6 @@ def print_crawl_stop(page_index: int, reason: str) -> None:
     get_logger().info(message)
 
 
-def parse_and_save(
-    html: str,
-    conn: sqlite3.Connection | None = None,
-    game_type: str = DEFAULT_GAME_TYPE,
-    source_page_url: str | None = None,
-    base_url: str = DEFAULT_BASE_URL,
-    has_special_num: bool = True,
-) -> CrawlSummary:
-    """Parse HTML with BeautifulSoup and save new draw rows to SQLite."""
-    owns_connection = conn is None
-    if conn is None:
-        conn = init_db()
-
-    draws = parse_draw_rows(
-        html,
-        game_type=game_type,
-        source_page_url=source_page_url,
-        base_url=base_url,
-        has_special_num=has_special_num,
-    )
-
-    if not draws:
-        if owns_connection:
-            conn.close()
-        raise ValueError("No draw rows found in HTML")
-
-    try:
-        summary = save_draws(conn, draws)
-        conn.commit()
-        return summary
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        if owns_connection:
-            conn.close()
-
-
-def parse_html_pages_and_save(
-    html_pages: list[tuple[str, str | None]],
-    conn: sqlite3.Connection,
-    game_type: str = DEFAULT_GAME_TYPE,
-    base_url: str = DEFAULT_BASE_URL,
-    has_special_num: bool = True,
-) -> CrawlSummary:
-    """Parse multiple HTML pages and save all new draw rows to SQLite."""
-    draws: list[DrawResult] = []
-
-    for html, source_page_url in html_pages:
-        draws.extend(
-            parse_draw_rows(
-                html,
-                game_type=game_type,
-                source_page_url=source_page_url,
-                base_url=base_url,
-                has_special_num=has_special_num,
-            )
-        )
-
-    if not draws:
-        raise ValueError("No draw rows found in HTML")
-
-    try:
-        summary = save_draws(conn, draws)
-        conn.commit()
-        return summary
-    except Exception:
-        conn.rollback()
-        raise
-
-
 def page_source_url(source_page_url: str, page_index: int) -> str:
     return f"{source_page_url}#page-index={page_index}"
 
@@ -784,111 +774,6 @@ def format_page_url(template: str, page_index: int) -> str:
         page_index=page_index,
         page_number=page_index + 1,
     )
-
-
-def load_html_pages_from_args(args: argparse.Namespace) -> list[tuple[str, str | None]]:
-    if args.html_file:
-        return [(read_html_file(args.html_file), None)]
-
-    url = args.url or os.environ.get("VIETLOTT_URL") or DEFAULT_URL
-    max_pages = args.max_pages
-    if max_pages is not None and max_pages < 1:
-        max_pages = None
-
-    session = build_http_session()
-    session.headers.update({"Referer": url})
-
-    first_html = fetch_html(url, timeout=args.timeout, session=session)
-    html_pages: list[tuple[str, str | None]] = [(first_html, url)]
-    if max_pages == 1:
-        return html_pages
-
-    seen_page_signatures: set[tuple[str, ...]] = {
-        tuple(
-            draw.draw_period
-            for draw in parse_draw_rows(
-                first_html,
-                game_type=args.game_type,
-                source_page_url=url,
-                base_url=args.base_url,
-                has_special_num=getattr(args, "has_special_num", True),
-            )
-        )
-    }
-
-    if args.page_url_template:
-        page_index = 1
-        while max_pages is None or page_index < max_pages:
-            page_url = format_page_url(args.page_url_template, page_index)
-            html = fetch_html(page_url, timeout=args.timeout, session=session)
-            draws = parse_draw_rows(
-                html,
-                game_type=args.game_type,
-                source_page_url=page_url,
-                base_url=args.base_url,
-                has_special_num=getattr(args, "has_special_num", True),
-            )
-            signature = tuple(draw.draw_period for draw in draws)
-            if not signature or signature in seen_page_signatures:
-                break
-            seen_page_signatures.add(signature)
-            html_pages.append((html, page_url))
-            time.sleep(args.page_delay)
-            page_index += 1
-        return html_pages
-
-    ajax_key = extract_ajax_key(first_html)
-    if ajax_key is None:
-        next_pages = extract_next_page_indices(first_html)
-        if next_pages:
-            raise ValueError(
-                "Found NextPage links but could not extract Vietlott Ajax key. "
-                "Use a full Vietlott page URL, or pass --page-url-template."
-            )
-        return html_pages
-
-    render_info = fetch_render_info(
-        session,
-        base_url=args.base_url,
-        site_id=args.site_id,
-        timeout=args.timeout,
-    )
-    game_draw_id = (
-        args.game_draw_id
-        if args.game_draw_id is not None
-        else extract_game_draw_id(first_html)
-    )
-
-    page_index = 1
-    while max_pages is None or page_index < max_pages:
-        html = fetch_ajax_draw_page(
-            session,
-            page_index=page_index,
-            key=ajax_key,
-            render_info=render_info,
-            game_draw_id=game_draw_id,
-            base_url=args.base_url,
-            ajax_draw_path=getattr(args, "ajax_draw_path", DEFAULT_AJAX_DRAW_PATH),
-            number_bands=getattr(args, "number_bands", 5),
-            timeout=args.timeout,
-        )
-        source_page_url = page_source_url(url, page_index)
-        draws = parse_draw_rows(
-            html,
-            game_type=args.game_type,
-            source_page_url=source_page_url,
-            base_url=args.base_url,
-            has_special_num=getattr(args, "has_special_num", True),
-        )
-        signature = tuple(draw.draw_period for draw in draws)
-        if not signature or signature in seen_page_signatures:
-            break
-        seen_page_signatures.add(signature)
-        html_pages.append((html, source_page_url))
-        time.sleep(args.page_delay)
-        page_index += 1
-
-    return html_pages
 
 
 def parse_page_draws(
@@ -902,6 +787,7 @@ def parse_page_draws(
         source_page_url=source_page_url,
         base_url=args.base_url,
         has_special_num=args.has_special_num,
+        max_number=getattr(args, "max_number", None),
     )
 
 
@@ -1044,6 +930,7 @@ def build_game_args(args: argparse.Namespace, config: GameConfig) -> argparse.Na
     values["has_special_num"] = config.has_special_num
     values["ajax_draw_path"] = config.ajax_draw_path
     values["number_bands"] = config.number_bands
+    values["max_number"] = config.max_number
     if args.game == "all":
         values["url"] = config.default_url
     else:
@@ -1144,7 +1031,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=1000,
         help=(
-            "So bo so moi che do se chot TRUOC khi cao (backtest 5 giai thuat). "
+            "So bo so moi che do se chot TRUOC khi cao (backtest 6 giai thuat). "
             "Dat 0 de tat."
         ),
     )
@@ -1223,6 +1110,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             add_summary(summary, game_summary)
         status = "success"
     except PartialCrawlError as exc:
+        # Da luu duoc >=1 trang roi moi loi — du lieu moi VAN nam trong DB.
+        status = "partial"
         summary = exc.summary
         error_message = str(exc)
     except Exception as exc:
@@ -1298,7 +1187,11 @@ def main(argv: Iterable[str] | None = None) -> int:
                 conn.close()
 
     print_summary(status, summary, error_message)
-    return 0 if status == "success" else 1
+    # 0 = tron ven; 2 = partial (co loi nhung da luu duoc trang moi);
+    # 1 = fail trang. Task Scheduler / stats_web dua vao ma nay de phan biet.
+    if status == "success":
+        return 0
+    return 2 if status == "partial" else 1
 
 
 if __name__ == "__main__":

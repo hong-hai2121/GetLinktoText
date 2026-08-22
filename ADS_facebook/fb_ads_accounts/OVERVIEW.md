@@ -37,15 +37,16 @@ launcher.py             (GUI cũ — chỉ điều phối Phase 1 & 2; hub.py th
 
 ### `config.py` — Cấu hình chung
 
-Lưu hai biến mà tất cả các script đọc:
+Các biến mà tất cả các script đọc:
 
 | Biến | Mô tả |
 |------|-------|
-| `ACCESS_TOKEN` | Facebook Graph API access token |
-| `DATE_PRESET` | Preset thời gian mặc định (`"this_month"`) |
+| `ACCESS_TOKEN` | Đọc từ biến `FB_ADS_ACCOUNTS_TOKEN` trong `.env` ở **gốc repo** (`GetLinktoText/.env`, mẫu ở `.env.example`) — KHÔNG hardcode trong file này vì nó được commit lên GitHub |
+| `SPREADSHEET_ID` | ID Google Sheet đích |
+| `DATE_PRESET` | Preset thời gian mặc định (`"last_month"`) |
 | `TIME_RANGE` | Dict `{since, until}` khi dùng ngày tuỳ chỉnh |
 
-`launcher.py` ghi đè `DATE_PRESET` / `TIME_RANGE` vào file này trước mỗi lần chạy để truyền khoảng thời gian mà người dùng chọn trên GUI xuống các script con.
+`hub.py` / `launcher.py` chỉ ghi lại hai dòng `DATE_PRESET` / `TIME_RANGE` ở cuối file trước mỗi lần chạy (giữ nguyên mọi dòng khác) để truyền khoảng thời gian mà người dùng chọn trên GUI xuống các script con.
 
 ---
 

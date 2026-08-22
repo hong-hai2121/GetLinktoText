@@ -13,10 +13,9 @@ trình duyệt. Chạy: python stats_web.py  [--game power655] [--no-open]
 """
 
 import argparse
+import base64
 import json
-import math
 import os
-import random
 import sqlite3
 import statistics
 import subprocess
@@ -46,47 +45,12 @@ POSITION_NAMES = {
 }
 
 
-def _gammq(a: float, x: float) -> float:
-    """Regularized upper incomplete gamma Q(a,x) — để tính p-value chi-square."""
-    if x <= 0:
-        return 1.0
-    gln = math.lgamma(a)
-    if x < a + 1.0:  # khai triển chuỗi cho P
-        ap, summ, delv = a, 1.0 / a, 1.0 / a
-        for _ in range(1000):
-            ap += 1.0
-            delv *= x / ap
-            summ += delv
-            if abs(delv) < abs(summ) * 1e-14:
-                break
-        return 1.0 - summ * math.exp(-x + a * math.log(x) - gln)
-    # phân số liên tục cho Q
-    b, c = x + 1.0 - a, 1e300
-    d = 1.0 / b
-    h = d
-    for i in range(1, 1000):
-        an = -i * (i - a)
-        b += 2.0
-        d = an * d + b
-        if abs(d) < 1e-300:
-            d = 1e-300
-        c = b + an / c
-        if abs(c) < 1e-300:
-            c = 1e-300
-        d = 1.0 / d
-        delv = d * c
-        h *= delv
-        if abs(delv - 1.0) < 1e-14:
-            break
-    return math.exp(-x + a * math.log(x) - gln) * h
-
-
-def compute_extra_stats(
-    db_path: Path | str, game_type: str, recent_n: int = 30
-) -> dict | None:
-    """Các phân tích hỗ trợ dựng bộ số: tổng/chẵn-lẻ/thấp-cao/đầu số, gan, nóng, cặp.
+def compute_extra_stats(db_path: Path | str, game_type: str) -> dict | None:
+    """Số liệu cho sugEngine + Mô phỏng: tổng, chẵn-lẻ, thấp-cao, liên tiếp, lặp, cooc.
 
     LƯU Ý: chỉ là thống kê mô tả, KHÔNG tăng xác suất trúng (xổ số độc lập).
+    Các mục hiển thị (đầu số, số gan/nóng, cặp hay đi cùng, đuôi số...) đã bỏ khỏi
+    trang nên KHÔNG tính nữa — payload chỉ giữ đúng phần score()/sugEngine đọc.
     """
     draws = gap_stats.fetch_draws(db_path, game_type=game_type)  # mới -> cũ
     total = len(draws)
@@ -121,94 +85,35 @@ def compute_extra_stats(
         odd[sum(1 for x in d if x % 2 == 1)] += 1
         low[sum(1 for x in d if x <= low_max)] += 1
 
-    # --- Đầu số (hàng chục) ---
-    bands = [(1, 9), (10, 19), (20, 29), (30, 39), (40, 49), (50, n)]
-    decade = [
-        {"label": f"{lo}-{hi}", "occ": sum(1 for d in draws for x in d if lo <= x <= hi)}
-        for lo, hi in bands
-    ]
-
-    # --- Số gan (lâu chưa về) + nóng gần đây ---
-    gap_of = {}
-    for num in range(1, n + 1):
-        g = total
-        for i, d in enumerate(draws):  # mới nhất trước
-            if num in d:
-                g = i
-                break
-        gap_of[num] = g
-    overdue = sorted(
-        ({"number": k, "gap": v} for k, v in gap_of.items()),
-        key=lambda r: (-r["gap"], r["number"]),
-    )[:12]
-
-    rn = min(recent_n, total)
-    recent = {num: 0 for num in range(1, n + 1)}
-    for d in draws[:rn]:
-        for x in d:
-            recent[x] += 1
-    hot = sorted(
-        ({"number": k, "count": v} for k, v in recent.items()),
-        key=lambda r: (-r["count"], r["number"]),
-    )[:12]
-
-    # --- Cặp số hay đi cùng ---
+    # --- Ma trận đồng xuất hiện (cho chế độ "theo cặp" ở bộ gợi ý) ---
     pair_count: dict[tuple[int, int], int] = {}
     for d in draws:
         for a, b in combinations(d, 2):  # d đã sort tăng dần nên a < b
             pair_count[(a, b)] = pair_count.get((a, b), 0) + 1
-    top_pairs = sorted(pair_count.items(), key=lambda kv: (-kv[1], kv[0]))[:15]
-    exp_pair = total * (6 / n) * (5 / (n - 1))  # kỳ vọng ngẫu nhiên cho 1 cặp
-
-    # Ma trận đồng xuất hiện đầy đủ (cho chế độ "theo cặp" ở bộ gợi ý).
     cooc_mat = [[0] * n for _ in range(n)]
     for (a, b), c in pair_count.items():
         cooc_mat[a - 1][b - 1] = c
         cooc_mat[b - 1][a - 1] = c
 
-    # --- Cấu trúc bộ số bổ sung: số liên tiếp, đuôi số ---
+    # --- Số liên tiếp trong bộ ---
     consec_dist: dict[int, int] = defaultdict(int)
-    last_digit = [0] * 10
     for d in draws:
         consec_dist[sum(1 for i in range(5) if d[i + 1] == d[i] + 1)] += 1
-        for x in d:
-            last_digit[x % 10] += 1
     consecutive = [
         {"label": str(k), "occ": consec_dist.get(k, 0)}
         for k in range((max(consec_dist) if consec_dist else 0) + 1)
     ]
-    with_consec = total - consec_dist.get(0, 0)
 
     # --- Số lặp lại từ kỳ ngay trước ---
     rep = [0] * 7
     for t in range(total - 1):
         rep[len(set(draws[t]) & set(draws[t + 1]))] += 1
-    comparisons = total - 1
     repeat_prev = [{"label": str(k), "occ": rep[k]} for k in range(7)]
-    repeat_mean = (
-        round(sum(k * rep[k] for k in range(7)) / comparisons, 2) if comparisons else 0
-    )
-
-    # --- Khoảng nghỉ trung bình mỗi số (bổ sung cho "số gan") ---
-    appear_idx: dict[int, list[int]] = {num: [] for num in range(1, n + 1)}
-    for i, d in enumerate(draws):
-        for x in d:
-            appear_idx[x].append(i)
-
-    def _avg_rest(num: int):
-        idxs = appear_idx[num]
-        if len(idxs) < 2:
-            return None
-        return round((idxs[-1] - idxs[0]) / (len(idxs) - 1), 1)
-
-    for o in overdue:
-        o["rest"] = _avg_rest(o["number"])
 
     return {
         "total": total,
         "n": n,
         "low_max": low_max,
-        "recent_n": rn,
         "latest": list(draws[0]),  # kỳ mới nhất (6 số đã sort) để prefill mô phỏng
         "sum": {
             "bins": sum_bins,
@@ -220,17 +125,8 @@ def compute_extra_stats(
         },
         "odd": odd,
         "low": low,
-        "decade": decade,
         "consecutive": consecutive,
-        "with_consec": with_consec,
-        "last_digit": [{"label": str(k), "occ": last_digit[k]} for k in range(10)],
         "repeat_prev": repeat_prev,
-        "repeat_mean": repeat_mean,
-        "exp_rest": round(n / 6, 1),
-        "overdue": overdue,
-        "hot": hot,
-        "pairs": [{"a": a, "b": b, "count": c} for (a, b), c in top_pairs],
-        "exp_pair": round(exp_pair, 1),
         "cooc": cooc_mat,
     }
 
@@ -391,6 +287,7 @@ def load_history(db_path: Path | str, game_type: str) -> list[dict]:
     """
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")
     try:
         rows = conn.execute(
             """
@@ -466,6 +363,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>%%TITLE%%</title>
+%%FAVICON%%
 <style>
   :root{
     --plane:#f9f9f7; --surface:#fcfcfb; --text:#0b0b0b; --text2:#52514e;
@@ -662,6 +560,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       <label>Loại số<input id="sugExcl" type="text" inputmode="numeric" placeholder="vd: 13"></label>
       <button class="btn" id="genBtn" type="button">🎲 Tạo</button>
     </div>
+    <div class="pc" id="sugAuto"></div>
     <div class="pc warn" id="sugMsg"></div>
     <div class="pc" id="sugStat"></div>
     <details id="sugSetsWrap" style="margin-top:6px"><summary>Xem &amp; chép toàn bộ bội số</summary>
@@ -733,16 +632,19 @@ HTML_TEMPLATE = r"""<!doctype html>
 const DATA = %%DATA%%;
 const GENERATED = "%%GENERATED%%";
 const SOURCE = "%%SOURCE%%";
+const GOLDEN = %%GOLDEN%%;
+// Nhớ lựa chọn Sáng/Tối của lần trước (áp NGAY trước khi render để khỏi chớp).
+try{
+  const savedTheme = localStorage.getItem('vietlott_theme');
+  if(savedTheme==='dark' || savedTheme==='light')
+    document.documentElement.setAttribute('data-theme', savedTheme);
+}catch(e){}
 let current = 0;
 let simRunning = false, simTarget = null, simAttempts = 0, simHits = null;
 const SIM_CAP = 100000000, SIM_CHUNK = 300000;
 
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const pad2 = x => String(x).padStart(2,'0');
-function mkTile(k,v,sub){
-  return `<div class="card"><div class="k">${k}</div><div class="v">${v}</div>`+
-         (sub?`<div class="s">${sub}</div>`:'')+`</div>`;
-}
 
 // series: [{label, value, sub, highlight}]
 function render(){
@@ -760,7 +662,18 @@ function render(){
   const hot = [...g.frequency].sort((a,b)=>b.count-a.count)[0];
   const cold = [...g.frequency].sort((a,b)=>b.gap-a.gap)[0];
   const mk = (k,v)=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  // Kỳ vừa về là thứ muốn xem nhất sau khi cập nhật — đưa lên đầu thay vì
+  // bắt cuộn xuống mục Lịch sử cuối trang.
+  const last = (g.history||[])[0];
+  const lastCard = last
+    ? '<div class="card"><div class="k">Kỳ mới nhất · '+esc(last.p||'—')+
+      ' · '+esc(last.d||'')+'</div><div class="v" style="font-size:21px;letter-spacing:1px">'+
+      last.n.map(pad2).join(' ')+
+      (last.s!=null ? ' <span style="color:var(--warn)">| '+pad2(last.s)+'</span>' : '')+
+      '</div></div>'
+    : '';
   cards.innerHTML =
+    lastCard +
     mk('Tổng số kỳ', g.total_draws.toLocaleString('vi')) +
     mk('Số về nhiều nhất', hot ? (hot.number+' · '+hot.count+' lần') : '—') +
     mk('Lâu chưa về nhất', cold ? (cold.number+' · '+cold.gap+' kỳ') : '—');
@@ -771,6 +684,10 @@ function render(){
   // dữ liệu đi thì bộ số trên web sẽ khác với predict_track.py sinh cho DB.
   // Ba thẻ tóm tắt phía trên cũng đọc g.frequency.
 
+  if(!sugModeTouched){
+    const bm = bestTrackMode();
+    if(bm) document.getElementById('sugMode').value = bm;
+  }
   renderSuggest();
   renderBacktest();
   renderTrack();
@@ -1094,6 +1011,19 @@ function sugEngine(){
 
 const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
   pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông',spread:'Phủ rộng'};
+
+// Chế độ mặc định TỰ CHỌN theo số liệu thật: lấy chế độ đứng đầu bảng xếp hạng
+// DB (tr.methods đã xếp theo ĐỘ PHỦ — thứ duy nhất quyết định cơ hội có vé
+// trúng ≥4 số khi mua cả bội số). KHÔNG lấy theo cột ≥4 từng vé: cột đó là
+// nhiễu quanh ngẫu nhiên và hiện đang "thưởng" nhầm chế độ chồng lấn nặng nhất.
+// Người dùng tự đổi tay thì tôn trọng lựa chọn đó (sugModeTouched).
+let sugModeTouched = false;
+function bestTrackMode(){
+  const tr = DATA[current].track;
+  if(!tr || !tr.methods) return null;
+  const lead = tr.methods.filter(m=>m.sets && m.cov_rate);
+  return lead.length ? lead[0].key : null;
+}
 function renderSuggest(){
   const ex = DATA[current].extra;
   const panel = document.getElementById('sugPanel');
@@ -1151,6 +1081,18 @@ function renderSuggest(){
   document.getElementById('sugMsg').textContent = res.relaxed
     ? '⚠ Không đủ bộ qua ràng buộc (khoá số? số bộ quá lớn?) — đã nới lỏng để đủ '
       +res.out.length+'/'+res.asked+' bộ.' : '';
+
+  const autoEl = document.getElementById('sugAuto');
+  if(autoEl){
+    const bm = bestTrackMode();
+    autoEl.innerHTML = (!sugModeTouched && bm && res.mode===bm)
+      ? 'Tự chọn <b>'+MODE_NAME[bm]+'</b> theo số liệu thật: đứng đầu về <b>độ phủ</b> '+
+        'trong mục "Giải thuật nào đang trúng nhiều nhất?" bên dưới — cùng số vé, bội số '+
+        'ít chồng lấn nhất nên cơ hội có vé trúng ≥4 số cao nhất khi mua nhiều vé cùng kỳ. '+
+        '(Tỉ lệ ≥4 tính trên TỪNG vé thì chế độ nào cũng như nhau — chênh lệch là nhiễu.) '+
+        'Bạn đổi chế độ tay thì trang giữ lựa chọn đó.'
+      : '';
+  }
 
   document.getElementById('sugNote').innerHTML =
     '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
@@ -1737,7 +1679,7 @@ DATA.forEach((g,i)=>{
   tabs.appendChild(b);
 });
 document.getElementById('genBtn').onclick = renderSuggest;
-document.getElementById('sugMode').onchange = renderSuggest;
+document.getElementById('sugMode').onchange = ()=>{ sugModeTouched = true; renderSuggest(); };
 document.getElementById('sugCount').onchange = renderSuggest;
 document.getElementById('simRun').onclick = startSim;
 document.getElementById('simStop').onclick = ()=>{ finishSim(false); };
@@ -1768,15 +1710,73 @@ document.getElementById('themeBtn').onclick = ()=>{
   const cur = document.documentElement.getAttribute('data-theme');
   const isDark = cur ? cur==='dark'
     : window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.setAttribute('data-theme', isDark?'light':'dark');
-  render();
+  const next = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('vietlott_theme', next); }catch(e){}
+  // KHÔNG render() lại: CSS var tự đổi màu. Render sẽ bốc lại bộ số ngẫu nhiên
+  // MỚI và reset lịch sử/mô phỏng — mất đúng thứ người dùng đang xem.
 };
-window.addEventListener('resize', ()=>{ /* svg scales via CSS */ });
+
+// Đối chiếu mô hình JS với bộ golden chốt trong predict_track.py. Hai bản
+// Python/JS phải giống hệt nhau (xem GOLDEN_SETS bên đó) — lệch là bộ số sinh
+// trên trang không còn khớp với bảng xếp hạng DB, phải sửa cho khớp ngay.
+(function(){
+  if(!GOLDEN || !GOLDEN.sets) return;
+  const bad = [];
+  for(const g of GOLDEN.sets){
+    if(Math.abs(popOfSet(g.set)-g.pop) > 1e-6*Math.max(1,Math.abs(g.pop))
+       || isCrowdedSet(g.set)!==g.crowded) bad.push(g.set.join(','));
+  }
+  for(const c of GOLDEN.caps){
+    if(coverageCap(c[0],c[1])!==c[2]) bad.push('cap('+c[0]+','+c[1]+')');
+  }
+  if(bad.length){
+    console.error('GOLDEN lệch:', bad);
+    const w=document.createElement('div');
+    w.className='banner';
+    w.style.color='var(--warn)';
+    w.textContent='⚠ Mô hình JS trên trang đã LỆCH với bản Python (predict_track.py): '+
+      bad.join(' · ')+' — bộ số sinh ở đây không còn khớp với bảng xếp hạng DB.';
+    document.querySelector('.wrap').prepend(w);
+  }
+})();
 render();
 </script>
 </body>
 </html>
 """
+
+
+def _favicon_tag() -> str:
+    """Nhúng vietlott_stats.ico làm icon tab (data URI — trang vẫn self-contained)."""
+    try:
+        if ICON_PATH.is_file() or _sinh_icon(ICON_PATH):
+            b64 = base64.b64encode(ICON_PATH.read_bytes()).decode("ascii")
+            return f'<link rel="icon" href="data:image/x-icon;base64,{b64}">'
+    except Exception:  # noqa: BLE001 — không có icon thì trang vẫn phải sinh được
+        pass
+    return ""
+
+
+def _golden_payload() -> str:
+    """Bộ golden từ predict_track để JS tự đối chiếu; tiện thể selftest bản Python."""
+    try:
+        import predict_track
+
+        errs = predict_track.selftest()
+        if errs:
+            print("⚠ predict_track.selftest LỆCH golden — sửa cho khớp rồi hãy tin trang:")
+            for e in errs:
+                print("   -", e)
+        return json.dumps({
+            "sets": [
+                {"set": list(s), "pop": p, "crowded": c}
+                for s, p, c in predict_track.GOLDEN_SETS
+            ],
+            "caps": [list(c) for c in predict_track.GOLDEN_CAPS],
+        })
+    except Exception:  # noqa: BLE001 — thiếu predict_track thì bỏ kiểm tra, trang vẫn chạy
+        return "null"
 
 
 def render_html(
@@ -1789,18 +1789,36 @@ def render_html(
     return (
         HTML_TEMPLATE
         .replace("%%DATA%%", json.dumps(all_data, ensure_ascii=False))
+        .replace("%%GOLDEN%%", _golden_payload())
         .replace("%%GENERATED%%", generated)
         .replace("%%SOURCE%%", source)
         .replace("%%TITLE%%", title)
         .replace("%%NAV%%", nav)
+        .replace("%%FAVICON%%", _favicon_tag())
     )
+
+
+def _report_update(label: str, returncode: int, failed: list[str]) -> None:
+    """Diễn giải mã thoát của crawler: 0 = OK, 2 = partial (đã lưu được), 1 = fail."""
+    if returncode == 0:
+        return
+    if returncode == 2:
+        print(
+            f"⚠ Cào {label} bị gián đoạn giữa chừng nhưng ĐÃ LƯU được trang mới "
+            f"(partial) — trang thống kê vẫn có dữ liệu mới."
+        )
+        return
+    print(f"⚠ Cào {label} lỗi (mã {returncode}) — dùng dữ liệu cũ.")
+    failed.append(label)
 
 
 def run_update(game: str) -> list[str]:
     """Cào kỳ mới về DB trước khi sinh trang. Trả về danh sách game cào lỗi.
 
-    Power 6/55 và Mega 6/45 nằm ở 2 DB riêng nên phải gọi 2 crawler. Lỗi mạng
-    của một game không được chặn việc sinh trang từ dữ liệu đã có.
+    Power 6/55 và Mega 6/45 nằm ở 2 DB riêng nên chạy SONG SONG được (đằng nào
+    cũng chờ mạng là chính — thời gian chờ giảm gần một nửa). Game đầu in thẳng
+    ra console để xem tiến trình; game sau gom output rồi in trọn sau đó cho
+    khỏi lẫn dòng. Lỗi của một game không chặn việc sinh trang từ dữ liệu đã có.
     """
     failed: list[str] = []
     jobs: list[tuple[str, list[str]]] = []
@@ -1808,19 +1826,41 @@ def run_update(game: str) -> list[str]:
         jobs.append(("Power 6/55", [str(BASE_DIR / "crawl.py")]))
     if game in ("mega645", "all"):
         jobs.append(("Mega 6/45", [str(BASE_DIR / "crawl_mega645.py")]))
+    if not jobs:
+        return failed
 
-    for label, cmd in jobs:
-        print(f"\n=== Cập nhật {label} ===", flush=True)
+    # Khởi động các game SAU ở chế độ nền, gom output (nhỏ, không sợ đầy pipe).
+    background: list[tuple[str, subprocess.Popen | None]] = []
+    for label, cmd in jobs[1:]:
         try:
-            subprocess.run(
-                [sys.executable, *cmd], cwd=str(BASE_DIR), check=True
+            proc = subprocess.Popen(
+                [sys.executable, *cmd], cwd=str(BASE_DIR),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
             )
-        except subprocess.CalledProcessError as exc:
-            print(f"⚠ Cào {label} lỗi (mã {exc.returncode}) — dùng dữ liệu cũ.")
-            failed.append(label)
         except Exception as exc:  # noqa: BLE001
-            print(f"⚠ Cào {label} lỗi: {type(exc).__name__}: {exc}")
+            print(f"⚠ Không khởi động được cào {label}: {type(exc).__name__}: {exc}")
             failed.append(label)
+            proc = None
+        background.append((label, proc))
+
+    first_label, first_cmd = jobs[0]
+    print(f"\n=== Cập nhật {first_label} ===", flush=True)
+    try:
+        rc = subprocess.run([sys.executable, *first_cmd], cwd=str(BASE_DIR)).returncode
+        _report_update(first_label, rc, failed)
+    except Exception as exc:  # noqa: BLE001
+        print(f"⚠ Cào {first_label} lỗi: {type(exc).__name__}: {exc}")
+        failed.append(first_label)
+
+    for label, proc in background:
+        if proc is None:
+            continue
+        out, _ = proc.communicate()
+        print(f"\n=== Cập nhật {label} (đã chạy song song) ===", flush=True)
+        if out and out.strip():
+            print(out.rstrip(), flush=True)
+        _report_update(label, proc.returncode, failed)
     print()
     return failed
 
@@ -2017,6 +2057,7 @@ def build_page_data(db_path: str, game_types: list[str]) -> list[dict]:
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")
     try:
         try:
             return load_all(conn, db_path, game_types)

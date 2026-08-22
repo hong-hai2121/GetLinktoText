@@ -16,13 +16,29 @@ import os
 # CONFIGURATION
 # ============================================================
 AD_ACCOUNT_ID = "act_882350396554887"
-ACCESS_TOKEN = (
-    "EAAXJKwPSJzABRSPeQ7lSX6BjHbIS0URANtsyK1yXUH1ctNFiCGN39hpOwKg7Pn"
-    "PJceKciVFk688aZAwnuEaKZAGFLzdCwlJiyAn5l3C891icJAFGZC2zT9dJeeU6N9"
-    "wwz1ikjVj9UCoQrvSNucxZBSH7be60ivTPUeTFCHcXPqOI2Vq3trCh0m5gqBgATK"
-    "cU3uxwvfKL6dWxsb1hRjsrWDRaDEEzKZCkR1KZA3nYHv6HPnPPY8oRaZBzZAoiff"
-    "IjG93UtrvfnwcjM03iGyZBZCSjD0mDBvL2F4OpnIDzXBewZDZD"
-)
+
+# Token đọc từ .env ở GỐC repo (GetLinktoText/.env, bị .gitignore che) — KHÔNG
+# hardcode ở đây: file này được commit lên GitHub. Mẫu biến ở .env.example.
+_ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+
+
+def _env(name: str) -> str:
+    """Đọc một biến trong .env gốc repo — vài dòng tự parse, khỏi cần dotenv."""
+    try:
+        with open(_ENV_FILE, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return ""
+
+
+ACCESS_TOKEN = _env("FB_ADS_REPORT_TOKEN")
+if not ACCESS_TOKEN:
+    sys.exit(f"Thiếu FB_ADS_REPORT_TOKEN trong {_ENV_FILE} — mở file đó và dán token vào.")
+
 GOOGLE_SHEET_ID = "1lx2_GAI80riLryyiRYCREXMqGzzGptAiAzTKUXE3qiI"
 CREDENTIALS_FILE = os.path.join(os.path.dirname(__file__), "credentials.json")
 

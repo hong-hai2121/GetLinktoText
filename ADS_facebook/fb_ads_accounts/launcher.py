@@ -43,23 +43,26 @@ CODE_BG    = "#f1f5f9"
 
 
 def write_config(date_preset: str, time_range: dict | None):
-    """Ghi config.py để get_campaigns.py và get_details.py đọc."""
-    # Đọc ACCESS_TOKEN hiện tại để không bị xóa khi ghi đè
-    token = ""
+    """Cập nhật DATE_PRESET / TIME_RANGE trong config.py để get_campaigns.py /
+    get_details.py đọc. GIỮ NGUYÊN mọi dòng khác — config.py giờ là code đọc
+    token từ .env gốc repo, ghi kiểu 'chỉ giữ dòng ACCESS_TOKEN' như trước sẽ
+    phá file (cùng cách làm với write_config của hub.py)."""
     config_path = BASE_DIR / "config.py"
     try:
-        for line in config_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("ACCESS_TOKEN"):
-                token = line + "\n"
-                break
+        lines = config_path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
-        pass
+        lines = []
+
+    kept = [ln for ln in lines
+            if not ln.lstrip().startswith(("DATE_PRESET", "TIME_RANGE"))]
 
     if date_preset:
-        date_part = f'DATE_PRESET = "{date_preset}"\nTIME_RANGE: dict = {{}}\n'
+        date_part = [f'DATE_PRESET = "{date_preset}"', "TIME_RANGE: dict = {}"]
     else:
-        date_part = f'DATE_PRESET = ""\nTIME_RANGE: dict = {json.dumps(time_range)}\n'
-    config_path.write_text(token + date_part, encoding="utf-8")
+        date_part = ['DATE_PRESET = ""', f"TIME_RANGE: dict = {json.dumps(time_range)}"]
+
+    out = "\n".join(kept + date_part).rstrip("\n") + "\n"
+    config_path.write_text(out, encoding="utf-8")
 
 
 # ── Widgets helpers ────────────────────────────────────────────────────────────

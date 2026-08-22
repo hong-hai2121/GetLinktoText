@@ -35,15 +35,10 @@ from collections import defaultdict
 from pathlib import Path
 
 from crawl import DB_PATH, EXPORT_DIR, current_timestamp, ensure_dirs, init_db
+from gap_stats import GAME_NUMBER_RANGE  # nguồn duy nhất: GameConfig trong crawl.py
 
 NUM_COLUMNS = ["num1", "num2", "num3", "num4", "num5", "num6"]
 POSITIONS = len(NUM_COLUMNS)  # 6 vị trí x1..x6 sau khi sort tăng dần
-
-# Tổng số quả cầu theo từng loại hình -> quyết định dải số 1..N cần liệt kê.
-GAME_NUMBER_RANGE = {
-    "power655": 55,
-    "mega645": 45,
-}
 
 
 def init_stats_tables(conn) -> None:

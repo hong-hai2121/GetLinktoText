@@ -12,8 +12,10 @@ pip install -r requirements.txt
 
 ## Cấu hình
 
-1. **Facebook token** — điền vào `ACCESS_TOKEN` trong [config.py](config.py).
+1. **Facebook token** — điền vào biến `FB_ADS_TSANHDUC_TOKEN` trong file `.env`
+   ở **gốc repo** (`GetLinktoText/.env`, tạo từ `.env.example` nếu chưa có).
    Token cần quyền: `ads_read` (và `business_management` nếu cần).
+   KHÔNG dán token vào config.py — file đó được commit lên GitHub.
 2. **Google Sheet** — kết quả ghi vào sheet:
    `https://docs.google.com/spreadsheets/d/1aBWyX1f3yjMVbbJ7HxDbvS3ZvjBL9JsXc3Ycm_gTwAc`
    Phải **chia sẻ sheet** này cho service account
@@ -46,7 +48,7 @@ python get_details.py      # bước 3 – adset/ad cho campaign được chọn
 | `get_accounts.py` | GUI cập nhật danh sách TKQC vào tab "TKQC API" |
 | `get_campaigns.py` | Đọc TKQC có TRUE → lấy campaign + insights → ghi Sheets |
 | `get_details.py` | Đọc campaign có "Chọn Lấy Chi Tiết" = TRUE → chèn Adset/Ad |
-| `config.py` | `ACCESS_TOKEN`, `DATE_PRESET` (mặc định `this_month`) |
+| `config.py` | Đọc token từ `.env` gốc repo; `DATE_PRESET` (mặc định `this_month`) |
 | `fb_api.py` | Bộ đếm / log / retry rate-limit cho Graph API (dùng chung) |
 | `service_account.json` | Khóa Google Service Account |
 
