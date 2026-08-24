@@ -1,0 +1,1257 @@
+{
+ "audio": "audio_mau.m4a",
+ "ngon_ngu": "en",
+ "thoi_luong": 1470.78,
+ "doan": [
+  {
+   "bat_dau": 0.0,
+   "ket_thuc": 5.34,
+   "noi_dung": "If you're not using meta ads, you're kind of missing out because this platform absolutely"
+  },
+  {
+   "bat_dau": 5.34,
+   "ket_thuc": 11.08,
+   "noi_dung": "dominates the ad game because it has the best targeting options that will allow you to reach"
+  },
+  {
+   "bat_dau": 11.08,
+   "ket_thuc": 16.58,
+   "noi_dung": "the exact audience you need. And with meta ads, you'll be able to advertise on Instagram,"
+  },
+  {
+   "bat_dau": 16.92,
+   "ket_thuc": 22.2,
+   "noi_dung": "Facebook, and even WhatsApp if you want to. And while the platform may be a bit intimidating"
+  },
+  {
+   "bat_dau": 22.2,
+   "ket_thuc": 27.34,
+   "noi_dung": "when starting out, don't you worry because in this video, I'll go over everything from"
+  },
+  {
+   "bat_dau": 27.34,
+   "ket_thuc": 32.72,
+   "noi_dung": "what meta ads are to setting them up and analyzing their performance. So without further ado,"
+  },
+  {
+   "bat_dau": 33.08,
+   "ket_thuc": 39.1,
+   "noi_dung": "let's get into it. All right, so let's start from the top. What exactly are meta ads and why should"
+  },
+  {
+   "bat_dau": 39.1,
+   "ket_thuc": 44.56,
+   "noi_dung": "you even care about them? Well, they are the advertisements you see on Facebook, Instagram,"
+  },
+  {
+   "bat_dau": 44.76,
+   "ket_thuc": 50.64,
+   "noi_dung": "Messenger, and as I already said, sometimes even WhatsApp. And they're all managed from one single"
+  },
+  {
+   "bat_dau": 50.64,
+   "ket_thuc": 56.6,
+   "noi_dung": "place, which is meta ads manager. Now you might be thinking of something like Google ads, where you"
+  },
+  {
+   "bat_dau": 56.6,
+   "ket_thuc": 61.16,
+   "noi_dung": "target people based on what they're searching for right now. But meta is a bit different. It"
+  },
+  {
+   "bat_dau": 61.16,
+   "ket_thuc": 66.92,
+   "noi_dung": "targets people based on who they are, like their interests, their age, location, and just overall"
+  },
+  {
+   "bat_dau": 66.92,
+   "ket_thuc": 72.16,
+   "noi_dung": "online behavior. And the best part about it, it's incredibly easy to get started with as a beginner,"
+  },
+  {
+   "bat_dau": 72.16,
+   "ket_thuc": 78.44,
+   "noi_dung": "and you do not need a huge budget for it either. You can test campaigns for just a few dollars a day,"
+  },
+  {
+   "bat_dau": 78.5,
+   "ket_thuc": 84.24,
+   "noi_dung": "which is really good. And the secret sauce here is meta's algorithm. When you run an ad,"
+  },
+  {
+   "bat_dau": 84.24,
+   "ket_thuc": 90.58,
+   "noi_dung": "the platform goes through a learning phase, and it needs about 50 conversion events like 50 sales or"
+  },
+  {
+   "bat_dau": 90.58,
+   "ket_thuc": 96.74,
+   "noi_dung": "signups to figure out who is most likely to take the action that you actually want. And during this"
+  },
+  {
+   "bat_dau": 96.74,
+   "ket_thuc": 101.54,
+   "noi_dung": "phase, performance might be a bit unpredictable, but that's completely normal as meta decides who"
+  },
+  {
+   "bat_dau": 101.54,
+   "ket_thuc": 107.12,
+   "noi_dung": "sees your ad through an automatic digital auction based on total value. And this includes your bid,"
+  },
+  {
+   "bat_dau": 107.22,
+   "ket_thuc": 112.42,
+   "noi_dung": "the ad's quality, and how likely someone is to interact with it. And this means that even with a"
+  },
+  {
+   "bat_dau": 112.42,
+   "ket_thuc": 118.04,
+   "noi_dung": "smaller budget, a high-quality, relevant ad can actually win the game. And the big question"
+  },
+  {
+   "bat_dau": 118.04,
+   "ket_thuc": 125.62,
+   "noi_dung": "really is here, is meta ads still worth it in 2025? The answer, yes it is. But your return on"
+  },
+  {
+   "bat_dau": 125.62,
+   "ket_thuc": 130.62,
+   "noi_dung": "investment really depends on a lot of things, like your strategy, your creatives, and your targeting,"
+  },
+  {
+   "bat_dau": 130.82,
+   "ket_thuc": 137.68,
+   "noi_dung": "the offer you're making, and your landing page also. Oh, and also testing. Lots and lots of testing."
+  },
+  {
+   "bat_dau": 137.68,
+   "ket_thuc": 142.3,
+   "noi_dung": "And yes, you might spend some time kicking this whole thing off, but if you have something to"
+  },
+  {
+   "bat_dau": 142.3,
+   "ket_thuc": 148.2,
+   "noi_dung": "promote on a budget, this might just be one of the best decisions you will ever make. So the first"
+  },
+  {
+   "bat_dau": 148.2,
+   "ket_thuc": 153.58,
+   "noi_dung": "thing to focus on is learning. Your goal with your first campaign isn't to attract, you know,"
+  },
+  {
+   "bat_dau": 153.62,
+   "ket_thuc": 160.42,
+   "noi_dung": "a million visitors. It's to understand what works, reach real people, and get results in a cost-effective"
+  },
+  {
+   "bat_dau": 160.42,
+   "ket_thuc": 167.46,
+   "noi_dung": "way. And by the way, helping you understand exactly what works is what Hostinger Academy is all about,"
+  },
+  {
+   "bat_dau": 167.54,
+   "ket_thuc": 172.94,
+   "noi_dung": "with lots of useful guides just like this one that you're watching right now. So make sure to hit that"
+  },
+  {
+   "bat_dau": 172.94,
+   "ket_thuc": 178.62,
+   "noi_dung": "subscribe button, and that way you will not miss any of our future tutorials. All right guys, now let's"
+  },
+  {
+   "bat_dau": 178.62,
+   "ket_thuc": 183.7,
+   "noi_dung": "roll up our sleeves and get things set up. And trust me, it's not as difficult as it may sound,"
+  },
+  {
+   "bat_dau": 184.06,
+   "ket_thuc": 190.18,
+   "noi_dung": "and step one of this is creating your meta business portfolio. This is basically where you'll manage"
+  },
+  {
+   "bat_dau": 190.18,
+   "ket_thuc": 196.12,
+   "noi_dung": "all of your assets like Facebook pages, Instagram accounts, and of course, your ad account as well."
+  },
+  {
+   "bat_dau": 196.4,
+   "ket_thuc": 202.28,
+   "noi_dung": "First thing you're going to want to do is head over to business.facebook.com and click on create"
+  },
+  {
+   "bat_dau": 202.28,
+   "ket_thuc": 207.32,
+   "noi_dung": "account right over here. Then just enter your business name, your name, and your business email"
+  },
+  {
+   "bat_dau": 207.32,
+   "ket_thuc": 212.46,
+   "noi_dung": "address. Then you can just go through these steps and enter the required information to complete the"
+  },
+  {
+   "bat_dau": 212.46,
+   "ket_thuc": 218.16,
+   "noi_dung": "setup. And that's it. You're now in. But to run actual ads, you'll need to connect your Facebook page,"
+  },
+  {
+   "bat_dau": 218.16,
+   "ket_thuc": 223.7,
+   "noi_dung": "and if you have one, then your Instagram account as well. Now from the meta business suite, just go to"
+  },
+  {
+   "bat_dau": 223.7,
+   "ket_thuc": 229.1,
+   "noi_dung": "settings like I'm doing right now. Now when we're in the settings, just under accounts here, select"
+  },
+  {
+   "bat_dau": 229.1,
+   "ket_thuc": 234.92,
+   "noi_dung": "pages. Look up a page you manage via the search bar and hit add. Then just follow the prompts until"
+  },
+  {
+   "bat_dau": 234.92,
+   "ket_thuc": 240.0,
+   "noi_dung": "you're done. You can also add your Instagram account just as easily. Just select Instagram"
+  },
+  {
+   "bat_dau": 240.0,
+   "ket_thuc": 245.78,
+   "noi_dung": "under accounts from the settings and just follow the same exact process. And with all of that out of the"
+  },
+  {
+   "bat_dau": 245.78,
+   "ket_thuc": 251.82,
+   "noi_dung": "way, let's create your ad account. Now on the left sidebar, right underneath pages right here,"
+  },
+  {
+   "bat_dau": 251.86,
+   "ket_thuc": 257.34,
+   "noi_dung": "you'll find ad accounts. So click add and choose create a new ad account. Then enter its name,"
+  },
+  {
+   "bat_dau": 257.44,
+   "ket_thuc": 263.06,
+   "noi_dung": "select a time zone right here, choose your currency, and yeah, that's pretty much it. Then just assign"
+  },
+  {
+   "bat_dau": 263.06,
+   "ket_thuc": 268.0,
+   "noi_dung": "the ad account to your business. And you can also add your payment info right away over here. Just"
+  },
+  {
+   "bat_dau": 268.0,
+   "ket_thuc": 273.9,
+   "noi_dung": "follow the prompts to do so and press save at the end because we don't want anything to end up not"
+  },
+  {
+   "bat_dau": 273.9,
+   "ket_thuc": 279.4,
+   "noi_dung": "being saved. And that's pretty much the initial setup that is now complete. But now before you"
+  },
+  {
+   "bat_dau": 279.4,
+   "ket_thuc": 285.12,
+   "noi_dung": "launch your first campaign, it's really crucial to understand how meta ads manager structures your"
+  },
+  {
+   "bat_dau": 285.12,
+   "ket_thuc": 290.8,
+   "noi_dung": "ads. So there are actually three levels to this. Now the first is campaign. This is where you set"
+  },
+  {
+   "bat_dau": 290.8,
+   "ket_thuc": 296.0,
+   "noi_dung": "your advertising objectives, like what you want people to do when they see your ad. And now it might"
+  },
+  {
+   "bat_dau": 296.0,
+   "ket_thuc": 301.16,
+   "noi_dung": "be visiting your site. It might be engaging with the post or just making a purchase. Then comes in"
+  },
+  {
+   "bat_dau": 301.16,
+   "ket_thuc": 306.62,
+   "noi_dung": "the ad set. Now here you mainly define your audience and placements. That's where your ad"
+  },
+  {
+   "bat_dau": 306.62,
+   "ket_thuc": 312.58,
+   "noi_dung": "will appear basically. And finally, the actual ad. And this is the creative part and what people will"
+  },
+  {
+   "bat_dau": 312.58,
+   "ket_thuc": 318.42,
+   "noi_dung": "actually see, like your images, videos, ad copies, call to actions, all that. So just remember these"
+  },
+  {
+   "bat_dau": 318.42,
+   "ket_thuc": 323.64,
+   "noi_dung": "three levels that I just mentioned. And also guys, in just one campaign, you can have multiple ad"
+  },
+  {
+   "bat_dau": 323.64,
+   "ket_thuc": 329.14,
+   "noi_dung": "sets with different audiences, for example. And in each ad set, you can have multiple ads with"
+  },
+  {
+   "bat_dau": 329.14,
+   "ket_thuc": 333.74,
+   "noi_dung": "different creatives as well. All right, guys, now that your meta ad account is ready to go,"
+  },
+  {
+   "bat_dau": 333.86,
+   "ket_thuc": 338.5,
+   "noi_dung": "it's time to make your first big decision. And that's picking your campaign objective."
+  },
+  {
+   "bat_dau": 339.0,
+   "ket_thuc": 343.66,
+   "noi_dung": "And I know what you're thinking, can't I just boost a post and hope for the best? Well, technically,"
+  },
+  {
+   "bat_dau": 343.82,
+   "ket_thuc": 349.62,
+   "noi_dung": "yes, you can. But if you want results you can actually measure and improve on, you'll have to do it"
+  },
+  {
+   "bat_dau": 349.62,
+   "ket_thuc": 355.28,
+   "noi_dung": "the right way. And I will show you what that way is in a second. Now, the first objective here is"
+  },
+  {
+   "bat_dau": 355.28,
+   "ket_thuc": 359.4,
+   "noi_dung": "awareness. Now, it's great if you're launching something new and just want people to know you"
+  },
+  {
+   "bat_dau": 359.4,
+   "ket_thuc": 364.44,
+   "noi_dung": "exist. Now, with this campaign objective, meta will show your ad to as many people as possible"
+  },
+  {
+   "bat_dau": 364.44,
+   "ket_thuc": 370.16,
+   "noi_dung": "who are likely to remember it. So according to the algorithm, basically. Now, the second one is"
+  },
+  {
+   "bat_dau": 370.16,
+   "ket_thuc": 376.24,
+   "noi_dung": "traffic. Now, this one sends people to a specific destination like your website, product page, or blog,"
+  },
+  {
+   "bat_dau": 376.34,
+   "ket_thuc": 383.06,
+   "noi_dung": "for example. And the third objective is engagement. That helps you get likes, comments, shares, and other"
+  },
+  {
+   "bat_dau": 383.06,
+   "ket_thuc": 388.44,
+   "noi_dung": "interactions on your posts or your page. Now, if you want to build a social presence or community,"
+  },
+  {
+   "bat_dau": 388.78,
+   "ket_thuc": 393.8,
+   "noi_dung": "this is the one you should really pick. And if you're trying to collect emails, signups, or customer"
+  },
+  {
+   "bat_dau": 393.8,
+   "ket_thuc": 400.48,
+   "noi_dung": "info, the leads objective is for you. It even lets you use forms right inside the ads. So users never"
+  },
+  {
+   "bat_dau": 400.48,
+   "ket_thuc": 405.84,
+   "noi_dung": "have to leave the app, basically. Now, another one is sales. And it's a bit more advanced and it"
+  },
+  {
+   "bat_dau": 405.84,
+   "ket_thuc": 411.3,
+   "noi_dung": "optimizes your ads for purchases or conversions on your website. Now, tracking the results of these"
+  },
+  {
+   "bat_dau": 411.3,
+   "ket_thuc": 416.54,
+   "noi_dung": "campaigns is a bit more tricky, but also not impossible. You can still totally do it."
+  },
+  {
+   "bat_dau": 416.9,
+   "ket_thuc": 423.26,
+   "noi_dung": "And the last one is app promotion, which helps you get installs for, yeah, you guessed it, a mobile app."
+  },
+  {
+   "bat_dau": 423.62,
+   "ket_thuc": 429.2,
+   "noi_dung": "So now, which one should you start with? Now, if you're a beginner, I highly recommend starting with"
+  },
+  {
+   "bat_dau": 429.2,
+   "ket_thuc": 434.6,
+   "noi_dung": "either traffic or engagement. They're really simple, really straightforward, and they help you learn how"
+  },
+  {
+   "bat_dau": 434.6,
+   "ket_thuc": 440.42,
+   "noi_dung": "the platform works without getting bogged down in advanced setups. So, I mean, if you want more"
+  },
+  {
+   "bat_dau": 440.42,
+   "ket_thuc": 445.68,
+   "noi_dung": "people on your site or your landing page, go with traffic. And if you want to grow your audience or"
+  },
+  {
+   "bat_dau": 445.68,
+   "ket_thuc": 452.64,
+   "noi_dung": "get more interaction on your actual posts, engagement is your best friend here. But now, let's dive into"
+  },
+  {
+   "bat_dau": 452.64,
+   "ket_thuc": 459.36,
+   "noi_dung": "a campaign to see what things actually look like. So, basically, to set the campaign, go to ads from your"
+  },
+  {
+   "bat_dau": 459.36,
+   "ket_thuc": 465.12,
+   "noi_dung": "left sidebar and choose ads manager right here. Once the interface opens up, just hit create and"
+  },
+  {
+   "bat_dau": 465.12,
+   "ket_thuc": 470.08,
+   "noi_dung": "then pick the campaign objective. Now, remember, we just talked about the objective. So, just pick one"
+  },
+  {
+   "bat_dau": 470.08,
+   "ket_thuc": 475.64,
+   "noi_dung": "here, set it up. And if you're prompted, check manual ad setup here, give your campaign a name,"
+  },
+  {
+   "bat_dau": 475.7,
+   "ket_thuc": 482.18,
+   "noi_dung": "and then press next. And we always want to go manual with meta ads. Now, you'll arrive on this panel where"
+  },
+  {
+   "bat_dau": 482.18,
+   "ket_thuc": 488.34,
+   "noi_dung": "you can modify that campaign level. And that's the level with the objectives. Here, you know, see this"
+  },
+  {
+   "bat_dau": 488.34,
+   "ket_thuc": 494.16,
+   "noi_dung": "little panel on the left. Here, you can navigate between each of the levels. And when you're all ready to"
+  },
+  {
+   "bat_dau": 494.16,
+   "ket_thuc": 499.74,
+   "noi_dung": "proceed to the ad set, just click next. Now, once you're there, just scroll down until you reach audience"
+  },
+  {
+   "bat_dau": 499.74,
+   "ket_thuc": 505.62,
+   "noi_dung": "controls, just like I'm doing here. And this is exactly where you can adjust the audience targeting and"
+  },
+  {
+   "bat_dau": 505.62,
+   "ket_thuc": 511.12,
+   "noi_dung": "aim for the people that you think are most likely to convert. And this part is super, super important"
+  },
+  {
+   "bat_dau": 511.12,
+   "ket_thuc": 517.44,
+   "noi_dung": "because even the most brilliant ad won't do much if it's shown to the wrong people. So, first up, what"
+  },
+  {
+   "bat_dau": 517.44,
+   "ket_thuc": 522.8,
+   "noi_dung": "you'll do here is you'll define your core audience based on a few key details. You can edit the"
+  },
+  {
+   "bat_dau": 522.8,
+   "ket_thuc": 528.66,
+   "noi_dung": "location to choose where you want your ads to be shown. You can get super specific here as you want"
+  },
+  {
+   "bat_dau": 528.66,
+   "ket_thuc": 535.28,
+   "noi_dung": "and you can pick countries, cities, or even a specific mile radius around your store. Then,"
+  },
+  {
+   "bat_dau": 535.38,
+   "ket_thuc": 539.86,
+   "noi_dung": "all right here, you can set the age to target people who are most likely to be interested in your"
+  },
+  {
+   "bat_dau": 539.86,
+   "ket_thuc": 545.48,
+   "noi_dung": "offer. And I mean, for example, if you're selling, let's say, trendy phone cases, then pick something"
+  },
+  {
+   "bat_dau": 545.48,
+   "ket_thuc": 551.5,
+   "noi_dung": "between 18 to 34 year olds. That might be a great pick. And after that, you can target all genders"
+  },
+  {
+   "bat_dau": 551.5,
+   "ket_thuc": 557.32,
+   "noi_dung": "or narrow it down depending on what you offer. And finally, the language option here is super useful"
+  },
+  {
+   "bat_dau": 557.32,
+   "ket_thuc": 562.62,
+   "noi_dung": "if your audience speaks a specific language that's different from the default for the region that you're"
+  },
+  {
+   "bat_dau": 562.62,
+   "ket_thuc": 568.18,
+   "noi_dung": "actually targeting. So, once you have all that set up, then just scroll down a bit and click audience"
+  },
+  {
+   "bat_dau": 568.18,
+   "ket_thuc": 574.02,
+   "noi_dung": "suggestion under advantage plus audience. And now this is going to be the fun part here, guys, which is"
+  },
+  {
+   "bat_dau": 574.02,
+   "ket_thuc": 579.38,
+   "noi_dung": "detailed targeting. It basically lets you tap into the user data to find people who are likely to care"
+  },
+  {
+   "bat_dau": 579.38,
+   "ket_thuc": 584.06,
+   "noi_dung": "about what you show them. And you can be really specific with your targeting based on a few"
+  },
+  {
+   "bat_dau": 584.06,
+   "ket_thuc": 589.98,
+   "noi_dung": "characteristics and you'll see them in the drop down menu right here. So, just first right here,"
+  },
+  {
+   "bat_dau": 589.98,
+   "ket_thuc": 594.72,
+   "noi_dung": "as you can see, there's demographics. So, things like relationship status, educational level,"
+  },
+  {
+   "bat_dau": 595.12,
+   "ket_thuc": 599.94,
+   "noi_dung": "job titles, and things like that. And then there's interests here and you can target people"
+  },
+  {
+   "bat_dau": 599.94,
+   "ket_thuc": 605.2,
+   "noi_dung": "interested in a whole lot of different things like vegan food, you know, photography, fitness,"
+  },
+  {
+   "bat_dau": 605.46,
+   "ket_thuc": 611.12,
+   "noi_dung": "you name it. You can even go ultra, ultra specific like targeting people based on a movie they like,"
+  },
+  {
+   "bat_dau": 611.18,
+   "ket_thuc": 616.76,
+   "noi_dung": "for example. So, search for things that define your target audience and see for yourself what's"
+  },
+  {
+   "bat_dau": 616.76,
+   "ket_thuc": 622.28,
+   "noi_dung": "available there. And finally, there's the last category, which is the behaviors category. And it's"
+  },
+  {
+   "bat_dau": 622.28,
+   "ket_thuc": 627.82,
+   "noi_dung": "for the actions people actually take. Now, you'll find online shoppers, frequent flyers here,"
+  },
+  {
+   "bat_dau": 627.82,
+   "ket_thuc": 634.54,
+   "noi_dung": "or even recent movers. And honestly, my advice here, if you're just getting started, don't overdo"
+  },
+  {
+   "bat_dau": 634.54,
+   "ket_thuc": 639.74,
+   "noi_dung": "it with all of these. It's tempting to stuck a dozen interests and behaviors thinking you're"
+  },
+  {
+   "bat_dau": 639.74,
+   "ket_thuc": 645.28,
+   "noi_dung": "laser targeting the perfect person. But when you do that, your audience gets really small and your"
+  },
+  {
+   "bat_dau": 645.28,
+   "ket_thuc": 650.98,
+   "noi_dung": "ads get more expensive. So, instead of doing that, start fairly broad, especially with interest"
+  },
+  {
+   "bat_dau": 650.98,
+   "ket_thuc": 656.9,
+   "noi_dung": "targeting. Pick one or two categories really relevant to your product or service, and then let Meta's"
+  },
+  {
+   "bat_dau": 656.9,
+   "ket_thuc": 661.8,
+   "noi_dung": "algorithm do the rest. It's actually really good at finding the right people if you give it a bit"
+  },
+  {
+   "bat_dau": 661.8,
+   "ket_thuc": 667.68,
+   "noi_dung": "of room to work with. Now, one quick but super important note here is if your ad has anything"
+  },
+  {
+   "bat_dau": 667.68,
+   "ket_thuc": 674.86,
+   "noi_dung": "to do with credit, loan, employment, or job listings, housing, or real estate, social issues, elections,"
+  },
+  {
+   "bat_dau": 675.2,
+   "ket_thuc": 681.5,
+   "noi_dung": "politics, or any financial services, you'll need to select a special ad category during setup."
+  },
+  {
+   "bat_dau": 681.5,
+   "ket_thuc": 687.76,
+   "noi_dung": "So, to set up this category, what you're going to do is go back to campaign options and tick the show"
+  },
+  {
+   "bat_dau": 687.76,
+   "ket_thuc": 694.5,
+   "noi_dung": "categories button under the apply name section here. Then choose the category that applies to your"
+  },
+  {
+   "bat_dau": 694.5,
+   "ket_thuc": 700.72,
+   "noi_dung": "category specifically. And this is because legal regulations, basically. It tells Meta you're working"
+  },
+  {
+   "bat_dau": 700.72,
+   "ket_thuc": 707.0,
+   "noi_dung": "in a regulated space and it limits some targeting options to prevent discrimination. But now, anyway,"
+  },
+  {
+   "bat_dau": 707.0,
+   "ket_thuc": 714.72,
+   "noi_dung": "let's just scroll back up a bit and now comes the big question. How much should I spend? And the good"
+  },
+  {
+   "bat_dau": 714.72,
+   "ket_thuc": 720.28,
+   "noi_dung": "news here is you don't need to throw in hundreds of dollars right away. Really, you don't. I strongly,"
+  },
+  {
+   "bat_dau": 720.66,
+   "ket_thuc": 725.92,
+   "noi_dung": "by the way, recommend that you don't do that. And when it comes to budgeting, Meta gives you two main"
+  },
+  {
+   "bat_dau": 725.92,
+   "ket_thuc": 731.18,
+   "noi_dung": "options. The first one is daily budget. Now, this is the amount you're willing to spend each day. Now,"
+  },
+  {
+   "bat_dau": 731.24,
+   "ket_thuc": 736.56,
+   "noi_dung": "if you set a daily budget of, let's say, five bucks, Meta will aim to spend just around that amount"
+  },
+  {
+   "bat_dau": 736.56,
+   "ket_thuc": 742.82,
+   "noi_dung": "each day. Now, it might just go a little bit over or under depending on how your ads perform, but it"
+  },
+  {
+   "bat_dau": 742.82,
+   "ket_thuc": 748.42,
+   "noi_dung": "will focus around that. And then the second option is the lifetime budget. This is where you give Meta"
+  },
+  {
+   "bat_dau": 748.42,
+   "ket_thuc": 755.22,
+   "noi_dung": "a total amount to spend over the entire campaign. So, if you set a lifetime budget to, say, $100 and run"
+  },
+  {
+   "bat_dau": 755.22,
+   "ket_thuc": 761.96,
+   "noi_dung": "your ad for 10 days, Meta will try to space the spending over time for the best results. But I do strongly"
+  },
+  {
+   "bat_dau": 761.96,
+   "ket_thuc": 767.4,
+   "noi_dung": "recommend starting with the daily budget as it's easy to manage, really flexible, and helps you keep"
+  },
+  {
+   "bat_dau": 767.4,
+   "ket_thuc": 773.0,
+   "noi_dung": "your ad spend in check while you learn. And next comes the ad scheduling. Now, you can choose to run"
+  },
+  {
+   "bat_dau": 773.0,
+   "ket_thuc": 778.74,
+   "noi_dung": "your campaign continuously or set a start and end date. Now, if you're just testing or, let's say,"
+  },
+  {
+   "bat_dau": 778.78,
+   "ket_thuc": 784.7,
+   "noi_dung": "running a promo, definitely set an end date because no one wants a random ad draining their card six"
+  },
+  {
+   "bat_dau": 784.7,
+   "ket_thuc": 790.36,
+   "noi_dung": "months from now because they forgot it existed. And here's a little pro tip, by the way. Always check your"
+  },
+  {
+   "bat_dau": 790.36,
+   "ket_thuc": 795.62,
+   "noi_dung": "time zone settings before you launch your ads because Meta runs on the time zone you set in"
+  },
+  {
+   "bat_dau": 795.62,
+   "ket_thuc": 801.72,
+   "noi_dung": "your ad account. So, your campaign might just start or end earlier than you expect if that is off."
+  },
+  {
+   "bat_dau": 802.06,
+   "ket_thuc": 807.24,
+   "noi_dung": "All right, guys. Now, let's move on. So, what you're going to do next, first, just scroll down to"
+  },
+  {
+   "bat_dau": 807.24,
+   "ket_thuc": 813.48,
+   "noi_dung": "placements here. Now, Meta owns a lot of real estate on the internet like Facebook, Instagram, Messenger,"
+  },
+  {
+   "bat_dau": 813.48,
+   "ket_thuc": 820.34,
+   "noi_dung": "WhatsApp, and your ad can show up in all kinds of places across all of those platforms. But just"
+  },
+  {
+   "bat_dau": 820.36,
+   "ket_thuc": 825.2,
+   "noi_dung": "before you start freaking out and micromanaging everything, let me introduce you to your new"
+  },
+  {
+   "bat_dau": 825.2,
+   "ket_thuc": 832.1,
+   "noi_dung": "best friend as a beginner, which is Advantage Plus Placements. This option lets Meta decide the best"
+  },
+  {
+   "bat_dau": 832.1,
+   "ket_thuc": 838.14,
+   "noi_dung": "places to show your ad based on performance. So, you set your goal and Meta's algorithm finds the"
+  },
+  {
+   "bat_dau": 838.14,
+   "ket_thuc": 843.9,
+   "noi_dung": "most effective placements to help you hit it. Basically, in short, it's the autopilot option."
+  },
+  {
+   "bat_dau": 844.06,
+   "ket_thuc": 848.98,
+   "noi_dung": "And honestly, it works really well for most beginners. I mean, there's a lot of potential places"
+  },
+  {
+   "bat_dau": 848.98,
+   "ket_thuc": 855.26,
+   "noi_dung": "your ad might be shown in like the Facebook or Instagram feed or reels or in-stream content and,"
+  },
+  {
+   "bat_dau": 855.34,
+   "ket_thuc": 860.56,
+   "noi_dung": "you know, so on. There's literally a million places. So, in a nutshell, Advantage Plus Placements"
+  },
+  {
+   "bat_dau": 860.56,
+   "ket_thuc": 865.86,
+   "noi_dung": "takes the guesswork out and gives you better reach and often for much less money as well. So,"
+  },
+  {
+   "bat_dau": 865.94,
+   "ket_thuc": 871.62,
+   "noi_dung": "you can enable that by just hitting edit and checking the circle right here. But if you do do this,"
+  },
+  {
+   "bat_dau": 871.72,
+   "ket_thuc": 877.16,
+   "noi_dung": "however, do pay attention to your assets since they'll be showing up as different placements. So,"
+  },
+  {
+   "bat_dau": 878.98,
+   "ket_thuc": 884.42,
+   "noi_dung": "don't get super distorted to fit a certain resolution or image size. And also, meanwhile,"
+  },
+  {
+   "bat_dau": 884.66,
+   "ket_thuc": 890.12,
+   "noi_dung": "if you've got more experience or really specific goals like only targeting Instagram users,"
+  },
+  {
+   "bat_dau": 890.48,
+   "ket_thuc": 895.46,
+   "noi_dung": "you can manually choose your placements as well. You don't have to do that option that I showed"
+  },
+  {
+   "bat_dau": 895.46,
+   "ket_thuc": 901.04,
+   "noi_dung": "earlier. This basically lets you fine-tune where your ad appears. But do have a heads up here."
+  },
+  {
+   "bat_dau": 901.18,
+   "ket_thuc": 907.24,
+   "noi_dung": "Narrowing your placements too much can sometimes increase your costs. Now, Meta's algorithm loves"
+  },
+  {
+   "bat_dau": 907.24,
+   "ket_thuc": 913.96,
+   "noi_dung": "flexibility, basically. And the cool thing is, Meta even gives special treatment to vertical video"
+  },
+  {
+   "bat_dau": 913.96,
+   "ket_thuc": 920.12,
+   "noi_dung": "in these placements. So, if you're using Advantage Plus Placements and you upload a video that fits,"
+  },
+  {
+   "bat_dau": 920.36,
+   "ket_thuc": 926.88,
+   "noi_dung": "Meta will automatically slot it into stories and reels for you. Now, some other placements you should"
+  },
+  {
+   "bat_dau": 926.88,
+   "ket_thuc": 932.1,
+   "noi_dung": "know about include feeds, in-stream videos, and search ads. Now, feeds are your just classic"
+  },
+  {
+   "bat_dau": 932.1,
+   "ket_thuc": 938.1,
+   "noi_dung": "scrollable ads, and they're actually really solid performers. Meanwhile, in-stream videos are YouTube"
+  },
+  {
+   "bat_dau": 938.1,
+   "ket_thuc": 943.68,
+   "noi_dung": "style ads that play before the content people want to watch. This placement works really well with"
+  },
+  {
+   "bat_dau": 943.68,
+   "ket_thuc": 949.7,
+   "noi_dung": "engaging, also attention-grabbing video content. And finally, we have Search. It's a newer placement"
+  },
+  {
+   "bat_dau": 949.7,
+   "ket_thuc": 956.38,
+   "noi_dung": "where your ads can show when people search inside the Meta apps. Okay, guys, now it's time to actually"
+  },
+  {
+   "bat_dau": 956.38,
+   "ket_thuc": 963.74,
+   "noi_dung": "click on our new ad and talk about the heart of our campaign and the actual creative. This is basically"
+  },
+  {
+   "bat_dau": 963.74,
+   "ket_thuc": 970.22,
+   "noi_dung": "what people actually see and is the single most important part of your whole campaign. And trust me,"
+  },
+  {
+   "bat_dau": 970.3,
+   "ket_thuc": 975.36,
+   "noi_dung": "this can be the difference between someone scrolling past your ad and someone actually clicking on it. So,"
+  },
+  {
+   "bat_dau": 975.52,
+   "ket_thuc": 982.8,
+   "noi_dung": "now let's hit Setup Creative right there and go ahead here. So, I mean, in 2025, attention spans are"
+  },
+  {
+   "bat_dau": 982.8,
+   "ket_thuc": 987.88,
+   "noi_dung": "shorter than they ever have been before. So, you've got one second, maybe two seconds if you're lucky"
+  },
+  {
+   "bat_dau": 987.88,
+   "ket_thuc": 994.34,
+   "noi_dung": "to grab someone's attention. So, how do you make that scroll stopper? Well, first, spend at least"
+  },
+  {
+   "bat_dau": 994.34,
+   "ket_thuc": 1000.66,
+   "noi_dung": "five minutes browsing the Meta Ads library. Just see what others in your niche are doing, and this tool"
+  },
+  {
+   "bat_dau": 1000.66,
+   "ket_thuc": 1006.86,
+   "noi_dung": "really allows you to see every ad run at the given time. It's super, super useful, so definitely don't"
+  },
+  {
+   "bat_dau": 1006.86,
+   "ket_thuc": 1012.72,
+   "noi_dung": "miss this step. Now, if you notice a lot of reels with a certain ending style or hook, for example,"
+  },
+  {
+   "bat_dau": 1012.72,
+   "ket_thuc": 1018.86,
+   "noi_dung": "take notes of that. Then, make sure to remember that high-quality visuals, they do really work."
+  },
+  {
+   "bat_dau": 1019.28,
+   "ket_thuc": 1026.72,
+   "noi_dung": "Blurry, cluttered, or over-designed ads just don't cut it anymore. So, use clean, really crisp images or videos."
+  },
+  {
+   "bat_dau": 1027.26,
+   "ket_thuc": 1034.18,
+   "noi_dung": "And then also consider user-generated content. I mean, it's everywhere for a reason right now. Ads that feel like"
+  },
+  {
+   "bat_dau": 1034.18,
+   "ket_thuc": 1040.8,
+   "noi_dung": "a real person is giving a recommendation always perform way better than polished, corporate-looking videos."
+  },
+  {
+   "bat_dau": 1040.8,
+   "ket_thuc": 1047.86,
+   "noi_dung": "And my next tip is to really focus on one clear problem and one clear solution. Don't try to say"
+  },
+  {
+   "bat_dau": 1047.86,
+   "ket_thuc": 1053.92,
+   "noi_dung": "everything all at once. Pick a pain point your audience has and show how you solve it. And it's"
+  },
+  {
+   "bat_dau": 1053.92,
+   "ket_thuc": 1058.54,
+   "noi_dung": "really ideal if you can make your ad blend into the platform. Like, if you're running on reels or"
+  },
+  {
+   "bat_dau": 1058.54,
+   "ket_thuc": 1064.9,
+   "noi_dung": "stories, make your ad look like the content users already watch there. And make sure to grab that"
+  },
+  {
+   "bat_dau": 1064.9,
+   "ket_thuc": 1070.94,
+   "noi_dung": "attention fast. The first three seconds of your video or visual need to hook people in. So, use"
+  },
+  {
+   "bat_dau": 1070.94,
+   "ket_thuc": 1077.62,
+   "noi_dung": "motion, bold text, or just a surprising statement right away. But once you've settled on your asset,"
+  },
+  {
+   "bat_dau": 1077.86,
+   "ket_thuc": 1083.92,
+   "noi_dung": "you'll need to actually upload its details via the creative setup. So, just enter your website name or"
+  },
+  {
+   "bat_dau": 1083.92,
+   "ket_thuc": 1089.56,
+   "noi_dung": "target page and switch to the text tab. Now, this might look a little tricky here, but it's actually"
+  },
+  {
+   "bat_dau": 1089.56,
+   "ket_thuc": 1095.22,
+   "noi_dung": "pretty straightforward. And that is because meta has specific character limits for these fields,"
+  },
+  {
+   "bat_dau": 1095.22,
+   "ket_thuc": 1100.86,
+   "noi_dung": "and you have to just stick to them. That's all. So, first, as you can see, we have the primary text"
+  },
+  {
+   "bat_dau": 1100.86,
+   "ket_thuc": 1107.52,
+   "noi_dung": "here. Now, it should be, but can be longer to 125 characters and feature one message. Now, next up is"
+  },
+  {
+   "bat_dau": 1107.52,
+   "ket_thuc": 1113.48,
+   "noi_dung": "the headline. Now, here, just include the big benefit or why just someone should care about it. Now, the"
+  },
+  {
+   "bat_dau": 1113.48,
+   "ket_thuc": 1119.7,
+   "noi_dung": "description field is next, and that is where you can go a little more into detail. It won't always"
+  },
+  {
+   "bat_dau": 1119.7,
+   "ket_thuc": 1126.1,
+   "noi_dung": "also be visible, so add some extra information that may help convert people. And finally, right over"
+  },
+  {
+   "bat_dau": 1126.1,
+   "ket_thuc": 1132.7,
+   "noi_dung": "here, we have the call to action. And this should tell people exactly what to do next. Keep it really"
+  },
+  {
+   "bat_dau": 1132.7,
+   "ket_thuc": 1138.66,
+   "noi_dung": "short, really simple, and really actionable. But when you're done with all of this, just switch over here"
+  },
+  {
+   "bat_dau": 1138.66,
+   "ket_thuc": 1144.76,
+   "noi_dung": "to the media tab and upload your creative. So, go through the specific tabs to just the assets based on"
+  },
+  {
+   "bat_dau": 1144.76,
+   "ket_thuc": 1151.62,
+   "noi_dung": "the format. And we'll skip these remaining options for now and just click done. And this new section will let"
+  },
+  {
+   "bat_dau": 1151.62,
+   "ket_thuc": 1157.86,
+   "noi_dung": "you edit the placements, copy, and other options for the ads. So, just get familiar with them here. And finally,"
+  },
+  {
+   "bat_dau": 1158.0,
+   "ket_thuc": 1165.0,
+   "noi_dung": "once you're done with all of the above, just hit publish and your first ad will go live. And guys, while"
+  },
+  {
+   "bat_dau": 1165.0,
+   "ket_thuc": 1170.2,
+   "noi_dung": "scrolling through the whole ad setup, you may have noticed the destination options. Now, depending"
+  },
+  {
+   "bat_dau": 1170.2,
+   "ket_thuc": 1176.32,
+   "noi_dung": "on what you do, you may want to set up a special landing page optimized for your campaign. And one"
+  },
+  {
+   "bat_dau": 1176.32,
+   "ket_thuc": 1182.32,
+   "noi_dung": "of the easiest solutions for landing page creation is Hostinger's Website Builder. You can build your"
+  },
+  {
+   "bat_dau": 1182.32,
+   "ket_thuc": 1189.2,
+   "noi_dung": "website and landing pages by putting AI to the task and take it live in literal minutes. And it's not"
+  },
+  {
+   "bat_dau": 1189.2,
+   "ket_thuc": 1194.98,
+   "noi_dung": "just website creation either. You can actually craft the perfect landing page easily by dragging"
+  },
+  {
+   "bat_dau": 1195.0,
+   "ket_thuc": 1200.4,
+   "noi_dung": "and dropping everything just the way you want. And you will see it happening live. So, it's really"
+  },
+  {
+   "bat_dau": 1200.4,
+   "ket_thuc": 1206.68,
+   "noi_dung": "easy to use. And also, if you subscribe to the AI Builder for at least a year, you'll also get a"
+  },
+  {
+   "bat_dau": 1206.68,
+   "ket_thuc": 1213.3,
+   "noi_dung": "domain name for free. So, Hostinger Website Builder even has MetaPixel integration. So, it's super, super"
+  },
+  {
+   "bat_dau": 1213.3,
+   "ket_thuc": 1218.26,
+   "noi_dung": "optimized for meta campaigns. So, if you want to give it a shot, just go to the link in the description"
+  },
+  {
+   "bat_dau": 1218.26,
+   "ket_thuc": 1223.66,
+   "noi_dung": "down below and use our discount code WB10 for an additional 10% off your purchase."
+  },
+  {
+   "bat_dau": 1224.22,
+   "ket_thuc": 1229.12,
+   "noi_dung": "And now, you probably heard me mention MetaPixel and you're probably wondering what it is. Well,"
+  },
+  {
+   "bat_dau": 1229.2,
+   "ket_thuc": 1234.94,
+   "noi_dung": "it's a bit of a more advanced ads technique. But if you are interested in finding out what it is,"
+  },
+  {
+   "bat_dau": 1235.0,
+   "ket_thuc": 1239.98,
+   "noi_dung": "we'll cover that in the upcoming video that we'll publish really soon. So, make sure you're subscribed"
+  },
+  {
+   "bat_dau": 1239.98,
+   "ket_thuc": 1246.16,
+   "noi_dung": "to Hostinger Academy. All right. So, you've launched your ad and it's live. You should now follow your"
+  },
+  {
+   "bat_dau": 1246.16,
+   "ket_thuc": 1251.6,
+   "noi_dung": "campaign and track its performance like we talked about earlier. So, from the campaigns tab right"
+  },
+  {
+   "bat_dau": 1251.6,
+   "ket_thuc": 1257.54,
+   "noi_dung": "over here, you can arrange the columns to track your key metrics. And I'll tell you what these are"
+  },
+  {
+   "bat_dau": 1257.54,
+   "ket_thuc": 1264.14,
+   "noi_dung": "in just a second. So, you'll find ad reporting on the left sidebar of ads manager and scroll down."
+  },
+  {
+   "bat_dau": 1264.3,
+   "ket_thuc": 1270.68,
+   "noi_dung": "And I mean, pretty cool, right? There are so many of them. But let me walk you through the main ones."
+  },
+  {
+   "bat_dau": 1270.8,
+   "ket_thuc": 1274.7,
+   "noi_dung": "So, no need to look for them on the list. They'll be visible already for you."
+  },
+  {
+   "bat_dau": 1274.7,
+   "ket_thuc": 1281.52,
+   "noi_dung": "So, first, we have CPR. And this is cost per result. And this is a big one, guys. And it will be visible"
+  },
+  {
+   "bat_dau": 1281.52,
+   "ket_thuc": 1287.2,
+   "noi_dung": "right away. Now, CPR tells you how much you're paying to get the outcome you set in your campaign"
+  },
+  {
+   "bat_dau": 1287.2,
+   "ket_thuc": 1293.12,
+   "noi_dung": "objective. So, if your CPR is going up, it might be time to tweak your targeting or update your ad"
+  },
+  {
+   "bat_dau": 1293.12,
+   "ket_thuc": 1298.58,
+   "noi_dung": "creative or just improve your landing page. Just make sure you don't throw more money at it because"
+  },
+  {
+   "bat_dau": 1298.58,
+   "ket_thuc": 1303.66,
+   "noi_dung": "clearly something is not working and you need to test to find out what exactly."
+  },
+  {
+   "bat_dau": 1304.3,
+   "ket_thuc": 1310.52,
+   "noi_dung": "Then, let's talk about frequency. Now, this shows how many times, on average, each person saw your ad."
+  },
+  {
+   "bat_dau": 1310.82,
+   "ket_thuc": 1317.16,
+   "noi_dung": "So, if your frequency is getting high, say, let's say three or more, and your performance is dropping,"
+  },
+  {
+   "bat_dau": 1317.4,
+   "ket_thuc": 1324.06,
+   "noi_dung": "your audience might be getting tired of seeing the same ad. But you can fix that by rotating creatives"
+  },
+  {
+   "bat_dau": 1324.06,
+   "ket_thuc": 1330.44,
+   "noi_dung": "or expanding your audience. Now, we have a reach and impressions and they should be looked at together."
+  },
+  {
+   "bat_dau": 1330.62,
+   "ket_thuc": 1336.52,
+   "noi_dung": "Now, reach is how many unique people saw your ad. Impressions, meanwhile, mean the total number of"
+  },
+  {
+   "bat_dau": 1336.52,
+   "ket_thuc": 1343.08,
+   "noi_dung": "times your ad was shown, including repeats. And if you've got a ton of impressions, let's say,"
+  },
+  {
+   "bat_dau": 1343.16,
+   "ket_thuc": 1347.6,
+   "noi_dung": "but low reach, your audience might be too small. So, try broadening your targeting."
+  },
+  {
+   "bat_dau": 1347.6,
+   "ket_thuc": 1353.84,
+   "noi_dung": "And then, it's CTR. Now, click through rate. It won't be visible right away, so you'll need to"
+  },
+  {
+   "bat_dau": 1353.84,
+   "ket_thuc": 1359.12,
+   "noi_dung": "enable it within the metrics panel. So, this basically tells you how many people actually"
+  },
+  {
+   "bat_dau": 1359.12,
+   "ket_thuc": 1365.9,
+   "noi_dung": "clicked your ad after seeing it. A good CTR, and for most beginners, it's just 1%, means your creative"
+  },
+  {
+   "bat_dau": 1365.9,
+   "ket_thuc": 1372.74,
+   "noi_dung": "and message are actually connecting. And if it's less than that 1%, then rework your hook, headline,"
+  },
+  {
+   "bat_dau": 1372.74,
+   "ket_thuc": 1379.52,
+   "noi_dung": "or just visuals. Make your ad more scroll-stopping. But now, if you've actually launched video assets,"
+  },
+  {
+   "bat_dau": 1379.82,
+   "ket_thuc": 1385.8,
+   "noi_dung": "you'll see a few video metrics here as well. Now, video plays is one, and it's essentially just letting"
+  },
+  {
+   "bat_dau": 1385.8,
+   "ket_thuc": 1391.54,
+   "noi_dung": "you know if people actually watched the ad. And meanwhile, here, average playtime or percentage"
+  },
+  {
+   "bat_dau": 1391.54,
+   "ket_thuc": 1397.36,
+   "noi_dung": "watched tells you if your viewers are sticking around or bouncing just after two seconds."
+  },
+  {
+   "bat_dau": 1397.36,
+   "ket_thuc": 1403.14,
+   "noi_dung": "And if your watch time is super low, your video might not be grabbing attention quickly enough."
+  },
+  {
+   "bat_dau": 1403.24,
+   "ket_thuc": 1408.82,
+   "noi_dung": "So, try reworking the first three seconds or everything else, but mostly focus on those"
+  },
+  {
+   "bat_dau": 1408.82,
+   "ket_thuc": 1414.86,
+   "noi_dung": "three seconds as they are really everything. And that is it, guys. The more you understand these"
+  },
+  {
+   "bat_dau": 1414.86,
+   "ket_thuc": 1420.66,
+   "noi_dung": "numbers, the easier it is to figure out what's working, what's not working, and where you can improve"
+  },
+  {
+   "bat_dau": 1420.66,
+   "ket_thuc": 1427.92,
+   "noi_dung": "next. And the secret sauce here with meta ads is test, learn, optimize, and repeat it all over again."
+  },
+  {
+   "bat_dau": 1428.3,
+   "ket_thuc": 1434.62,
+   "noi_dung": "Don't stress if your first campaign isn't perfect. Nobody's is. Trust me. What matters is that you're"
+  },
+  {
+   "bat_dau": 1434.62,
+   "ket_thuc": 1440.46,
+   "noi_dung": "learning and improving with every single click. And now, if you found this video helpful at all,"
+  },
+  {
+   "bat_dau": 1440.6,
+   "ket_thuc": 1445.52,
+   "noi_dung": "give it a thumbs up and make sure you subscribe to Hostinger Academy for more tutorials that will"
+  },
+  {
+   "bat_dau": 1445.52,
+   "ket_thuc": 1451.44,
+   "noi_dung": "help you grow your business online. And if you have a question about meta ads, just drop it in the"
+  },
+  {
+   "bat_dau": 1451.44,
+   "ket_thuc": 1457.02,
+   "noi_dung": "comments down below. And also, if you're interested in trying out the website builder that I mentioned"
+  },
+  {
+   "bat_dau": 1457.02,
+   "ket_thuc": 1463.44,
+   "noi_dung": "before, check out the video next where we show you a step-by-step process on how to build a website using"
+  },
+  {
+   "bat_dau": 1463.44,
+   "ket_thuc": 1470.22,
+   "noi_dung": "its powerful AI features. But for now, guys, thank you so much for watching, and I will see you in the next video."
+  }
+ ]
+}

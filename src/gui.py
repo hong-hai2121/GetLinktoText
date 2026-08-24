@@ -398,6 +398,10 @@ class GetTextApp:
             links_toolbar, text="📋  Dán link", command=self.paste_links, style="Primary.TButton"
         )
         self.paste_links_btn.pack(side="left")
+        self.browse_files_btn = ttk.Button(
+            links_toolbar, text="📁  Chọn file", command=self.browse_files, style="Ghost.TButton"
+        )
+        self.browse_files_btn.pack(side="left", padx=(8, 0))
         self.clear_links_btn = ttk.Button(
             links_toolbar, text="🗑  Xóa trắng", command=self.clear_links, style="Ghost.TButton"
         )
@@ -409,7 +413,7 @@ class GetTextApp:
         )
         ttk.Label(
             links_toolbar,
-            text="Dán từ clipboard, mỗi link một dòng — link trùng sẽ tự bỏ qua.",
+            text="Dán link hoặc bấm 'Chọn file' để thêm video/audio trong máy — mục trùng sẽ tự bỏ qua.",
             style="Muted.TLabel",
         ).pack(side="left", padx=(12, 0))
 
@@ -530,6 +534,53 @@ class GetTextApp:
         note = f" (bỏ qua {skipped} link trùng)" if skipped else ""
         self.log(f"📋 Đã dán thêm {len(added)} link{note}. Tổng: {len(existing) + len(added)} link.")
         self.update_status(f"Đã dán {len(added)} link", "green")
+
+    def browse_files(self):
+        """Chọn file video/audio trong máy (mặc định mở Downloads) và thêm vào danh sách."""
+        from tkinter import filedialog
+
+        initial_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        if not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser("~")
+
+        video_exts = "*.mp4 *.mkv *.webm *.avi *.mov *.flv *.ts *.m4v"
+        audio_exts = "*.mp3 *.m4a *.wav *.aac *.ogg *.opus *.flac *.wma"
+        paths = filedialog.askopenfilenames(
+            parent=self.root,
+            title="Chọn file video / audio",
+            initialdir=initial_dir,
+            filetypes=[
+                ("Video / Audio", f"{video_exts} {audio_exts}"),
+                ("Video", video_exts),
+                ("Audio", audio_exts),
+                ("Tất cả file", "*.*"),
+            ],
+        )
+        if not paths:
+            return
+
+        existing = self._current_links()
+        seen = set(existing)
+        added = []
+        for path in paths:
+            path = os.path.normpath(path)
+            if path not in seen:
+                seen.add(path)
+                added.append(path)
+
+        if not added:
+            self.log(f"ℹ️ {len(paths)} file đã chọn đều có sẵn trong danh sách.")
+            return
+
+        self.links_text.delete("1.0", tk.END)
+        self.links_text.insert("1.0", "\n".join(existing + added) + "\n")
+        self.links_text.see(tk.END)
+        self.update_link_count()
+
+        skipped = len(paths) - len(added)
+        note = f" (bỏ qua {skipped} file trùng)" if skipped else ""
+        self.log(f"📁 Đã thêm {len(added)} file{note}. Tổng: {len(existing) + len(added)} link.")
+        self.update_status(f"Đã thêm {len(added)} file", "green")
 
     def clear_links(self):
         if not self._current_links():
