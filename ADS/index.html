@@ -332,6 +332,7 @@
       <button data-s="inactive">Đã tắt</button>
     </div>
     <span class="tip">📊 Bấm một dòng để xem phân tích</span>
+    <span class="tip">❔ Rê chuột lên tên cột để xem chú thích</span>
     <div class="tb-spacer"></div>
     <span class="count" id="count"></span>
     <span class="count" id="copyInfo"></span>
@@ -430,11 +431,78 @@ const S = { headers:[], cols:[], rows:[], order:[], files:[], sortIdx:null, sort
 const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
 const SRC_HEADER = 'Tài khoản / Nguồn';   // cột nguồn tự thêm khi gộp nhiều file
 const DERIVED_HEADERS = ['Hook rate','Hold rate']; // cột tự tính, không có trong file Excel
-/* Chú thích hiện khi hover tiêu đề cột */
+/* Chú thích hiện khi hover tiêu đề cột (khớp CHÍNH XÁC tên cột) */
 const HEADER_TIPS = {
   'Hook rate': 'Tỷ lệ thu hút những giây đầu (tool tự tính)\n= Lượt phát video ≥3s ÷ Lượt hiển thị\nĐo độ "níu mắt" của mở đầu video: cứ 100 lần hiển thị thì bao nhiêu người dừng lại xem ≥3 giây. Càng cao video càng hút; thấp → cần đổi 3 giây mở đầu.',
   'Hold rate': 'Tỷ lệ giữ chân người xem (tool tự tính)\n= ThruPlay ÷ Lượt phát video ≥3s\nTrong số người đã xem ≥3 giây, bao nhiêu người xem gần hết (ThruPlay ≈ 15 giây hoặc hết video). Càng cao nội dung càng giữ chân; thấp → phần thân video gây chán.'
 };
+/* Chú thích theo TỪ KHÓA — áp cho mọi biến thể tên cột trong file export FB.
+   Duyệt từ trên xuống, lấy luật ĐẦU TIÊN mà tên cột chứa đủ các từ khóa (luật riêng đặt trước luật chung). */
+const TIP_RULES = [
+  [['cpm'], 'CPM — chi phí cho mỗi 1.000 lượt hiển thị\n= Chi tiêu ÷ Lượt hiển thị × 1.000\nGiá "thuê chỗ" quảng cáo. CPM cao → tệp đắt hoặc quảng cáo kém hấp dẫn nên FB tính đắt hơn.'],
+  [['cpc', 'tất cả'], 'CPC (tất cả) — chi phí trung bình cho MỖI LƯỢT CLICK bất kỳ\n(click ảnh, xem thêm, like, vào trang…) = Chi tiêu ÷ Lượt click (tất cả).'],
+  [['cpc'], 'CPC liên kết — chi phí cho mỗi lượt click VÀO LIÊN KẾT\n= Chi tiêu ÷ Lượt click vào liên kết\nGiá để đưa 1 người sang trang đích / Messenger.'],
+  [['ctr', 'liên kết'], 'CTR liên kết — tỷ lệ hiển thị dẫn tới click VÀO LIÊN KẾT\n= Lượt click liên kết ÷ Lượt hiển thị × 100\nĐo độ hút của quảng cáo với hành động chính; thường ≥1% là ổn.'],
+  [['ctr'], 'CTR (tất cả) — tỷ lệ hiển thị có click BẤT KỲ\n= Lượt click (tất cả) ÷ Lượt hiển thị × 100.'],
+  [['chi phí trên mỗi kết quả'], 'Giá trung bình để có 1 kết quả\n= Chi tiêu ÷ Kết quả (kết quả theo "Chỉ báo kết quả")\nChỉ số quan trọng nhất khi so các nhóm cùng mục tiêu — càng thấp càng tốt.'],
+  [['chi phí / kết quả'], 'Giá trung bình để có 1 kết quả\n= Chi tiêu ÷ Kết quả (kết quả theo "Chỉ báo kết quả")\nChỉ số quan trọng nhất khi so các nhóm cùng mục tiêu — càng thấp càng tốt.'],
+  [['chi phí trên mỗi lượt mua'], 'Giá quảng cáo để có 1 đơn mua\n= Chi tiêu ÷ Lượt mua.'],
+  [['chi phí trên mỗi người click'], 'Chi phí cho mỗi NGƯỜI đã click\n= Chi tiêu ÷ Số người click (tất cả).'],
+  [['chi phí trên mỗi'], 'Chi phí trung bình cho mỗi đơn vị nêu trong tên cột\n= Chi tiêu ÷ số lượt tương ứng.'],
+  [['thruplay'], 'ThruPlay — lượt xem "gần trọn" video\nSố lần video được xem ĐẾN HẾT hoặc tối thiểu 15 giây (với video dài hơn 15s)\nDùng đánh giá video có giữ chân được người xem hay không.'],
+  [['tối thiểu 3 giây'], 'Số lần video được phát liên tục từ 3 giây trở lên\nĐo số người "dừng lại xem" thay vì lướt qua — là nguyên liệu tính Hook rate.'],
+  [['thời gian phát video'], 'Thời gian xem video trung bình mỗi lượt phát (giây)\nCàng cao video càng giữ chân người xem.'],
+  [['tg xem'], 'Thời gian xem video trung bình mỗi lượt phát (giây)\nCàng cao video càng giữ chân người xem.'],
+  [['người xem'], 'Số NGƯỜI khác nhau đã xem video (1 người xem nhiều lần chỉ tính 1).'],
+  [['lượt xem'], 'Số LẦN video được phát (tính cả tự phát khi lướt tới, dù chỉ 1 giây)\n1 người có thể tạo nhiều lượt xem.'],
+  [['tần suất'], 'Tần suất — trung bình MỖI NGƯỜI thấy quảng cáo bao nhiêu lần\n= Lượt hiển thị ÷ Người tiếp cận\nTrên ~3–4 trong thời gian ngắn dễ "bão hòa", người xem phát chán.'],
+  [['tiếp cận'], 'Số NGƯỜI khác nhau đã thấy quảng cáo ít nhất 1 lần\n(khác Lượt hiển thị: 1 người thấy 5 lần vẫn chỉ tính 1 người tiếp cận).'],
+  [['hiển thị'], 'Số LẦN quảng cáo xuất hiện trên màn hình\n1 người thấy 5 lần = 5 lượt hiển thị.'],
+  [['chỉ báo roas'], 'Loại giá trị chuyển đổi được dùng để tính "ROAS kết quả".'],
+  [['roas kết quả'], 'ROAS tính theo giá trị của "Kết quả"\n= Giá trị kết quả ÷ Chi tiêu.'],
+  [['roas'], 'ROAS — doanh thu thu về trên mỗi đồng chi quảng cáo\n= Giá trị lượt mua ÷ Chi tiêu\nVD ROAS 3: chi 1đ quảng cáo thu 3đ doanh thu. Dưới 1 = lỗ tiền quảng cáo.'],
+  [['giá trị chuyển đổi'], 'Tổng DOANH THU của các chuyển đổi ghi nhận từ quảng cáo.'],
+  [['lượt mua'], 'Số giao dịch MUA ghi nhận từ quảng cáo (qua Pixel / website / catalog).'],
+  [['nhắn tin', 'mới'], 'Số người LẦN ĐẦU nhắn tin cho Trang (khách mới, chưa từng nhắn trước đó).'],
+  [['nhắn tin'], 'Tổng số người đã bắt đầu cuộc trò chuyện với Trang từ quảng cáo.'],
+  [['đơn đặt hàng'], 'Số đơn hàng được tạo từ quảng cáo (thường là đơn chốt qua Messenger).'],
+  [['số người click'], 'Số NGƯỜI khác nhau đã click bất kỳ vào quảng cáo.'],
+  [['lượt click', 'liên kết'], 'Số lượt click VÀO LIÊN KẾT (sang trang đích, Messenger…).'],
+  [['lượt click'], 'Số lượt click BẤT KỲ vào quảng cáo (ảnh, xem thêm, like, vào trang…).'],
+  [['số tiền đã chi'], 'Tổng tiền quảng cáo đã chạy trong kỳ báo cáo.'],
+  [['chi tiêu'], 'Tổng tiền quảng cáo đã chạy trong kỳ báo cáo.'],
+  [['loại ngân sách'], 'Kiểu ngân sách: "Hàng ngày" (mức chi mỗi ngày) hoặc "Trọn đời" (tổng cho cả đợt chạy).'],
+  [['ngân sách'], 'Mức chi tối đa bạn đặt cho nhóm/chiến dịch (xem kèm "Loại ngân sách").'],
+  [['phân phối'], 'Trạng thái chạy: active = đang chạy, inactive = đã tắt / hết lịch / hết ngân sách.'],
+  [['loại giá thầu'], 'Chiến lược đấu thầu\nABSOLUTE_OCPM = "Số lượng lớn nhất": FB tự tối ưu, không đặt giá trần.'],
+  [['giá thầu'], 'Mức giá thầu thủ công (0 hoặc trống = để FB tự đấu giá).'],
+  [['cài đặt ghi nhận'], 'Cửa sổ ghi công chuyển đổi\nVD "click 7 ngày, xem 1 ngày": tính kết quả nếu khách hành động trong 7 ngày sau khi click hoặc 1 ngày sau khi xem quảng cáo.'],
+  [['chỉnh sửa'], 'Thời điểm chỉnh sửa QUAN TRỌNG gần nhất (đổi ngân sách, tệp, chất liệu…)\nSửa lớn khiến nhóm quay lại giai đoạn máy học.'],
+  [['bắt đầu báo cáo'], 'Ngày ĐẦU của kỳ số liệu trong file này.'],
+  [['kết thúc báo cáo'], 'Ngày CUỐI của kỳ số liệu trong file này.'],
+  [['bắt đầu'], 'Ngày nhóm quảng cáo bắt đầu chạy.'],
+  [['kết thúc'], 'Ngày hẹn dừng ("Đang diễn ra" = không hẹn dừng).'],
+  [['chỉ báo kết quả'], 'Loại sự kiện đang được đếm là "Kết quả" của nhóm này\n(vd: bắt đầu hội thoại tin nhắn, người tiếp cận, lượt mua…).'],
+  [['kết quả'], 'Số lần đạt MỤC TIÊU của nhóm quảng cáo\nĐếm theo "Chỉ báo kết quả" — nhóm mục tiêu khác nhau thì "kết quả" nghĩa khác nhau, không so trực tiếp với nhau được.'],
+  [['tên chiến dịch'], 'Chiến dịch chứa nhóm quảng cáo này (cấp cao nhất: Chiến dịch → Nhóm QC → Quảng cáo).'],
+  [['tên nhóm'], 'Tên nhóm quảng cáo (cấp giữa) — nơi đặt ngân sách, tệp đối tượng, lịch chạy.'],
+  [['tên quảng cáo'], 'Tên quảng cáo (cấp thấp nhất) — từng bài viết / chất liệu cụ thể.'],
+  [['tài khoản'], 'File / tài khoản nguồn của dòng này (khi gộp nhiều file để xem chung).'],
+  [['nguồn'], 'File / tài khoản nguồn của dòng này (khi gộp nhiều file để xem chung).'],
+  [['chia sẻ'], 'Số lượt chia sẻ bài quảng cáo.'],
+  [['bình luận'], 'Số bình luận trên bài quảng cáo.'],
+  [['cảm xúc'], 'Số lượt thả cảm xúc (like, tim…) trên bài quảng cáo.'],
+  [['tương tác'], 'Tổng tương tác với bài viết (cảm xúc + bình luận + chia sẻ + click…).'],
+  [['thích trang'], 'Số lượt thích Trang có được nhờ quảng cáo.'],
+  [['mục tiêu'], 'Mục tiêu tối ưu của chiến dịch (tin nhắn, doanh số, tương tác…).'],
+];
+function tipFor(h){
+  if(HEADER_TIPS[h]) return HEADER_TIPS[h];
+  const l=String(h||'').toLowerCase();
+  if(!l) return '';
+  for(const [keys,tip] of TIP_RULES){ if(keys.every(k=>l.includes(k))) return tip; }
+  return '';
+}
 const LS_KEY = 'ads_view_state_v1';       // khóa lưu dữ liệu import trong trình duyệt
 
 /* ---------- Tiện ích số / định dạng ---------- */
@@ -674,7 +742,7 @@ function renderHead(){
     if(c.align==='left')th.classList.add('txt');
     if(i===pin)th.classList.add('sticky-col');
     if(S.sortIdx===i)th.classList.add('sorted');
-    th.title=HEADER_TIPS[h]||h||'';   // hover: chú thích chỉ số (nếu có) hoặc đầy đủ tên cột
+    th.title=tipFor(h)||h||'';   // hover: chú thích chỉ số (nếu có) hoặc đầy đủ tên cột
     th.innerHTML=`<span class="th-label">${esc(h||' ')}<span class="arrow">${S.sortIdx===i?(S.sortDir<0?'▼':'▲'):'▲'}</span></span>`;
     th.onclick=()=>{ if(S.sortIdx===i){S.sortDir*=-1;}else{S.sortIdx=i;S.sortDir=(c.role==='name')?1:-1;} renderAll(); }; // cột Chiến dịch: lần đầu Đang chạy lên trên
     const rez=el('div','resizer'); rez.title='Kéo để đổi độ rộng cột';
@@ -836,7 +904,7 @@ function renderSummary(rows, agg){
   ];
   // Header
   const thead=document.getElementById('thead2'); thead.innerHTML='';
-  const addTh=(label,cls)=>{ const e=el('th'); if(cls)e.className=cls; e.title=HEADER_TIPS[label]||label; e.innerHTML=`<span class="th-label">${esc(label)}</span>`; thead.appendChild(e); };
+  const addTh=(label,cls)=>{ const e=el('th'); if(cls)e.className=cls; e.title=tipFor(label)||label; e.innerHTML=`<span class="th-label">${esc(label)}</span>`; thead.appendChild(e); };
   addTh(nameLabel, 'txt sticky-col');
   cols.forEach(c=>addTh(c.label));
   // Body
@@ -1150,6 +1218,7 @@ function buildChooser(){
   const list=document.getElementById('colList'); list.innerHTML='';
   S.order.forEach(i=>{
     const h=S.headers[i], id='c'+i, lab=el('label');
+    lab.title=tipFor(h)||'';   // hover: chú thích cột ngay trong bảng chọn cột
     lab.innerHTML=`<input type="checkbox" id="${id}" ${S.hidden.has(i)?'':'checked'}><span>${esc(h||'(cột trống)')}</span>`;
     lab.querySelector('input').onchange=e=>{ if(e.target.checked)S.hidden.delete(i); else S.hidden.add(i); renderAll(); };
     list.appendChild(lab);
