@@ -94,6 +94,9 @@ ReelStats/reel_stats.xlsx
 GetTextLargeV3/models/
 GetTextLargeV3/geckodriver.exe
 
+# ORC: tool OCR ảnh -> Word, không đưa lên git
+ORC/
+
 # Ignore output and backup directories
 output_videos/
 local_videos/
