@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FB Billing Import · không cần API</title>
+<style>
+  :root {
+    --bg: #f1f5f9; --card: #ffffff; --border: #dbe2ea; --border-strong: #b6c2d1;
+    --accent: #2563eb; --accent-hv: #1d4ed8; --accent-soft: #dbeafe;
+    --text: #1e293b; --muted: #64748b; --green: #15803d; --green-soft: #dcfce7;
+    --amber: #b45309; --amber-soft: #fef3c7; --red: #b91c1c; --red-soft: #fee2e2;
+    --violet: #6d28d9; --violet-soft: #ede9fe;
+    --code: #f8fafc; --shadow: 0 1px 2px rgba(15,23,42,.05), 0 4px 16px rgba(15,23,42,.05);
+    --bar-h: 76px;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text); background: var(--bg);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  .app { max-width: 1480px; margin: 0 auto; padding: 16px 22px calc(var(--bar-h) + 24px); }
+
+  /* ── Thanh trên ─────────────────────────────────────────── */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 16px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #7c3aed);
+          color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 14px; letter-spacing: .5px; }
+  .brand h1 { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.2; }
+  .brand .sub { color: var(--muted); font-size: 12.5px; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* ── Nút ───────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px;
+    border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    border: 1px solid var(--border-strong); background: #fff; color: var(--text); transition: background .12s, border-color .12s;
+  }
+  .btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hv); border-color: var(--accent-hv); }
+  .btn-soft { background: var(--accent-soft); border-color: #bfdbfe; color: var(--accent-hv); }
+  .btn-soft:hover { background: #bfdbfe; }
+  .btn-danger { color: var(--red); }
+  .btn-danger:hover { background: var(--red-soft); border-color: #fca5a5; }
+  .btn-lg { height: 44px; padding: 0 24px; font-size: 14.5px; border-radius: 10px; }
+  .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 6px; }
+  .btn svg { width: 15px; height: 15px; flex: none; }
+
+  /* ── Thẻ ───────────────────────────────────────────────── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .step { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; flex: none; }
+  .card-head .title { font-weight: 700; font-size: 15px; }
+  .card-head .hint { color: var(--muted); font-size: 12.5px; }
+  .card-body { padding: 16px 18px; }
+
+  /* ── Form chọn sheet ───────────────────────────────────── */
+  .choice { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; background: #fff; }
+  .choice.active { border-color: #93c5fd; background: #f8fbff; }
+  .choice-head { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .choice-head input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .choice-head .tag { font-weight: 500; font-size: 12px; color: var(--accent-hv); background: var(--accent-soft); padding: 1px 8px; border-radius: 999px; }
+  .form-grid { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px 14px; align-items: center; margin: 12px 0 2px 27px; }
+  .form-grid .k { font-size: 13px; color: var(--text); font-weight: 500; }
+  .form-grid .note { grid-column: 2; color: var(--muted); font-size: 12px; margin-top: -4px; }
+  .input {
+    width: 100%; height: 38px; padding: 0 12px; font: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 8px; background: #fff;
+  }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  .input::placeholder { color: #94a3b8; }
+  .pair { display: flex; gap: 8px; }
+  .pair .input:last-child { max-width: 280px; }
+  .history { border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow: hidden; }
+  .hrow { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-top: 1px solid #eef2f6; }
+  .hrow:first-child { border-top: 0; }
+  .hrow.cur { background: #f0fdf4; }
+  .hrow .hname { width: 240px; flex: none; height: 32px; font-size: 13px; }
+  .hrow .hinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+  .hrow .hinfo b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .hinfo .mono { color: var(--muted); font-size: 11.5px; }
+  .hrow .hwhen { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .history .empty { padding: 12px; font-size: 13px; }
+  .sa-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .sa-row .lbl { color: var(--muted); font-size: 13px; }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
+  .spacer { flex: 1 1 auto; }
+
+  .fallback { border: 1px solid #fcd34d; background: #fffbeb; border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+  .fallback h3 { margin: 0 0 4px; font-size: 14px; color: var(--amber); }
+  .fallback .err { color: var(--muted); font-size: 12px; margin-bottom: 8px; word-break: break-all; }
+  .fallback ol { margin: 8px 0 12px 20px; padding: 0; }
+  .fallback li { margin: 3px 0; }
+  .fallback .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .fallback .row + .row { margin-top: 10px; }
+  .fallback .input { max-width: 640px; }
+
+  .connected { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 16px; }
+  .connected .ok-ic { width: 30px; height: 30px; border-radius: 50%; background: var(--green-soft); color: var(--green); display: grid; place-items: center; flex: none; }
+  .connected .name { font-weight: 700; font-size: 15px; }
+  .connected .url { color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12.5px; word-break: break-all; }
+
+  /* ── Bảng file ─────────────────────────────────────────── */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12.5px; align-items: center; }
+  .tablewrap { min-height: 170px; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+  .tablewrap.drag { outline: 2px dashed var(--accent); outline-offset: -4px; background: #eff6ff; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+  th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: var(--muted); font-weight: 700; font-size: 12px;
+       text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eef2f6; vertical-align: middle; }
+  tbody tr:hover td { background: #f8fafc; }
+  tr.sel td { background: #eff6ff !important; }
+  td.chk, th.chk { width: 40px; text-align: center; }
+  td.chk input, th.chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  td.file { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.kind { white-space: nowrap; width: 120px; }
+  td.tab { min-width: 260px; }
+  td.tab .input { height: 32px; font-size: 13px; }
+  td.rows { text-align: center; width: 110px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.st { width: 150px; white-space: nowrap; }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .empty b { color: var(--text); }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill-muted { background: #e2e8f0; color: #475569; }
+  .pill-ok { background: var(--green-soft); color: var(--green); }
+  .pill-warn { background: var(--amber-soft); color: var(--amber); }
+  .pill-info { background: var(--accent-soft); color: var(--accent-hv); }
+  .pill-err { background: var(--red-soft); color: var(--red); }
+  .pill-busy { background: var(--accent-soft); color: var(--accent-hv); }
+  .pill-busy::before { animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .kind { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .kind-billing { background: var(--accent-soft); color: var(--accent-hv); }
+  .kind-report { background: var(--violet-soft); color: var(--violet); }
+
+  .detail { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--code); }
+  .detail .dh { padding: 8px 14px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; border-bottom: 1px solid var(--border); }
+  #info { padding: 10px 14px; min-height: 92px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; white-space: pre-wrap; line-height: 1.6; }
+  .detail .ok { color: var(--green); } .detail .warn { color: var(--amber); } .detail .err { color: var(--red); }
+  .detail .info { color: var(--accent-hv); } .detail .dim { color: var(--muted); }
+
+  /* ── Thanh hành động cố định đáy ───────────────────────── */
+  .actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: #fff; border-top: 1px solid var(--border);
+               box-shadow: 0 -6px 20px rgba(15,23,42,.06); }
+  .actionbar-in { max-width: 1480px; margin: 0 auto; padding: 14px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
+         background: #fff; font-size: 13px; cursor: pointer; user-select: none; }
+  .opt input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .opt:hover { border-color: var(--border-strong); }
+  .progress { display: none; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .progress.on { display: inline-flex; }
+  .bar { width: 150px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 40%; background: var(--accent); animation: slide 1s linear infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  #result { font-size: 13.5px; font-weight: 600; color: var(--text); }
+
+  /* ── Modal / toast ─────────────────────────────────────── */
+  .modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-bg.on { display: flex; }
+  .modal { background: #fff; border-radius: 14px; width: 640px; max-width: 100%; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  .modal h3 { margin: 0 0 10px; font-size: 16px; }
+  .modal pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 320px; overflow: auto;
+               font-family: Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; margin: 0 0 14px; line-height: 1.55; }
+  .modal .btns { display: flex; justify-content: flex-end; gap: 8px; }
+  .toast { position: fixed; bottom: calc(var(--bar-h) + 14px); right: 18px; z-index: 60; background: #0f172a; color: #fff; padding: 9px 14px;
+           border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.on { opacity: .94; }
+  [hidden] { display: none !important; }
+
+  @media (max-width: 820px) {
+    .form-grid { grid-template-columns: 1fr; margin-left: 0; }
+    .form-grid .note { grid-column: 1; }
+    td.file { max-width: 260px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">FB</div>
+    <div>
+      <h1>FB Billing Import</h1>
+      <div class="sub">Google Sheet · không cần Facebook API · billing + báo cáo Ads Manager + tổng hợp</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="status" class="pill pill-muted"><span id="status-text">Đang khởi động…</span></span>
+    <button class="btn btn-sm" onclick="quitApp()" title="Tắt server Python và kết thúc tool">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>Thoát
+    </button>
+  </div>
+</header>
+
+<!-- ───────── Bước 1: Sheet đích ───────── -->
+<section class="card" id="target">
+  <div class="card-head"><span class="step">1</span><span class="title">Google Sheet đích</span>
+    <span class="hint">Chọn nơi nhận dữ liệu rồi bấm Kết nối</span></div>
+  <div class="card-body">
+
+    <div id="target-form">
+      <div class="choice active" id="choice-existing">
+        <label class="choice-head"><input type="radio" name="mode" value="existing" checked onchange="syncChoice()"> Dùng Google Sheet có sẵn <span class="tag">mặc định</span></label>
+        <div class="form-grid">
+          <span class="k">Link hoặc ID</span>
+          <div class="pair">
+            <input class="input" type="text" id="f-sheet" placeholder="dán link đầy đủ https://docs.google.com/spreadsheets/d/…/edit hoặc ID" oninput="syncSheetHint()">
+            <input class="input" type="text" id="f-name" placeholder="tên gợi nhớ (tuỳ chọn)">
+          </div>
+          <span class="note" id="sheet-hint">Dán link đầy đủ, tool tự lấy ID. Sheet phải chia sẻ quyền Editor cho service account bên dưới.</span>
+          <span class="k">Đã dùng gần đây</span>
+          <div class="history" id="sheet-history"></div>
+        </div>
+      </div>
+      <div class="choice" id="choice-new">
+        <label class="choice-head"><input type="radio" name="mode" value="new" onchange="syncChoice()"> Tạo Google Sheet mới</label>
+        <div class="form-grid">
+          <span class="k">Tên sheet</span><input class="input" type="text" id="f-title">
+          <span class="k">Chia sẻ với email</span><input class="input" type="text" id="f-email" placeholder="email Google của bạn, để mở được sheet">
+          <span class="note">Bỏ trống thì chỉ tool này đọc/ghi được sheet.</span>
+        </div>
+      </div>
+
+      <div class="sa-row">
+        <span class="lbl">Service account</span>
+        <span class="mono" id="sa-email">…</span>
+        <button class="btn btn-sm" onclick="copyText(state.sa_email, 'Đã copy email service account')">Copy</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary btn-lg" id="btn-connect" onclick="connect()">Kết nối
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+
+      <div class="fallback" id="fallback" hidden>
+        <h3>⚠ Service account không tạo được Google Sheet mới</h3>
+        <div class="err mono" id="fallback-err"></div>
+        <div>Google không còn cấp dung lượng Drive cho service account. Hãy tạo sheet bằng tài khoản Google của bạn rồi chia sẻ lại:</div>
+        <ol>
+          <li>Bấm <b>Mở sheets.new</b>, Google tạo sheet trống trong Drive của bạn.</li>
+          <li>Đặt tên sheet (gợi ý: <b id="fallback-title"></b>).</li>
+          <li>Bấm <b>Share / Chia sẻ</b>, dán email service account (nút Copy), chọn quyền <b>Editor</b>.</li>
+          <li>Copy link sheet, dán vào ô dưới, bấm <b>Kết nối</b>.</li>
+        </ol>
+        <div class="row">
+          <button class="btn btn-soft" onclick="openUrl('https://sheets.new')">Mở sheets.new</button>
+          <button class="btn" onclick="copyText(state.sa_email, 'Đã copy email service account')">Copy email service account</button>
+        </div>
+        <div class="row">
+          <span style="white-space:nowrap">Link sheet</span>
+          <input class="input" type="text" id="fb-link" placeholder="dán link sheet vừa tạo">
+          <button class="btn btn-primary" onclick="connectFallback()">Kết nối</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="target-info" class="connected" hidden>
+      <span class="ok-ic"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span>
+      <div>
+        <div class="name" id="sheet-title"></div>
+        <div class="url" id="sheet-url" onclick="openUrl(state.sheet.url)"></div>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn btn-soft" onclick="openUrl(state.sheet.url)">Mở Sheet</button>
+      <button class="btn" onclick="copyText(state.sheet.url, 'Đã copy link sheet')">Copy link</button>
+      <button class="btn" onclick="showTargetForm()">Đổi Sheet…</button>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── Bước 2: Import file (tự phân loại) ───────── -->
+<section class="card" id="files">
+  <div class="card-head"><span class="step">2</span><span class="title">Import file</span>
+    <span class="hint">Thêm mọi file vào đây, tool tự phân loại theo tên file. Sửa tab đích trực tiếp trong ô Tab nếu muốn.</span></div>
+  <div class="card-body">
+    <div class="toolbar">
+      <button class="btn btn-primary" id="btn-add" onclick="pickFiles()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Thêm file…</button>
+      <input type="file" id="file-input" multiple accept=".xlsx,.xls,.csv" hidden onchange="uploadFiles(this.files); this.value='';">
+      <span class="legend">
+        <span><span class="kind kind-billing">Billing</span> tên file có “_fb_billing” → tab = tên trước “_fb_billing”, upsert theo ID giao dịch</span>
+        <span><span class="kind kind-report">Báo cáo Ads</span> file xuất từ Ads Manager → tab = “Camp ” + tên tài khoản, chỉ dòng có chi tiêu, ghi đè tab</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="btn" onclick="removeSelected()">Xóa đã chọn</button>
+      <button class="btn btn-danger" onclick="clearAll()">Xóa tất cả</button>
+    </div>
+    <div class="tablewrap" id="tablewrap">
+      <table>
+        <thead><tr><th class="chk"><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)"></th>
+          <th>File</th><th>Loại</th><th>Tab đích</th><th style="text-align:center">Dòng</th><th>Trạng thái</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="detail">
+      <div class="dh">Chi tiết file đang chọn</div>
+      <div id="info"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── Bước 3: Bảng tổng hợp ───────── -->
+<section class="card" id="summary">
+  <div class="card-head"><span class="step">3</span><span class="title">Bảng tổng hợp</span>
+    <span class="hint">Nhân bản mẫu “Tổng Hợp T6”. Điền dòng 1.1 Ngân sách được duyệt (từ tab billing) và 1.3 Ngân sách thực tế Camp đã tiêu (từ tab Camp). Chạy lại bao nhiêu lần cũng được.</span></div>
+  <div class="card-body">
+    <div class="toolbar">
+      <label class="opt">Tháng
+        <select id="th-month" class="input" style="width:auto;height:30px;padding:0 8px" onchange="syncThLabel()"></select></label>
+      <label class="opt">Năm
+        <input id="th-year" class="input" type="number" min="2020" max="2100" style="width:92px;height:30px;padding:0 8px" onchange="syncThLabel()"></label>
+      <label class="opt"><input type="checkbox" id="th-all"> Cộng cả cột như mẫu, không lọc tháng</label>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" id="btn-th" onclick="runTongHop()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg><span id="btn-th-label">Tạo / cập nhật Tổng Hợp</span></button>
+    </div>
+    <div id="th-result" class="muted" style="margin-top:12px">Kết nối Google Sheet ở bước 1 rồi bấm nút.</div>
+  </div>
+</section>
+
+</div><!-- /.app -->
+
+<footer class="actionbar">
+  <div class="actionbar-in">
+    <button class="btn btn-primary btn-lg" id="btn-import" onclick="importAll(false)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3"/></svg><span id="btn-import-label">Import tất cả</span></button>
+    <button class="btn" id="btn-retry" onclick="importAll(true)" disabled>↻ Chạy lại file lỗi</button>
+    <div class="opts">
+      <label class="opt" title="Chỉ áp dụng cho file billing"><input type="checkbox" id="opt-replace"> Billing: thay thế dữ liệu cũ trong tab</label>
+      <label class="opt" title="Chỉ áp dụng cho file billing"><input type="checkbox" id="opt-month" checked onchange="renderInfo()"> Billing: chỉ giữ tháng đa số của file</label>
+    </div>
+    <span class="spacer"></span>
+    <span class="progress" id="prog"><span class="bar"><i></i></span>Đang xử lý…</span>
+    <span id="result"></span>
+  </div>
+</footer>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <pre id="modal-body"></pre>
+    <div class="btns"><button class="btn" onclick="closeModal(false)">Huỷ</button><button class="btn btn-primary" onclick="closeModal(true)">Đồng ý</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const state = { sa_email: '', sheet: null, items: [], selected: null, busy: false, quit: false, sheets: [] };
+let modalResolve = null;
+let es = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const IMPORTABLE = ['ready', 'mismatch', 'new_tab', 'replace'];
+
+// ── Gọi Python qua HTTP ─────────────────────────────────────────────────────
+async function api(name, ...args) {
+  const r = await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ args }) });
+  const data = await r.json().catch(() => ({ error: 'Phản hồi không hợp lệ' }));
+  if (!r.ok || (data && data.error)) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+window.__emit = (event, payload) => {          // Python đẩy sự kiện qua SSE
+  if (event === 'item')   upsertItem(payload);
+  if (event === 'done')   importDone(payload);
+  if (event === 'status') setStatus(payload.text, payload.error ? 'err' : '');
+};
+function connectEvents() {
+  es = new EventSource('/events');
+  es.onmessage = e => { try { const m = JSON.parse(e.data); window.__emit(m.event, m.payload); } catch (_) {} };
+  es.onerror = () => { if (!state.quit) setStatus('Mất kết nối với server Python, chạy lại tool nếu không tự hồi phục', 'err'); };
+  es.onopen = () => refreshStatus();
+}
+function openUrl(url) { window.open(url, '_blank', 'noopener'); }
+
+// ── Tiện ích giao diện ──────────────────────────────────────────────────────
+function setStatus(text, kind) {                 // kind: 'ok' | 'err' | '' (xám)
+  $('status-text').textContent = text || '';
+  $('status').className = 'pill ' + (kind === 'ok' ? 'pill-ok' : kind === 'err' ? 'pill-err' : 'pill-muted');
+}
+function refreshStatus() {
+  if (state.sheet) setStatus(`Đã kết nối · ${state.items.length} file trong hàng đợi`, 'ok');
+  else setStatus('Chưa kết nối Google Sheet', '');
+}
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800); }
+function copyText(text, msg) {
+  if (!text) return;
+  const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+                           document.execCommand('copy'); ta.remove(); toast(msg); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast(msg), fallback);
+  else fallback();
+}
+function confirmBox(title, body) {
+  $('modal-title').textContent = title; $('modal-body').textContent = body; $('modal').classList.add('on');
+  return new Promise(res => { modalResolve = res; });
+}
+function closeModal(ok) { $('modal').classList.remove('on'); if (modalResolve) modalResolve(ok); modalResolve = null; }
+function setBusy(b) { state.busy = b; $('prog').classList.toggle('on', b); refreshButtons(); }
+function syncChoice() {
+  const m = mode();
+  $('choice-new').classList.toggle('active', m === 'new');
+  $('choice-existing').classList.toggle('active', m === 'existing');
+}
+async function quitApp() {
+  if (!(await confirmBox('Thoát', 'Tắt server Python và kết thúc tool?'))) return;
+  state.quit = true; if (es) es.close();
+  try { await api('quit'); } catch (_) {}
+  document.body.innerHTML = '<div style="padding:48px;font-size:15px;color:#64748b">Đã tắt tool. Bạn có thể đóng tab này.</div>';
+}
+
+// ── Khởi động (tải lại trang vẫn giữ trạng thái từ server) ─────────────────
+document.addEventListener('DOMContentLoaded', init);
+async function init() {
+  try {
+    const s = await api('get_state');
+    state.sa_email = s.sa_email;
+    $('sa-email').textContent = s.sa_email || '(không đọc được service_account.json)';
+    $('f-title').value = s.default_title;
+    $('f-email').value = s.share_email || '';
+    state.sheets = s.sheets || [];
+    $('f-sheet').value = s.default_sheet_id || '';
+    $('f-name').value = (state.sheets.find(h => h.id === s.default_sheet_id) || {}).name || '';
+    syncSheetHint(); renderHistory();
+    $('fallback-title').textContent = s.default_title;
+    const sel = $('th-month');
+    sel.innerHTML = [...Array(12)].map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+    sel.value = s.report_month; $('th-year').value = s.report_year; syncThLabel();
+    syncChoice();
+    if (s.sheet) showConnected(s.sheet); else showTargetForm();
+    state.items = s.items || [];
+    renderItems();
+    refreshStatus();
+    connectEvents();
+  } catch (e) { setStatus('Lỗi khởi động: ' + e.message, 'err'); }
+}
+
+// ── Lịch sử sheet đã dùng ───────────────────────────────────────────────────
+function sheetIdOf(text) {
+  const s = (text || '').trim();
+  const m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (m) return m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : '';
+}
+function syncSheetHint() {
+  const raw = $('f-sheet').value.trim(), id = sheetIdOf(raw), h = $('sheet-hint');
+  if (!raw) { h.textContent = 'Dán link đầy đủ, tool tự lấy ID. Sheet phải chia sẻ quyền Editor cho service account bên dưới.'; h.style.color = ''; return; }
+  if (!id) { h.textContent = 'Chưa nhận ra ID trong chuỗi này. Link phải có dạng …/spreadsheets/d/<ID>/…'; h.style.color = 'var(--red)'; return; }
+  const known = state.sheets.find(x => x.id === id);
+  h.style.color = '';
+  h.textContent = `ID: ${id}` + (known ? `  ·  đã dùng: ${known.name || known.title}` : '  ·  sheet mới, sẽ được lưu vào danh sách sau khi kết nối');
+  if (known && !$('f-name').value) $('f-name').value = known.name || '';
+}
+function fmtWhen(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+function renderHistory() {
+  const box = $('sheet-history');
+  if (!state.sheets.length) { box.innerHTML = '<div class="empty muted">Chưa có. Kết nối một sheet là nó được lưu ở đây.</div>'; return; }
+  const cur = state.sheet ? state.sheet.id : '';
+  box.innerHTML = state.sheets.map(h => `
+    <div class="hrow ${h.id === cur ? 'cur' : ''}">
+      <input class="input hname" type="text" value="${esc(h.name || '')}" placeholder="tên gợi nhớ" data-id="${esc(h.id)}" title="Sửa tên gợi nhớ rồi Enter">
+      <div class="hinfo"><b title="${esc(h.title || '')}">${esc(h.title || '(chưa kết nối lần nào)')}</b><span class="mono">${esc(h.id)}</span></div>
+      <span class="hwhen">${fmtWhen(h.last_used)}</span>
+      <button class="btn btn-sm btn-soft" onclick="useSheet('${esc(h.id)}')">${h.id === cur ? 'Đang dùng' : 'Dùng'}</button>
+      <button class="btn btn-sm btn-danger" onclick="forgetSheet('${esc(h.id)}')" title="Bỏ khỏi danh sách (không xóa sheet)">✕</button>
+    </div>`).join('');
+  box.querySelectorAll('input.hname').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      try { state.sheets = await api('save_sheet_name', inp.dataset.id, inp.value); toast('Đã lưu tên gợi nhớ'); renderHistory(); syncSheetHint(); }
+      catch (e) { toast(e.message); }
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  });
+}
+async function useSheet(id) {
+  const h = state.sheets.find(x => x.id === id); if (!h) return;
+  document.querySelector('input[name=mode][value=existing]').checked = true; syncChoice();
+  $('f-sheet').value = id; $('f-name').value = h.name || ''; syncSheetHint();
+  await doConnect({ mode: 'existing', sheet: id, name: h.name || '' });
+}
+async function forgetSheet(id) {
+  const h = state.sheets.find(x => x.id === id); if (!h) return;
+  if (!(await confirmBox('Bỏ khỏi danh sách', `Bỏ "${h.name || h.title || id}" khỏi danh sách đã dùng?\nSheet trên Google không bị xóa.`))) return;
+  state.sheets = await api('forget_sheet', id); renderHistory(); syncSheetHint();
+}
+
+// ── Kết nối Sheet ───────────────────────────────────────────────────────────
+function showTargetForm() { $('target-form').hidden = false; $('target-info').hidden = true; $('fallback').hidden = true; }
+function showConnected(sheet) {
+  state.sheet = sheet;
+  $('sheet-title').textContent = sheet.title; $('sheet-url').textContent = sheet.url;
+  $('target-form').hidden = true; $('target-info').hidden = false;
+}
+function mode() { return document.querySelector('input[name=mode]:checked').value; }
+
+async function connect() {
+  const choice = mode() === 'new'
+    ? { mode: 'new', title: $('f-title').value.trim(), email: $('f-email').value.trim() }
+    : { mode: 'existing', sheet: $('f-sheet').value.trim(), name: $('f-name').value.trim() };
+  if (choice.mode === 'new' && !choice.title) return toast('Nhập tên cho Google Sheet mới');
+  if (choice.mode === 'existing' && !choice.sheet) return toast('Dán link hoặc ID Google Sheet');
+  await doConnect(choice);
+}
+async function connectFallback() {
+  const link = $('fb-link').value.trim();
+  if (!link) return toast('Dán link sheet vừa tạo');
+  await doConnect({ mode: 'existing', sheet: link });
+}
+async function doConnect(choice) {
+  $('btn-connect').disabled = true; setStatus('Đang kết nối Google Sheet…', ''); setBusy(true);
+  try {
+    const r = await api('connect', choice);
+    if (!r.ok) {
+      if (r.quota) {
+        $('fallback').hidden = false; $('fallback-err').textContent = r.error;
+        $('fallback-title').textContent = choice.title || $('f-title').value;
+        setStatus('Service account không tạo được sheet, làm theo hướng dẫn bên dưới', 'err');
+      } else { setStatus(r.error, 'err'); await confirmBox('Lỗi kết nối', r.error); }
+      return;
+    }
+    showConnected(r.sheet);
+    if (r.sheets) { state.sheets = r.sheets; $('f-sheet').value = r.sheet.id; $('f-name').value = (r.sheets[0] || {}).name || ''; renderHistory(); syncSheetHint(); }
+    state.items = r.items || state.items;   // đã so lại với sheet mới
+    renderItems();
+    setStatus(`Đã kết nối · ${r.tabs} tab trong sheet`, 'ok');
+    if (r.created) {
+      copyText(r.sheet.url, 'Đã copy link sheet mới');
+      let msg = `Đã tạo Google Sheet mới: ${r.sheet.title}\n${r.sheet.url}\n\n(link đã copy vào clipboard)\n`;
+      msg += r.share_err ? `⚠ Chia sẻ cho ${choice.email} thất bại: ${r.share_err}` :
+             choice.email ? `Đã chia sẻ cho ${choice.email} (Editor).` :
+             '⚠ Chưa chia sẻ cho ai: bạn sẽ không mở được sheet bằng tài khoản Google của mình.';
+      await confirmBox('Sheet mới', msg);
+    }
+  } catch (e) { setStatus('Lỗi: ' + e.message, 'err'); }
+  finally { $('btn-connect').disabled = false; setBusy(false); }
+}
+
+// ── Bước 2: file (billing + báo cáo, tự phân loại) ─────────────────────────
+function pickFiles() { if (!state.busy) $('file-input').click(); }
+async function uploadFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (state.busy || !files.length) return;
+  setBusy(true); setStatus(`Đang đọc ${files.length} file…`, '');
+  try {
+    for (const f of files) {
+      const r = await fetch('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f });
+      const it = await r.json();
+      if (!r.ok || it.error) { toast(`${f.name}: ${it.error || r.status}`); continue; }
+      upsertItem(it);
+    }
+  } catch (e) { setStatus('Lỗi đọc file: ' + e.message, 'err'); return; }
+  finally { setBusy(false); }
+  refreshStatus();
+}
+function upsertItem(it) {
+  const i = state.items.findIndex(x => x.id === it.id);
+  if (i >= 0) state.items[i] = it; else state.items.push(it);
+  renderItems();
+}
+async function onTabEdit(id, value) {
+  const it = state.items.find(x => x.id === id);
+  if (!it || it.tab === value.trim() || !value.trim()) { renderItems(); return; }
+  try { upsertItem(await api('set_tab', id, value.trim())); } catch (e) { toast(e.message); renderItems(); }
+}
+async function removeSelected() {
+  const ids = [...document.querySelectorAll('tbody input.rowchk:checked')].map(c => +c.value);
+  if (!ids.length) return toast('Tích chọn file cần xóa ở cột đầu');
+  await api('remove_items', ids);
+  state.items = state.items.filter(x => !ids.includes(x.id));
+  if (ids.includes(state.selected)) state.selected = null;
+  $('chk-all').checked = false;
+  renderItems(); refreshStatus();
+}
+async function clearAll() {
+  const ids = state.items.filter(x => x.status !== 'importing').map(x => x.id);
+  if (!ids.length) return;
+  if (!(await confirmBox('Xóa tất cả', `Bỏ ${ids.length} file khỏi hàng đợi? (không ảnh hưởng Google Sheet)`))) return;
+  await api('remove_items', ids);
+  state.items = state.items.filter(x => !ids.includes(x.id)); state.selected = null;
+  $('chk-all').checked = false;
+  renderItems(); refreshStatus();
+}
+function toggleAll(on) { document.querySelectorAll('tbody input.rowchk').forEach(c => c.checked = on); }
+
+const LABEL = { loading: ['Đang đọc…', 'busy'], checking: ['Đang so cột…', 'busy'], no_sheet: ['Chờ kết nối', 'muted'],
+                ready: ['Sẵn sàng', 'ok'], mismatch: ['Cột khác tab', 'warn'], new_tab: ['Tab mới', 'info'],
+                replace: ['Ghi đè tab', 'warn'], importing: ['Đang import…', 'busy'], done: ['Hoàn tất', 'ok'], error: ['Lỗi', 'err'] };
+function pill(status) { const [t, k] = LABEL[status] || [status, 'muted']; return `<span class="pill pill-${k}">${t}</span>`; }
+function kindTag(k) { return k === 'report' ? '<span class="kind kind-report">Báo cáo Ads</span>' : '<span class="kind kind-billing">Billing</span>'; }
+function rowsText(it) {
+  if (it.rows == null) return '—';
+  return it.kind === 'report' ? `${it.rows} / ${it.rows_total}` : String(it.rows);
+}
+
+function renderItems() {
+  const tb = $('tbody');
+  if (!state.items.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="empty"><b>Chưa có file.</b><br>Bấm “Thêm file…” hoặc kéo thả file .xlsx vào đây. File billing và báo cáo Ads Manager thêm chung, tool tự phân loại.</td></tr>';
+    refreshButtons(); renderInfo(); return;
+  }
+  tb.innerHTML = state.items.map(it => `
+    <tr class="${it.id === state.selected ? 'sel' : ''}" data-id="${it.id}">
+      <td class="chk"><input type="checkbox" class="rowchk" value="${it.id}"></td>
+      <td class="file" title="${esc(it.file)}">${esc(it.file)}</td>
+      <td class="kind">${kindTag(it.kind)}</td>
+      <td class="tab"><input class="input" type="text" value="${esc(it.tab)}" data-id="${it.id}" ${it.status === 'importing' || it.status === 'done' ? 'disabled' : ''}></td>
+      <td class="rows" title="${it.kind === 'report' ? 'có chi tiêu / tổng dòng trong file' : 'số dòng trong file'}">${rowsText(it)}</td>
+      <td class="st">${pill(it.status)}</td>
+    </tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr => tr.addEventListener('click', e => {
+    if (e.target.tagName === 'INPUT') return;
+    state.selected = +tr.dataset.id; renderItems();
+  }));
+  tb.querySelectorAll('td.tab input').forEach(inp => {
+    inp.addEventListener('change', () => onTabEdit(+inp.dataset.id, inp.value));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  });
+  refreshButtons(); renderInfo();
+}
+function refreshButtons() {
+  const n = state.items.filter(x => IMPORTABLE.includes(x.status)).length;
+  $('btn-import').disabled = !state.sheet || state.busy || !n;
+  $('btn-import-label').textContent = n ? `Import tất cả (${n} file)` : 'Import tất cả';
+  $('btn-retry').disabled = state.busy || !state.items.some(x => x.status === 'error' && x.rows != null);
+  $('btn-add').disabled = state.busy;
+  $('btn-th').disabled = !state.sheet || state.busy;
+}
+function renderInfo() {
+  const it = state.items.find(x => x.id === state.selected);
+  const box = $('info');
+  if (!it) { box.innerHTML = '<span class="dim">Bấm vào một dòng trong bảng để xem chi tiết.</span>'; return; }
+  const L = []; const line = (cls, t) => L.push(`<span class="${cls}">${esc(t)}</span>`);
+  line('dim', `File : ${it.file}`);
+  if (it.kind === 'report') {
+    line('dim', `Loại : Báo cáo Ads Manager · cấp ${it.level} · kỳ ${it.period || '?'} · ${it.cols} cột`);
+    line(it.status === 'replace' ? 'warn' : it.status === 'new_tab' ? 'info' : 'ok',
+         `Tab  : ${it.tab}` + (it.status === 'replace' ? '   (đã có trong sheet, sẽ GHI ĐÈ toàn bộ)' : it.status === 'new_tab' ? '   (chưa có, sẽ tạo)' : ''));
+    if (it.matched) line('ok', `✓  Tài khoản này có tab billing “${it.matched} (ID)”, nên tab báo cáo đặt là “Camp ${it.matched}”`);
+    else if (state.sheet) line('dim', 'ℹ  Chưa thấy tab billing của tài khoản này, tên tab lấy theo tên file + chữ Camp (sửa được ở ô Tab)');
+    if (it.spend_col) line('dim', `Lọc  : cột “${it.spend_col}” khác 0  →  giữ ${it.rows} / ${it.rows_total} dòng`);
+    if (it.status === 'error') line('err', `Lỗi  : ${it.error}`);
+    if (!state.sheet) line('warn', '⚠  Chưa kết nối Google Sheet');
+    box.innerHTML = L.join('\n'); return;
+  }
+  line('dim', 'Loại : Billing (FB Billing Scraper)');
+  if (it.status === 'new_tab') line('info', `Tab  : ${it.tab}   (chưa có trong sheet, sẽ tạo lúc import)`);
+  else line('ok', `Tab  : ${it.tab}`);
+  if (it.status === 'error') line('err', `Lỗi  : ${it.error}`);
+  const f = it.info;
+  if (f) {
+    let s = `Dòng : ${it.rows} tổng  →  import ${f.import_rows}`;
+    if (f.skipped) s += `   (bỏ ${f.skipped} dòng không phải 'Đã thanh toán')`;
+    line('dim', s);
+    line(f.has_id ? 'ok' : 'err', f.has_id ? "✓  Cột 'ID giao dịch' có, sẽ dedup theo ID" : "✗  Cột 'ID giao dịch' KHÔNG CÓ, sẽ append tất cả");
+    if (f.month) line('dim', `Tháng : ${f.month} (đa số)`);
+    if (f.dropped && f.dropped.length) {
+      const d = f.dropped.map(([lb, c]) => `${lb} (${c})`).join(', ');
+      const n = f.dropped.reduce((a, [, c]) => a + c, 0);
+      if ($('opt-month').checked) line('warn', `⚠  ${n} dòng THÁNG KHÁC sẽ bị loại: ${d}`);
+      else line('dim', `ℹ  ${n} dòng tháng khác (đang giữ): ${d}`);
+    }
+    if (it.status === 'checking') line('dim', '⋯  Đang so cột với sheet…');
+    else if (!state.sheet) line('warn', '⚠  Chưa kết nối Google Sheet, kết nối rồi mới so cột được');
+    else if (f.sheet_empty) line('info', 'ℹ  Tab trống, sẽ tạo cột từ file');
+    else {
+      if (f.new_cols.length) line('warn', `⚠  ${f.new_cols.length} cột CÓ ở file, KHÔNG ở tab (sẽ thêm): ${f.new_cols.join(', ')}`);
+      if (f.missing.length)  line('warn', `⚠  ${f.missing.length} cột CÓ ở tab, KHÔNG ở file (để trống): ${f.missing.join(', ')}`);
+      if (!f.new_cols.length && !f.missing.length) line('ok', '✓  Cột file khớp hoàn toàn với tab');
+    }
+  }
+  box.innerHTML = L.join('\n');
+}
+
+// ── Import (cả 2 loại) ──────────────────────────────────────────────────────
+async function importAll(retryOnly) {
+  const items = retryOnly ? state.items.filter(x => x.status === 'error' && x.rows != null)
+                          : state.items.filter(x => IMPORTABLE.includes(x.status));
+  if (!items.length || !state.sheet) return;
+  const replace = $('opt-replace').checked, month = $('opt-month').checked;
+  const bills = items.filter(x => x.kind === 'billing'), reps = items.filter(x => x.kind === 'report');
+  let msg = `Sheet : ${state.sheet.title}\n`;
+  if (bills.length) {
+    msg += `\nBilling: ${bills.length} file → ${new Set(bills.map(x => x.tab)).size} tab (upsert theo ID giao dịch)\n`;
+    const nw = bills.filter(x => x.status === 'new_tab'); if (nw.length) msg += `   tạo mới ${nw.length} tab: ` + nw.slice(0, 6).map(x => x.tab).join(' · ') + '\n';
+    const mm = bills.filter(x => x.status === 'mismatch'); if (mm.length) msg += `   ⚠ ${mm.length} file có cột KHÁC tab đích (cột mới sẽ được thêm)\n`;
+    if (replace) msg += '   ⚠ Chế độ THAY THẾ: xóa dữ liệu cũ trong tab billing trước khi import\n';
+  }
+  if (reps.length) {
+    msg += `\nBáo cáo Ads Manager: ${reps.length} file, ${reps.reduce((a, x) => a + x.rows, 0)} dòng có chi tiêu\n`;
+    const rp = reps.filter(x => x.status === 'replace'); if (rp.length) msg += `   ⚠ GHI ĐÈ toàn bộ ${rp.length} tab đã có: ` + rp.slice(0, 6).map(x => x.tab).join(' · ') + '\n';
+    const nw = reps.filter(x => x.status === 'new_tab'); if (nw.length) msg += `   tạo mới ${nw.length} tab: ` + nw.slice(0, 6).map(x => x.tab).join(' · ') + '\n';
+  }
+  if (!(await confirmBox(retryOnly ? 'Chạy lại file lỗi' : 'Xác nhận Import', msg.trim()))) return;
+  setBusy(true); $('result').textContent = '';
+  try { await api('import_items', items.map(x => x.id), replace, month); }
+  catch (e) { setBusy(false); setStatus('Lỗi: ' + e.message, 'err'); }
+}
+function importDone(r) {
+  setBusy(false);
+  const parts = [];
+  if (r.errors) parts.push(`✓ ${r.total - r.errors}/${r.total} file · ✗ ${r.errors} lỗi`);
+  else parts.push(`✓ ${r.total} file`);
+  if (r.billing) parts.push(`billing +${r.added} mới ↺ ${r.updated} cập nhật`);
+  if (r.reports) parts.push(`báo cáo ${r.report_rows} dòng có chi tiêu`);
+  if (r.dropped) parts.push(`bỏ ${r.dropped} dòng sai tháng`);
+  $('result').textContent = parts.join(' · ');
+  setStatus(`Đã kết nối · ${r.tabs} tab trong sheet`, 'ok');
+  if (r.dropped_report && r.dropped_report.length) {
+    const lines = [`Đã loại ${r.dropped} dòng KHÔNG thuộc tháng đa số của file:`, ''];
+    r.dropped_report.forEach(([f, target, cnt]) => { lines.push(`📄 ${f}  →  giữ ${target}`); cnt.forEach(([lb, c]) => lines.push(`     • bỏ ${c} dòng ${lb}`)); lines.push(''); });
+    confirmBox('Đã loại dòng sai tháng', lines.join('\n'));
+  }
+}
+
+// ── Bước 3: bảng tổng hợp ───────────────────────────────────────────────────
+function syncThLabel() { $('btn-th-label').textContent = `Tạo / cập nhật Tổng Hợp T${$('th-month').value}`; }
+async function runTongHop() {
+  if (!state.sheet || state.busy) return;
+  const month = +$('th-month').value, year = +$('th-year').value, all = $('th-all').checked;
+  const box = $('th-result');
+  setBusy(true); box.className = 'muted'; box.style.color = ''; box.textContent = `Đang tạo / cập nhật Tổng Hợp T${month} trong "${state.sheet.title}"…`;
+  try {
+    const r = await api('tong_hop', month, year, all);
+    if (!r.ok) { box.className = ''; box.style.color = 'var(--red)'; box.textContent = '✗ ' + r.error; return; }
+    const how = all ? 'cộng cả cột Số tiền' : `chỉ tính dòng có Ngày thanh toán thuộc tháng ${month}/${year}`;
+    box.innerHTML = `<span class="pill pill-ok">Đã ${esc(r.mode)}</span> &nbsp; <b>${esc(r.target)}</b> · ${r.accounts} tài khoản · mẫu “${esc(r.template)}” (${esc(r.template_from)}) · dòng 1.1 ${how} · dòng 1.3 = tổng “Số tiền đã chi tiêu” của tab Camp. `
+                  + `<span class="link" style="color:var(--accent);text-decoration:underline;cursor:pointer" onclick="openUrl('${esc(r.url)}')">Mở tab ${esc(r.target)}</span>`;
+    setStatus(`Đã kết nối · ${state.items.length} file trong hàng đợi · ${r.target} ${r.mode}`, 'ok');
+  } catch (e) { box.style.color = 'var(--red)'; box.textContent = '✗ ' + e.message; }
+  finally { setBusy(false); }
+}
+
+// ── Kéo thả file vào bảng ───────────────────────────────────────────────────
+const wrap = $('tablewrap');
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+wrap.addEventListener('dragenter', () => wrap.classList.add('drag'));
+wrap.addEventListener('dragleave', e => { if (!wrap.contains(e.relatedTarget)) wrap.classList.remove('drag'); });
+wrap.addEventListener('drop', e => { e.preventDefault(); wrap.classList.remove('drag'); uploadFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>
