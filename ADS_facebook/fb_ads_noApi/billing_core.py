@@ -548,9 +548,9 @@ def upsert_with_retry(ws, headers, rows, replace, max_retry=4):
 SPEND_COL_HINT = "chi tiêu"          # cột "Số tiền đã chi tiêu (VND)"
 REPORT_TAB_PREFIX = "Camp "          # tab báo cáo = "Camp <Tên TK>", phân biệt với tab billing "<Tên TK> (<ID>)"
 _REPORT_LEVELS = [                    # (mẫu trong tên file, nhãn) — thử "Nhóm quảng cáo" TRƯỚC "Quảng cáo"
-    (r"Nhóm-quảng-cáo|Ad-?sets?", "Nhóm quảng cáo"),
-    (r"Chiến-dịch|Campaigns?", "Chiến dịch"),
-    (r"Quảng-cáo|Ads", "Quảng cáo"),
+    (r"Nh.m-qu.ng-c.o|Ad-?sets?", "Nhóm quảng cáo"),      # "." thay chữ có dấu: khớp cả tên file bị mất dấu
+    (r"Chi.n-d.ch|Campaigns?", "Chiến dịch"),             #   ("Nh_m-qu_ng-c_o", "Chi_n-d_ch")
+    (r"Qu.ng-c.o|Ads", "Quảng cáo"),
 ]
 
 
@@ -584,22 +584,40 @@ def _norm_key(s: str) -> str:
     return re.sub(r"[^\w()+]", "", (s or "").casefold())
 
 
+def _ascii_key(s: str) -> str:
+    """Khóa so sánh thô: chỉ giữ chữ cái ASCII và số. Dùng khi tên file bị mất dấu tiếng Việt —
+    'H_ ng H_i 01 - BSH H_ng Vi_t - GMT_7 _THU_' và 'Hồng Hải 01 - BSH Hưng Việt - GMT+7 (THUẾ)'
+    cùng ra 'hnghi01bshhngvitgmt7thu'."""
+    return re.sub(r"[^a-z0-9]", "", (s or "").casefold())
+
+
 def match_account_tab(account: str, titles) -> str:
     """Tìm tab đã có trong sheet ứng với tài khoản này → trả tên đúng chính tả của tab.
 
     Ưu tiên tab billing '<tên> (<ID>)' (trả phần tên, bỏ ID) — đúng quy ước Tổng Hợp T6:
     tab chiến dịch = tên tài khoản không có ID. Sau đó mới tới tab trùng tên không ID.
+    Không khớp chính xác → so phần ASCII còn lại (tên file mất dấu), chỉ nhận khi đúng 1 tab khớp.
     """
     key = _norm_key(account)
     if not key:
         return ""
+    titles = list(titles)
+    strip_id = lambda t: re.sub(r"\s*\(\d{6,}\)\s*$", "", t)
     for t in titles:
-        base = re.sub(r"\s*\(\d{6,}\)\s*$", "", t)
+        base = strip_id(t)
         if base != t and _norm_key(base) == key:
             return base.strip()
     for t in titles:
         if _norm_key(t) == key:
             return t
+    akey = _ascii_key(account)
+    if len(akey) >= 6:
+        hits = {strip_id(t).strip() for t in titles if strip_id(t) != t and _ascii_key(strip_id(t)) == akey}
+        if len(hits) == 1:
+            return hits.pop()
+        hits = {t for t in titles if _ascii_key(t) == akey}
+        if len(hits) == 1:
+            return hits.pop()
     return ""
 
 

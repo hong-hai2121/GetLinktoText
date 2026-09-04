@@ -11,6 +11,9 @@ Giao diện WEB mở trong CHROME (server nội bộ 127.0.0.1), KHÔNG cần Fa
         còn lại           → báo cáo xuất tay từ Ads Manager (Nhóm quảng cáo / Chiến dịch / Quảng cáo)
                             tab = "Camp <Tên TK>", chỉ giữ dòng "Số tiền đã chi tiêu" ≠ 0, ghi đè cả tab
   • Bước 3: Tổng hợp — tab "Tổng Hợp T{m}" (tong_hop.py): dòng 1.1 từ tab billing, 1.3 từ tab Camp
+                            (chỉ cộng nhóm QC có tên và "Ngân sách nhóm quảng cáo" ≠ 0 — bỏ dòng tổng của Ads Manager)
+                            + dòng phụ Lệch, CP Tổng, Đơn (Lượt mua), Doanh Số (Giá trị chuyển đổi lượt mua), Tỷ lệ CP
+                            + dòng "ID tài khoản" (thay nhãn "1. NGÂN SÁCH - TẠM ỨNG", tra tab "Danh Sách" theo tên TK)
   • Đóng tab trình duyệt (hoặc bấm "Thoát") → server tự tắt sau vài giây
   • Logic đọc/lọc/upsert: billing_core.py · giao diện: ui/index.html
 
