@@ -338,7 +338,8 @@ class GetTextApp:
         info_text = (
             f"📁 Video: {config.OUTPUT_VIDEO_DIR}      "
             f"📄 Word: {config.OUTPUT_WORD_FILE}      "
-            f"📋 Processed: {config.PROCESSED_LINKS_FILE}"
+            f"📋 Processed: {config.PROCESSED_LINKS_FILE}      "
+            f"⛔ Link lỗi: {config.FAILED_LINKS_FILE}"
         )
         ttk.Label(cfg, text=info_text, style="Muted.TLabel", wraplength=1060, justify="left").grid(
             row=2, column=0, columnspan=3, sticky="w"
@@ -379,10 +380,12 @@ class GetTextApp:
         tab_log = ttk.Frame(self.nb, style="Card.TFrame", padding=2)
         tab_links = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
         tab_result = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
+        tab_failed = ttk.Frame(self.nb, style="Card.TFrame", padding=10)
 
         self.nb.add(tab_log, text="  📜  Nhật ký  ")
         self.nb.add(tab_links, text="  🔗  Danh sách link  ")
         self.nb.add(tab_result, text="  📄  Nội dung Word  ")
+        self.nb.add(tab_failed, text="  ⛔  Link chưa lấy  ")
 
         tab_log.grid_rowconfigure(0, weight=1)
         tab_log.grid_columnconfigure(0, weight=1)
@@ -445,6 +448,45 @@ class GetTextApp:
             justify="left",
         ).pack(side="left", padx=(12, 0))
 
+        # Tab "Link chưa lấy": thanh công cụ (row 0) + danh sách link lỗi (row 1)
+        tab_failed.grid_rowconfigure(0, weight=0)
+        tab_failed.grid_rowconfigure(1, weight=1)
+        tab_failed.grid_columnconfigure(0, weight=1)
+
+        failed_toolbar = ttk.Frame(tab_failed, style="Card.TFrame")
+        failed_toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.retry_append_btn = ttk.Button(
+            failed_toolbar, text="↩  Thêm vào danh sách link",
+            command=self.restore_failed_links_append, style="Primary.TButton",
+        )
+        self.retry_append_btn.pack(side="left")
+        self.retry_replace_btn = ttk.Button(
+            failed_toolbar, text="♻  Thay thế danh sách link",
+            command=self.restore_failed_links_replace, style="Ghost.TButton",
+        )
+        self.retry_replace_btn.pack(side="left", padx=(8, 0))
+        self.reload_failed_btn = ttk.Button(
+            failed_toolbar, text="🔄  Tải lại", command=self.load_failed_links, style="Ghost.TButton"
+        )
+        self.reload_failed_btn.pack(side="left", padx=(8, 0))
+        self.clear_failed_btn = ttk.Button(
+            failed_toolbar, text="🗑  Xóa trắng", command=self.clear_failed_links, style="Ghost.TButton"
+        )
+        self.clear_failed_btn.pack(side="left", padx=(8, 0))
+
+        self._failed_count_var = tk.StringVar(value="⛔  0 link")
+        ttk.Label(failed_toolbar, textvariable=self._failed_count_var, style="Count.TLabel").pack(
+            side="right"
+        )
+        ttk.Label(
+            failed_toolbar,
+            text="Link không lấy được nội dung tự ghi vào đây kèm lý do (sau dấu #). "
+            "Xóa bớt dòng không cần rồi bấm 'Thêm' / 'Thay thế' để đưa về tab Danh sách link và chạy lại.",
+            style="Muted.TLabel",
+            wraplength=400,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
+
         text_kwargs = dict(
             wrap=tk.WORD,
             bg=C["surface"],
@@ -460,6 +502,7 @@ class GetTextApp:
         self.log_text = scrolledtext.ScrolledText(tab_log, font=F["mono"], **text_kwargs)
         self.links_text = scrolledtext.ScrolledText(tab_links, font=F["body"], **text_kwargs)
         self.result_text = scrolledtext.ScrolledText(tab_result, font=F["body"], **text_kwargs)
+        self.failed_text = scrolledtext.ScrolledText(tab_failed, font=F["body"], **text_kwargs)
 
         self.log_text.grid(row=0, column=0, sticky="nsew")
         self.links_text.grid(row=1, column=0, sticky="nsew")
@@ -467,6 +510,8 @@ class GetTextApp:
         self.links_text.bind("<<Modified>>", self._on_links_modified)
         self._init_log_tags()
         self.result_text.grid(row=1, column=0, sticky="nsew")
+        self.failed_text.grid(row=1, column=0, sticky="nsew")
+        self.failed_text.bind("<<Modified>>", self._on_failed_modified)
 
         self.nb.select(tab_log)
         self.nb.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -591,6 +636,108 @@ class GetTextApp:
         self.log("🗑 Đã xóa trắng ô danh sách link (chưa ghi vào file — bấm 'Tải lại' để lấy lại).")
         self.update_status("Đã xóa trắng danh sách link", "green")
 
+    # ── Link chưa lấy được ─────────────────────────────────────────────────
+    def _current_failed_links(self):
+        """Các link trong ô 'Link chưa lấy' (bỏ phần lý do sau dấu TAB)."""
+        links = []
+        for line in self.failed_text.get("1.0", tk.END).splitlines():
+            link = line.split("\t", 1)[0].strip()
+            if link:
+                links.append(link)
+        return links
+
+    def _on_failed_modified(self, _event=None):
+        if not self.failed_text.edit_modified():
+            return
+        self.failed_text.edit_modified(False)
+        self.update_failed_count()
+
+    def update_failed_count(self):
+        self._failed_count_var.set(f"⛔  {len(self._current_failed_links())} link")
+
+    def load_failed_links(self):
+        self.failed_text.delete("1.0", tk.END)
+        try:
+            lines = io.read_failed_lines(config.FAILED_LINKS_FILE)
+        except Exception as e:
+            self.log(f"❌ Lỗi khi đọc danh sách link chưa lấy: {e}")
+            lines = []
+        if lines:
+            self.failed_text.insert("1.0", "\n".join(lines) + "\n")
+            self.log(f"✅ Đã tải {len(lines)} link chưa lấy được từ {config.FAILED_LINKS_FILE}")
+        self.update_failed_count()
+
+    def restore_failed_links_append(self):
+        self._restore_failed_links(replace=False)
+
+    def restore_failed_links_replace(self):
+        if self._current_links() and not messagebox.askyesno(
+            "Thay thế danh sách link",
+            "Danh sách link hiện tại sẽ bị thay bằng các link chưa lấy được.\nTiếp tục?",
+        ):
+            return
+        self._restore_failed_links(replace=True)
+
+    def _restore_failed_links(self, replace: bool):
+        """Đưa các link trong tab 'Link chưa lấy' về tab Danh sách link để chạy lại."""
+        failed_links = self._current_failed_links()
+        if not failed_links:
+            self.log("ℹ️ Chưa có link nào trong tab 'Link chưa lấy' để đưa về danh sách.")
+            return
+
+        existing = [] if replace else self._current_links()
+        seen = set(existing)
+        added = []
+        for link in failed_links:
+            if link not in seen:
+                seen.add(link)
+                added.append(link)
+
+        new_list = existing + added
+        self.links_text.delete("1.0", tk.END)
+        if new_list:
+            self.links_text.insert("1.0", "\n".join(new_list) + "\n")
+        self.update_link_count()
+        self.save_links()
+
+        # Đã đưa về danh sách chạy -> bỏ khỏi file link lỗi
+        try:
+            io.remove_failed_links(config.FAILED_LINKS_FILE, set(failed_links))
+        except Exception as e:
+            self.log(f"⚠️ Không cập nhật được file link chưa lấy: {e}")
+        self.load_failed_links()
+
+        if replace:
+            self.log(f"♻ Đã thay danh sách link bằng {len(added)} link chưa lấy. Bấm 'Bắt đầu' để chạy lại.")
+        else:
+            skipped = len(failed_links) - len(added)
+            note = f" (bỏ qua {skipped} link đã có sẵn)" if skipped else ""
+            self.log(f"↩ Đã thêm {len(added)} link chưa lấy vào danh sách link{note}. Bấm 'Bắt đầu' để chạy lại.")
+        self.update_status(f"Đã đưa {len(failed_links)} link về danh sách", "green")
+        try:
+            self.nb.select(1)
+        except Exception:
+            pass
+
+    def clear_failed_links(self):
+        if not self._current_failed_links():
+            self.log("ℹ️ Danh sách link chưa lấy đang trống.")
+            return
+        if not messagebox.askyesno(
+            "Xóa danh sách link chưa lấy",
+            "Xóa hẳn toàn bộ link chưa lấy được (cả trong file failed_links.txt)?",
+        ):
+            return
+        try:
+            io.write_failed_lines(config.FAILED_LINKS_FILE, [])
+        except Exception as e:
+            self.log(f"❌ Lỗi khi xóa danh sách link chưa lấy: {e}")
+            return
+        self.failed_text.delete("1.0", tk.END)
+        self.update_failed_count()
+        self.log("🗑 Đã xóa toàn bộ danh sách link chưa lấy được.")
+        self.update_status("Đã xóa danh sách link chưa lấy", "green")
+
     # ── Tab switching ──────────────────────────────────────────────────────
     def on_tab_changed(self, event=None):
         try:
@@ -608,6 +755,10 @@ class GetTextApp:
             self.result_text.delete("1.0", "end")
             self.load_result_docx()
             self.result_text.see("1.0")
+        elif idx == 3:  # Link chưa lấy
+            self.failed_text.config(state="normal")
+            self.load_failed_links()
+            self.failed_text.see("1.0")
         else:
             self.log_text.see(tk.END)
 

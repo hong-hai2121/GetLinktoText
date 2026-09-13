@@ -10,6 +10,7 @@ from docx.shared import Pt, RGBColor
 from src import browser_client
 from src import config
 from src import download
+from src import io
 from src import transcribe
 from src.notifications import play_sound
 
@@ -24,8 +25,10 @@ class GetTextService:
         self._link_counter = 0
         self.max_links_per_run = 0
         self.processed_links_file = config.PROCESSED_LINKS_FILE
+        self.failed_links_file = config.FAILED_LINKS_FILE
         self.move_processed_links = True
         self.stop_event = threading.Event()
+        self._fail_reason = None
 
     def log(self, message: str):
         self.logger(message)
@@ -51,6 +54,7 @@ class GetTextService:
         config.MODEL_NAME = model_name
         self.max_links_per_run = max(0, int(max_links_per_run))
         self.processed_links_file = config.PROCESSED_LINKS_FILE
+        self.failed_links_file = config.FAILED_LINKS_FILE
         self.move_processed_links = bool(move_processed_links)
 
     def initialize_whisper(self):
@@ -142,6 +146,21 @@ class GetTextService:
         except Exception as e:
             self.log(f"⚠️ Không thể cập nhật file link sau khi xử lý batch: {e}")
 
+    # ── Link chưa lấy được (failed_links.txt) ──────────────────────────────
+    def _mark_link_failed(self, link_key: str, reason: str):
+        try:
+            io.upsert_failed_link(self.failed_links_file, link_key, reason)
+            self.log(f"⚠️ Chưa lấy được ({reason}) — đã ghi vào tab 'Link chưa lấy': {link_key}")
+        except Exception as e:
+            self.log(f"⚠️ Không ghi được link lỗi vào {self.failed_links_file}: {e}")
+
+    def _mark_link_succeeded(self, link_key: str):
+        # Link từng lỗi nay lấy được rồi -> tự bỏ khỏi danh sách link chưa lấy
+        try:
+            io.remove_failed_links(self.failed_links_file, {link_key})
+        except Exception:
+            pass
+
     def clean_link(self, line: str, fallback_index: int | None = None):
         line = line.strip()
         match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://[^\s\"'<>]+)", line)
@@ -207,6 +226,7 @@ class GetTextService:
         title = download.get_video_title_facebook(link, browser)
         if config.CHECK_TITLE_BLACKLIST and self.check_title_blacklist(title):
             self.log(f"⛔ Bỏ qua video {video_number} do tiêu đề không phù hợp.")
+            self._fail_reason = "Tiêu đề chứa từ khóa cấm"
             return None
 
         if config.SKIP_LONG_VIDEOS:
@@ -216,12 +236,14 @@ class GetTextService:
                 self.log(
                     f"⏭️ Bo qua video {video_number}: thoi luong {duration_seconds / 60:.1f} phut > {max_minutes} phut."
                 )
+                self._fail_reason = f"Video dài {duration_seconds / 60:.1f} phút (đang bật bỏ qua video dài hơn {max_minutes} phút)"
                 return None
 
         fb_video_url = None
         if checklinktiktok == 0:
             fb_video_url = download.get_facebook_video_url(link)
             if not fb_video_url:
+                self._fail_reason = "Không lấy được URL video từ Facebook"
                 return None
 
         video_filename = f"video_{video_number}.mp4"
@@ -230,11 +252,13 @@ class GetTextService:
         if checklinktiktok == 0:
             self.log("\n🎥 ĐANG TẢI VIDEO LINK FACEBOOK")
             if not download.download_video(fb_video_url, video_path):
+                self._fail_reason = "Tải video Facebook thất bại"
                 return None
 
         if checklinktiktok == 1:
             self.log("\n🎥 ĐANG TẢI VIDEO LINK TIKTOK")
             if not download.download_videoTIKTOK(link, video_path):
+                self._fail_reason = "Tải video TikTok thất bại"
                 return None
 
         audio_filename = f"audio_{video_number}.wav"
@@ -247,15 +271,18 @@ class GetTextService:
             self.log(f"🎥 Video đã sẵn sàng: {video_path}")
         else:
             self.log(f"❌ Lỗi! Video chưa được sẵn sàng tại {video_path}")
+            self._fail_reason = "Không tìm thấy file video đã tải"
             return None, None, None
 
         if not transcribe.extract_audio(video_path, audio_path):
+            self._fail_reason = "Tách audio từ video thất bại (ffmpeg)"
             return None, None, None
 
         if os.path.exists(audio_path):
             self.log(f"🎵 Âm thanh đã lưu tại: {audio_path}")
         else:
             self.log(f"❌ Lỗi! Âm thanh chưa được lưu vào {audio_path}")
+            self._fail_reason = "Không lưu được file audio"
             return None, None, None
 
         # Lấy thời lượng audio một lần để vừa kiểm tra video dài, vừa ghi vào Word
@@ -269,6 +296,7 @@ class GetTextService:
                 self.log(
                     f"⏭️ Bo qua video {video_number}: thoi luong {duration_seconds / 60:.1f} phut > {max_minutes} phut."
                 )
+                self._fail_reason = f"Video dài {duration_seconds / 60:.1f} phút (đang bật bỏ qua video dài hơn {max_minutes} phút)"
                 return None, None, duration_seconds
 
         transcript = transcribe.transcribe_whisper(
@@ -356,6 +384,7 @@ class GetTextService:
 
     def process_video(self, index: int, link: str, doc: Document, driver, browser):
         self._check_stop_requested()
+        self._fail_reason = None
         video_number, link = self.clean_link(link, index)
         link = link.strip().strip('"').strip("'")
         video_number = video_number if video_number is not None else index
@@ -437,7 +466,8 @@ class GetTextService:
 
         links = self._read_links_file()
         links_for_run, remaining_links = self._split_links_for_current_run(links)
-        processed_count = 0
+        succeeded_lines: list[str] = []
+        failed_lines: list[str] = []
 
         if self.max_links_per_run > 0:
             self.log(
@@ -446,11 +476,20 @@ class GetTextService:
 
         for idx, raw_line in enumerate(links_for_run, start=1):
             self._check_stop_requested()
-            video_number, _ = self.clean_link(raw_line)
+            video_number, link_key = self.clean_link(raw_line)
+            link_key = link_key.strip().strip('"').strip("'")
             self.log(f"🔄 Đang xử lý video {idx}/{len(links_for_run)} (ID={video_number})...")
 
             active_driver = driver if need_gpt else None
-            transcript_file = self.process_video(idx, raw_line, doc, active_driver, active_driver)
+            try:
+                transcript_file = self.process_video(idx, raw_line, doc, active_driver, active_driver)
+            except StopRequestedError:
+                raise
+            except Exception as e:
+                # Một link hỏng không làm đổ cả đợt chạy — ghi vào danh sách lỗi rồi đi tiếp
+                self.log(f"❌ Lỗi khi xử lý {link_key}: {e}")
+                self._fail_reason = f"Lỗi: {e}"
+                transcript_file = None
             self._check_stop_requested()
 
             if (
@@ -476,7 +515,8 @@ class GetTextService:
                             self.log(f"🗑️ Đã xóa file transcript: {transcript_file}")
                         except Exception as e:
                             self.log(f"⚠️ Không thể xóa transcript: {e}")
-                        processed_count += 1
+                        succeeded_lines.append(raw_line)
+                        self._mark_link_succeeded(link_key)
                         continue
 
                     self.log(f"\n📝 Đang xử lý GPT cho video {idx}...")
@@ -503,7 +543,8 @@ class GetTextService:
                         except Exception as e:
                             self.log(f"⚠️ Không thể xóa transcript: {e}")
                         self.log(f"✅ Video {idx}: Chế độ Tiêu đề - đã xong sau Yêu cầu 1.")
-                        processed_count += 1
+                        succeeded_lines.append(raw_line)
+                        self._mark_link_succeeded(link_key)
                         continue
 
                     self.log(f"\n📝 Yêu cầu 2: Viết mô tả video {idx} và hashtag...")
@@ -547,11 +588,15 @@ class GetTextService:
                         config.torch.cuda.empty_cache()
 
             if transcript_file is not None:
-                processed_count += 1
+                succeeded_lines.append(raw_line)
+                self._mark_link_succeeded(link_key)
+            else:
+                failed_lines.append(raw_line)
+                self._mark_link_failed(link_key, self._fail_reason or "Không lấy được nội dung")
 
-        processed_links = links_for_run[:processed_count]
-        remaining_after_run = links_for_run[processed_count:] + remaining_links
-        self._finalize_link_batch(processed_links, remaining_after_run)
+        # Link lỗi đã nằm trong failed_links.txt (lấy lại từ tab 'Link chưa lấy'),
+        # nên không giữ lại trong danh sách chờ — tránh batch sau vấp lại đúng link hỏng.
+        self._finalize_link_batch(succeeded_lines, remaining_links)
 
         self.log("\n🧹 Giải phóng bộ nhớ...")
 
@@ -569,4 +614,8 @@ class GetTextService:
 
         self.log("✅ Bộ nhớ đã được giải phóng.")
         self.log("🎉 Hoàn thành tất cả video! Kết quả đã lưu vào final_result.docx")
+        if failed_lines:
+            self.log(
+                f"⚠️ Có {len(failed_lines)} link chưa lấy được nội dung — mở tab '⛔ Link chưa lấy' để xem lý do và đưa về danh sách chạy lại."
+            )
         play_sound("success")
