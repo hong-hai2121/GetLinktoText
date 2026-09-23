@@ -147,6 +147,19 @@ class GetTextService:
             self.log(f"⚠️ Không thể cập nhật file link sau khi xử lý batch: {e}")
 
     # ── Link chưa lấy được (failed_links.txt) ──────────────────────────────
+    def reset_failed_links(self):
+        """Xóa danh sách link lỗi cũ để tab 'Link chưa lấy' chỉ hiện lỗi của lần chạy này."""
+        try:
+            cu = io.read_failed_lines(self.failed_links_file)
+            if not cu:
+                return 0
+            io.write_failed_lines(self.failed_links_file, [])
+            self.log(f"🧹 Đã xóa {len(cu)} link chưa lấy của lần chạy trước.")
+            return len(cu)
+        except Exception as e:
+            self.log(f"⚠️ Không xóa được danh sách link chưa lấy cũ: {e}")
+            return 0
+
     def _mark_link_failed(self, link_key: str, reason: str):
         try:
             io.upsert_failed_link(self.failed_links_file, link_key, reason)
@@ -441,6 +454,9 @@ class GetTextService:
 
     def process_videos(self):
         self._check_stop_requested()
+        # Mỗi đợt chạy chỉ theo dõi link lỗi của chính nó (GUI đã xóa trước khi
+        # bấm 'Bắt đầu'; gọi lại ở đây để các lối chạy khác cũng sạch danh sách cũ).
+        self.reset_failed_links()
         doc = Document()
         doc.save(config.OUTPUT_WORD_FILE)
 

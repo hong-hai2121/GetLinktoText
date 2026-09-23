@@ -480,7 +480,8 @@ class GetTextApp:
         )
         ttk.Label(
             failed_toolbar,
-            text="Link không lấy được nội dung tự ghi vào đây kèm lý do (sau dấu #). "
+            text="Link không lấy được nội dung tự ghi vào đây kèm lý do (sau dấu #) — chỉ của lần chạy hiện tại, "
+            "mỗi lần bấm 'Bắt đầu' danh sách cũ sẽ bị xóa. "
             "Xóa bớt dòng không cần rồi bấm 'Thêm' / 'Thay thế' để đưa về tab Danh sách link và chạy lại.",
             style="Muted.TLabel",
             wraplength=400,
@@ -718,6 +719,13 @@ class GetTextApp:
             self.nb.select(1)
         except Exception:
             pass
+
+    def _reset_failed_links_for_run(self):
+        """Bấm 'Bắt đầu' -> xóa luôn danh sách lỗi cũ, tab chỉ hiện lỗi của lần chạy này."""
+        self.service.reset_failed_links()
+        self.failed_text.config(state="normal")
+        self.failed_text.delete("1.0", tk.END)
+        self.update_failed_count()
 
     def clear_failed_links(self):
         if not self._current_failed_links():
@@ -1019,6 +1027,7 @@ class GetTextApp:
             pass
 
         self.service.clear_stop_request()
+        self._reset_failed_links_for_run()
         self.set_running_state(True)
         self.worker_thread = threading.Thread(target=self.run_pipeline_thread, daemon=True)
         self.worker_thread.start()
