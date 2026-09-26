@@ -132,7 +132,7 @@ def compute_extra_stats(db_path: Path | str, game_type: str) -> dict | None:
 
 
 def compute_track(db_path: Path | str, game_type: str) -> dict | None:
-    """Bảng xếp hạng 5 giải thuật trên KẾT QUẢ THẬT đã tích luỹ trong DB.
+    """Bảng xếp hạng 7 giải thuật trên KẾT QUẢ THẬT đã tích luỹ trong DB.
 
     Bộ số được crawl.py chốt trước mỗi lần cập nhật lịch sử (bảng
     prediction_batches / prediction_sets), rồi chấm điểm khi kỳ mới về. Ở đây chỉ
@@ -552,6 +552,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <option value="pairs">Theo cặp hay đi cùng</option>
           <option value="payout">Tránh số đông</option>
           <option value="spread">Phủ rộng (ít chồng lấn nhất)</option>
+          <option value="cover">Phủ kín số (vé rời nhau)</option>
         </select>
       </label>
       <label>Số bộ<input id="sugCount" type="text" inputmode="numeric" value="5"
@@ -831,8 +832,8 @@ function popTournament(gen){
 // là mức CHỒNG LẤN giữa các vé: hai vé chung 5 số thì gần như luôn cùng trúng hoặc
 // cùng trượt, tức tiền mua vé thứ hai bị phí. Đo bằng số bộ-3 KHÁC NHAU mà cả bội
 // số phủ được — mỗi vé có C(6,3)=20 bộ-3, nên k vé phủ tối đa 20k.
-// ĐỒNG BỘ: giống coverage3/gen_spread trong predict_track.py.
-const SPREAD_TRIES = 40;
+// ĐỒNG BỘ: giống coverage3/gen_spread/gen_cover trong predict_track.py.
+const SPREAD_TRIES = 40, COVER_TRIES = 40;
 function tripleKeys(s, n){                     // s: 6 số đã sắp tăng dần
   const out=[];
   for(let i=0;i<4;i++) for(let j=i+1;j<5;j++) for(let m=j+1;m<6;m++)
@@ -849,6 +850,11 @@ function coverage3(sets, n){
 // quá con số đó thì trần thật là C(n,3). Mega 6/45 với 1000 vé: C(45,3)=14.190 <
 // 20.000 — lấy 20k làm mẫu số sẽ khiến MỌI chế độ trông tệ đi một cách giả tạo.
 function coverageCap(k, n){ return Math.min(20*k, n*(n-1)*(n-2)/6); }
+// Xác suất CẢ bội số trượt sạch (không trúng nổi 1 số) khi phủ được `cov` số khác
+// nhau trên dải 1..n: C(n-cov, 6)/C(n, 6). Đây là thứ chế độ "Phủ kín số" tối thiểu hoá.
+function C6(m){ if(m<6) return 0;
+  let r=1; for(let i=0;i<6;i++) r=r*(m-i)/(i+1); return r; }
+function missPct(n, cov){ return C6(n-cov)/C6(n)*100; }
 function pickRandom(pool, k){                  // Fisher–Yates một phần
   const a=pool.slice();
   for(let i=0;i<k && i<a.length;i++){
@@ -870,6 +876,45 @@ function makeSpread(n, pool, locked){
       if(nw===20) break;                       // đã phủ toàn bộ-3 mới, khỏi thử tiếp
     }
     if(best) for(const k of tripleKeys(best,n)) covered.add(k);
+    return best;
+  };
+}
+// Chế độ "Phủ kín số": vé sau KHÔNG dùng lại số của vé trước cho tới khi hết dải.
+// "Phủ rộng" tối ưu bộ-3 — đúng cho bội số lớn. Nhưng mua 5–20 vé thì thứ quyết
+// định là bội số phủ được bao nhiêu SỐ khác nhau: xác suất cả bội số trượt sạch
+// (không trúng nổi 1 số) = C(n − số đã phủ, 6)/C(n, 6). Power 6/55 mua 5 vé: phủ
+// 30 số -> 0,61%; bốc tự do chỉ phủ ~24 số -> 2,54%. Đủ ceil(n/6) vé (10 vé Power,
+// 8 vé Mega) là phủ trọn dải -> CHẮC CHẮN trúng ít nhất 1 số.
+// `remaining` sống suốt bội số -> mỗi lần tạo bội số phải gọi makeCover mới.
+// ĐỒNG BỘ: giống gen_cover trong predict_track.py.
+function makeCover(n, pool, locked){
+  const covered=new Set(), need=Math.max(0, 6-locked.length);
+  let remaining=[];
+  return function(){
+    if(pool.length < need) return null;
+    let forced=[];
+    if(remaining.length < need){
+      forced = remaining;                      // số lẻ cuối lượt -> ghép vào vé này
+      const f=new Set(forced);
+      remaining = pool.filter(x=>!f.has(x));
+      for(let i=remaining.length-1;i>0;i--){   // Fisher–Yates
+        const j=Math.random()*(i+1)|0, t=remaining[i];
+        remaining[i]=remaining[j]; remaining[j]=t; }
+    }
+    const take = need - forced.length;
+    let best=null, bestPick=null, bestNew=-1;
+    for(let t=0;t<COVER_TRIES;t++){
+      const pick=pickRandom(remaining, take);
+      const c=locked.concat(forced, pick).sort((a,b)=>a-b);
+      if(c.length<6) return null;
+      let nw=0; for(const k of tripleKeys(c,n)) if(!covered.has(k)) nw++;
+      if(nw>bestNew){ best=c; bestPick=pick; bestNew=nw; }
+      if(nw===20) break;                       // đã phủ toàn bộ-3 mới, khỏi thử tiếp
+    }
+    if(!best) return null;
+    for(const k of tripleKeys(best,n)) covered.add(k);
+    const used=new Set(bestPick);
+    remaining = remaining.filter(x=>!used.has(x));
     return best;
   };
 }
@@ -958,7 +1003,11 @@ function sugEngine(){
   const spreadPool = (()=>{ const p=[];
     for(let x=1;x<=n;x++) if(!exclSet.has(x) && !locked.includes(x)) p.push(x);
     return p; })();
+  // Hai chế độ tối ưu ở mức BỘI SỐ: vé sau phụ thuộc các vé trước nên generator có
+  // trạng thái, và KHÔNG được lọc/xếp lại thứ tự ở các bước sau.
+  const greedy = mode==='spread' || mode==='cover';
   const rawGen = mode==='spread' ? makeSpread(n, spreadPool, locked)
+               : mode==='cover'  ? makeCover(n, spreadPool, locked)
                : mode==='pairs'  ? genPair : sampleWeighted;
   // payout: bốc ở mức BỘ (giữ bộ ít người đánh nhất) + loại thẳng dạng đụng hàng nặng.
   const gen = mode==='payout' ? (()=>popTournament(rawGen)) : rawGen;
@@ -966,13 +1015,13 @@ function sugEngine(){
   // "Phủ rộng" cố tình BỎ ràng buộc điển hình: ràng buộc thu hẹp không gian bốc nên
   // bóp chính độ phủ mà chế độ này đang tối ưu, trong khi KHÔNG nâng kỳ vọng trúng
   // của từng vé (luôn là 36/n dù chọn bộ nào).
-  const typical = mode==='spread' ? (()=>true) : passes;
+  const typical = greedy ? (()=>true) : passes;
 
   // Bội số: ngân sách phải co giãn theo count, nếu không xin 1000 bộ sẽ chỉ ra vài chục.
   const bulk = count > 20;
   // spread lấy đúng count bộ: sinh dư rồi cắt theo điểm sẽ vứt mất chính các vé
   // được chọn để lấp chỗ trống, làm hỏng độ phủ.
-  const poolTarget = mode==='spread' ? count : (bulk ? Math.ceil(count*1.4) : count*10);
+  const poolTarget = greedy ? count : (bulk ? Math.ceil(count*1.4) : count*10);
   const tries1 = Math.max(9000, count*40), tries2 = Math.max(4000, count*20);
   // Chống "cày không ra": chế độ pairs bốc tham lam nên số bộ DUY NHẤT có hạn
   // (~1.6k với 6/55); hết bộ mới thì thoát sớm thay vì quay vòng vô ích.
@@ -994,7 +1043,7 @@ function sugEngine(){
       seen.add(key); pool.push(score(s)); stall=0;
     }
   }
-  if(mode!=='spread') pool.sort((a,b)=>b.score-a.score);
+  if(!greedy) pool.sort((a,b)=>b.score-a.score);
   let out;
   if(bulk){
     // Với bội số, ràng buộc "khác nhau ≥2 số" là O(n²) và gần như bất khả thi —
@@ -1010,7 +1059,8 @@ function sugEngine(){
 }
 
 const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên số gan',
-  pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông',spread:'Phủ rộng'};
+  pairs:'Theo cặp hay đi cùng',payout:'Tránh số đông',spread:'Phủ rộng',
+  cover:'Phủ kín số'};
 
 // Chế độ mặc định TỰ CHỌN theo số liệu thật: lấy chế độ đứng đầu bảng xếp hạng
 // DB (tr.methods đã xếp theo ĐỘ PHỦ — thứ duy nhất quyết định cơ hội có vé
@@ -1018,7 +1068,14 @@ const MODE_NAME = {balanced:'Cân đối',hot:'Thiên số nóng',gan:'Thiên s�
 // nhiễu quanh ngẫu nhiên và hiện đang "thưởng" nhầm chế độ chồng lấn nặng nhất.
 // Người dùng tự đổi tay thì tôn trọng lựa chọn đó (sugModeTouched).
 let sugModeTouched = false;
+// Ngoại lệ "Phủ kín số": bảng DB đo độ phủ bộ-3 ở 1000 vé/kỳ, cỡ mà nó kém "Phủ
+// rộng" ~0,7 điểm. Nhưng dưới ~100 vé — cỡ người ta mua thật — hai chế độ ngang
+// nhau về bộ-3, còn số KHÁC NHAU phủ được thì "Phủ kín số" hơn hẳn (5 vé: 30 số
+// so với ~24), tức khả năng cả bội số trượt sạch thấp hơn 4 lần. Nên ở cỡ nhỏ
+// chọn nó, cỡ lớn mới theo bảng.
+const COVER_MAX_SETS = 100;
 function bestTrackMode(){
+  if(sugInputs().count <= COVER_MAX_SETS) return 'cover';
   const tr = DATA[current].track;
   if(!tr || !tr.methods) return null;
   const lead = tr.methods.filter(m=>m.sets && m.cov_rate);
@@ -1075,7 +1132,19 @@ function renderSuggest(){
         'phần lớn số tiền này không mở thêm cơ hội trúng. Chế độ <b>Phủ rộng</b> đạt ~84% '+
         'với cùng số vé.</span>' : '');
   }else{
-    wrap.style.display='none'; ta.value=''; stat.innerHTML='';
+    // Bội số nhỏ (≤20 vé) là cỡ người ta mua thật: ở đây thứ quyết định KHÔNG phải
+    // độ phủ bộ-3 (vé nào cũng dư sức phủ hết) mà là số KHÁC NHAU phủ được — nó ra
+    // thẳng khả năng cả bội số không trúng nổi 1 số.
+    wrap.style.display='none'; ta.value='';
+    const nums = new Set(); res.out.forEach(c=>c.set.forEach(x=>nums.add(x)));
+    const miss = missPct(ex.n, nums.size);
+    const best = missPct(ex.n, Math.min(6*res.out.length, ex.n));
+    stat.innerHTML = '<b>'+res.out.length+'</b> vé · phủ <b>'+nums.size+'/'+ex.n+'</b> số khác nhau'+
+      ' · khả năng cả bội số <b>không trúng nổi 1 số</b>: <b'+(miss<=best*1.2?' style="color:var(--good)"':'')+
+      '>'+(miss<0.001?'0':miss.toFixed(2)+'%')+'</b>'+
+      (miss>best*1.2 ? ' (tốt nhất có thể với '+res.out.length+' vé là '+
+        (best<0.001?'0':best.toFixed(2)+'%')+' — chế độ <b>Phủ kín số</b>)' : '')+
+      ' · tổng tiền <b>'+(res.out.length*10000).toLocaleString('vi')+'đ</b>';
   }
 
   document.getElementById('sugMsg').textContent = res.relaxed
@@ -1086,11 +1155,17 @@ function renderSuggest(){
   if(autoEl){
     const bm = bestTrackMode();
     autoEl.innerHTML = (!sugModeTouched && bm && res.mode===bm)
-      ? 'Tự chọn <b>'+MODE_NAME[bm]+'</b> theo số liệu thật: đứng đầu về <b>độ phủ</b> '+
-        'trong mục "Giải thuật nào đang trúng nhiều nhất?" bên dưới — cùng số vé, bội số '+
-        'ít chồng lấn nhất nên cơ hội có vé trúng ≥4 số cao nhất khi mua nhiều vé cùng kỳ. '+
-        '(Tỉ lệ ≥4 tính trên TỪNG vé thì chế độ nào cũng như nhau — chênh lệch là nhiễu.) '+
-        'Bạn đổi chế độ tay thì trang giữ lựa chọn đó.'
+      ? (bm==='cover'
+        ? 'Tự chọn <b>Phủ kín số</b> vì bạn đang lấy '+res.asked+' bộ (≤'+COVER_MAX_SETS+'): '+
+          'ở cỡ này các vé rời nhau được, nên bội số phủ nhiều <b>số khác nhau</b> nhất — '+
+          'khả năng cả bội số không trúng nổi 1 số thấp nhất. Lấy trên '+COVER_MAX_SETS+
+          ' bộ thì trang tự chuyển sang chế độ đứng đầu bảng xếp hạng bên dưới. '+
+          'Bạn đổi chế độ tay thì trang giữ lựa chọn đó.'
+        : 'Tự chọn <b>'+MODE_NAME[bm]+'</b> theo số liệu thật: đứng đầu về <b>độ phủ</b> '+
+          'trong mục "Giải thuật nào đang trúng nhiều nhất?" bên dưới — cùng số vé, bội số '+
+          'ít chồng lấn nhất nên cơ hội có vé trúng ≥4 số cao nhất khi mua nhiều vé cùng kỳ. '+
+          '(Tỉ lệ ≥4 tính trên TỪNG vé thì chế độ nào cũng như nhau — chênh lệch là nhiễu.) '+
+          'Bạn đổi chế độ tay thì trang giữ lựa chọn đó.')
       : '';
   }
 
@@ -1098,7 +1173,7 @@ function renderSuggest(){
     '<div class="notet">Cách chấm điểm &amp; chế độ</div>'+
     '<b>Điểm điển hình</b> = mức bộ số khớp với thói quen lịch sử ở 5 mặt: '+
     'tổng, chẵn/lẻ, thấp/cao, số liên tiếp, số lặp kỳ trước (100 = giống nhất).'+
-    (res.mode==='spread'
+    (res.mode==='spread' || res.mode==='cover'
       ? '<div style="margin-top:6px">Chế độ này <b>không áp</b> ràng buộc điển hình — '+
         'xem giải thích bên dưới.</div>'
       : '<div style="margin-top:6px">Bộ còn phải qua ràng buộc: tổng trong '+
@@ -1117,8 +1192,20 @@ function renderSuggest(){
       spread:'mỗi lần bốc '+SPREAD_TRIES+' bộ ứng viên, giữ bộ phủ được nhiều <b>bộ-3 mới</b> '+
              'nhất so với các vé đã chọn. <b>Độ phủ ~84%</b> — cao nhất trong các chế độ. '+
              'Cố tình BỎ ràng buộc điển hình vì ràng buộc đó thu hẹp không gian bốc, '+
-             'làm giảm độ phủ mà không nâng kỳ vọng trúng của từng vé.'
+             'làm giảm độ phủ mà không nâng kỳ vọng trúng của từng vé.',
+      cover:'vé sau <b>không dùng lại số</b> của vé trước cho tới khi hết dải 1–'+ex.n+'. '+
+            'Mua '+Math.ceil(ex.n/6)+' vé là phủ trọn dải — <b>chắc chắn trúng ít nhất 1 số</b>, '+
+            'không còn là may rủi. Đây là chế độ nên dùng khi mua <b>5–20 vé</b>; '+
+            'trên 100 vé thì "Phủ rộng" nhỉnh hơn chút về bộ-3.'
     }[res.mode])+'</div>'+
+    (res.mode==='cover'
+      ? (()=>{ const rnd=Math.round(ex.n*(1-Math.pow(1-6/ex.n,5)));
+          return '<div style="margin-top:6px"><b>Con số cụ thể (dải 1–'+ex.n+'):</b> mua 5 vé '+
+            'rời nhau phủ 30 số → khả năng cả bội số không trúng nổi 1 số chỉ <b>'+
+            missPct(ex.n,30).toFixed(2)+'%</b>; bốc tự do chỉ phủ ~'+rnd+' số → '+
+            missPct(ex.n,rnd).toFixed(2)+'%. Từ '+Math.ceil(ex.n/6)+' vé trở lên tỉ lệ đó về '+
+            '<b>0</b>. Nó KHÔNG làm từng vé dễ trúng hơn — chỉ không để tiền vé sau mua lại '+
+            'thứ vé trước đã có.</div>'; })() : '')+
     (res.mode==='spread'
       ? '<div style="margin-top:6px"><b>Vì sao chế độ này khác hẳn:</b> nó KHÔNG cố đoán số. '+
         'Xác suất của từng vé vẫn y hệt các chế độ khác. Nó chỉ giảm mức <b>chồng lấn</b> '+
@@ -1134,9 +1221,10 @@ function renderSuggest(){
     'trúng hơn — chỉ giảm khả năng phải chia giải với người khác khi đã trúng.</span>';
 }
 
-// --- So sánh 5 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
-const BT_MODES = [['spread','Phủ rộng'],['balanced','Cân đối'],['hot','Thiên số nóng'],
-  ['gan','Thiên số gan'],['pairs','Theo cặp hay đi cùng'],['payout','Tránh số đông']];
+// --- So sánh 7 giải thuật với 1 kết quả (mỗi lần Chạy tạo mới 1000 bộ/giải thuật) ---
+const BT_MODES = [['cover','Phủ kín số'],['spread','Phủ rộng'],['balanced','Cân đối'],
+  ['hot','Thiên số nóng'],['gan','Thiên số gan'],['pairs','Theo cặp hay đi cùng'],
+  ['payout','Tránh số đông']];
 
 function btBuildGen(){
   const g = DATA[current], ex = g.extra, n = ex.n;
@@ -1193,12 +1281,12 @@ function btBuildGen(){
     }
     return mode==='pairs' ? genPair() : sampleWeighted(W[mode]);
   };
-  // "Phủ rộng" phải nhớ các bộ-3 đã phủ trong SUỐT bội số, nên không dùng chung
-  // `gen` không trạng thái được — mỗi lần tạo bội số gọi makeGen('spread') một lần
-  // rồi gọi hàm trả về cho từng vé.
+  // "Phủ rộng"/"Phủ kín số" phải nhớ các bộ-3 đã phủ (và các số đã dùng) trong SUỐT
+  // bội số, nên không dùng chung `gen` không trạng thái được — mỗi lần tạo bội số gọi
+  // makeGen(mode) một lần rồi gọi hàm trả về cho từng vé.
   const pool = (()=>{ const p=[]; for(let x=1;x<=n;x++) p.push(x); return p; })();
-  const makeGen = mode => mode==='spread'
-    ? makeSpread(n, pool, [])
+  const makeGen = mode => mode==='spread' ? makeSpread(n, pool, [])
+    : mode==='cover' ? makeCover(n, pool, [])
     : (()=>gen(mode));
   return {n, gen, makeGen};
 }
@@ -1479,7 +1567,7 @@ function renderTrack(){
     '</div>';
   });
 
-  // Phân bố số trùng 0..6: so 5 chế độ với nhau VÀ với tỉ lệ lý thuyết. Đây là
+  // Phân bố số trùng 0..6: so 7 chế độ với nhau VÀ với tỉ lệ lý thuyết. Đây là
   // bảng trả lời thẳng "có chế độ nào lệch khỏi ngẫu nhiên không".
   let distTbl='';
   if(withData.length && withData[0].dist){
@@ -1680,7 +1768,15 @@ DATA.forEach((g,i)=>{
 });
 document.getElementById('genBtn').onclick = renderSuggest;
 document.getElementById('sugMode').onchange = ()=>{ sugModeTouched = true; renderSuggest(); };
-document.getElementById('sugCount').onchange = renderSuggest;
+// Đổi số bộ có thể đổi cả chế độ nên dùng (xem bestTrackMode) — nhưng chỉ khi user
+// chưa tự chọn chế độ; đã chọn tay thì tôn trọng.
+document.getElementById('sugCount').onchange = ()=>{
+  if(!sugModeTouched){
+    const bm = bestTrackMode();
+    if(bm) document.getElementById('sugMode').value = bm;
+  }
+  renderSuggest();
+};
 document.getElementById('simRun').onclick = startSim;
 document.getElementById('simStop').onclick = ()=>{ finishSim(false); };
 document.getElementById('btGen').onclick = btGenerate;

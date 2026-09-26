@@ -69,10 +69,11 @@ Local HTML mode parses that file only. To follow `NextPage(n)` automatically,
 run from the full Vietlott web URL so the crawler can read the Ajax key from the
 page.
 
-## Backtest 6 giai thuat tren ket qua that
+## Backtest 7 giai thuat tren ket qua that
 
 Moi lan chay `crawl.py`, truoc khi cao ve, chuong trinh tu chot 1000 bo so cho
-moi giai thuat (`balanced` / `hot` / `gan` / `pairs` / `payout` / `spread`) dua tren
+moi giai thuat (`balanced` / `hot` / `gan` / `pairs` / `payout` / `spread` /
+`cover`) dua tren
 lich su hien co, luu vao `prediction_batches` + `prediction_sets`. Cao xong, ky moi
 da nam trong DB thi cac bo do duoc cham diem ngay.
 
@@ -80,7 +81,7 @@ Vi bo so duoc chot TRUOC khi ky moi ve nen khong the "nhin truoc ket qua" —
 diem cham tich luy qua nhieu ky cho biet giai thuat nao dang trung nhieu nhat.
 
 ```text
-Du doan: power655: da chot batch #7 (1000 bo x 6 che do) sau ky 01372
+Du doan: power655: da chot batch #7 (1000 bo x 7 che do) sau ky 01372
 ... (cao) ...
 Da cham diem 1 ky du doan (con 0 ky dang cho ket qua).
 ```
@@ -135,6 +136,31 @@ nghia khi mua NHIEU ve trong cung mot ky.
 Che do nay **co tinh BO rang buoc "dien hinh"** (`passes()`): rang buoc do thu hep
 khong gian boc nen bop chinh do phu ma no dang toi uu, trong khi khong he nang ky
 vong trung cua tung ve.
+
+**Che do `cover` ("Phu kin so")** di xa hon mot buoc: ve sau **khong dung lai so**
+cua ve truoc cho toi khi het dai 1..n, roi moi bat dau luot phu moi (so le con sot
+duoc ghep vao ve dau luot sau nen khong so nao bi bo). Trong rang buoc roi nhau do
+no van boc tham lam theo bo-3 moi nhu `spread`.
+
+Ly do: `spread` toi uu so bo-3 khac nhau — dung cho boi so LON. Nhung nguoi choi
+thuong mua 5-20 ve, va o co do thu quyet dinh la boi so phu duoc bao nhieu SO khac
+nhau, vi xac suat ca boi so truot sach (khong trung noi 1 so) = `C(n - so da phu, 6)
+/ C(n, 6)`.
+
+| Power 6/55 | 5 ve | 10 ve |
+| --- | --- | --- |
+| `cover` (ve roi nhau) | phu 30 so, truot sach **0,61%** | phu 55 so, truot sach **0** |
+| `spread` | phu 24 so, truot sach 2,54% | phu 39 so, truot sach 0,03% |
+| `gan` | phu 18 so, truot sach 8,02% | phu 32 so, truot sach 0,35% |
+
+Du `ceil(n/6)` ve (10 ve Power, 8 ve Mega) la phu tron dai -> **chac chan trung it
+nhat 1 so**, khong con la may rui. Doi lai, o 1000 ve/ky (co ma bang xep hang do)
+do phu bo-3 cua `cover` kem `spread` khoang 0,7 diem — nen trang tu chon `cover`
+khi lay <= 100 bo (`COVER_MAX_SETS` trong stats_web.py) va theo bang xep hang khi
+lay nhieu hon.
+
+Cung nhu `spread`, `cover` **co tinh BO rang buoc "dien hinh"**. No KHONG lam tung
+ve de trung hon — chi khong de tien ve sau mua lai thu ve truoc da co.
 
 **Tran do phu = `min(20 x so ve, C(n,3))`, KHONG phai `20 x so ve`.** Ca tro choi chi
 co C(n,3) bo-3; Mega 6/45 co C(45,3) = 14.190 < 20.000 nen 1000 ve khong the vuot

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 """
-Backtest thực cho 6 chế độ "Bộ số gợi ý": mỗi chế độ tạo 1000 vé (bộ 6 số),
+Backtest thực cho 7 chế độ "Bộ số gợi ý": mỗi chế độ tạo 1000 vé (bộ 6 số),
 LƯU lại kèm kỳ gốc, rồi khi kỳ tiếp theo có kết quả thật (crawl về DB) sẽ TỰ CHẤM
 xem chế độ nào trùng nhiều số hơn — tích luỹ qua nhiều kỳ thành bảng xếp hạng.
 
 Quy trình:
-  1. Trước mỗi kỳ:   python predict_track.py generate            (lưu 6×1000 bộ vào DB)
+  1. Trước mỗi kỳ:   python predict_track.py generate            (lưu 7×1000 bộ vào DB)
   2. Sau khi có KQ:  python predict_track.py evaluate            (tự chấm các kỳ đang chờ)
   3. Xem bảng:       python predict_track.py board               (in bảng xếp hạng)
      (stats_web.py cũng tự gọi evaluate + hiện bảng ngay trên trang)
@@ -35,8 +35,8 @@ from pathlib import Path
 import gap_stats
 from crawl import DB_PATH, ensure_dirs
 
-# 6 chế độ đúng như dropdown "Bộ số gợi ý" trong stats_web.py.
-METHODS = ["balanced", "hot", "gan", "pairs", "payout", "spread"]
+# 7 chế độ đúng như dropdown "Bộ số gợi ý" trong stats_web.py.
+METHODS = ["balanced", "hot", "gan", "pairs", "payout", "spread", "cover"]
 MODE_NAME = {
     "balanced": "Cân đối",
     "hot": "Thiên số nóng",
@@ -44,12 +44,16 @@ MODE_NAME = {
     "pairs": "Theo cặp hay đi cùng",
     "payout": "Tránh số đông",
     "spread": "Phủ rộng",
+    "cover": "Phủ kín số",
 }
 DEFAULT_SETS = 1000
 
 # Chế độ "Phủ rộng": mỗi lần bốc SPREAD_TRIES bộ ứng viên, giữ bộ phủ được NHIỀU
 # bộ-3 MỚI nhất so với các vé đã chọn. Xem giải thích ở coverage3()/gen_spread().
 SPREAD_TRIES = 40
+# Chế độ "Phủ kín số": cũng bốc COVER_TRIES ứng viên/vé như trên, nhưng chỉ được
+# bốc trong các số CHƯA dùng ở lượt phủ hiện tại. Xem gen_cover().
+COVER_TRIES = 40
 
 
 # --------------------------------------------------------------------------- #
@@ -532,6 +536,58 @@ def gen_spread(prof: dict, k: int) -> list[list[int]]:
     return out
 
 
+def gen_cover(prof: dict, k: int) -> list[list[int]]:
+    """k vé RỜI NHAU: vé sau không dùng lại số của vé trước cho tới khi hết dải.
+
+    "Phủ rộng" tối ưu số bộ-3 khác nhau — chỉ số đúng cho bội số LỚN. Nhưng người
+    chơi thường mua 5–20 vé, và ở cỡ đó thứ quyết định là bội số phủ được bao nhiêu
+    SỐ khác nhau: xác suất cả bội số trượt sạch (không trúng nổi 1 số) là
+    C(n - số đã phủ, 6) / C(n, 6). Power 6/55 với 5 vé: phủ 30 số -> 0,61%, trong
+    khi bốc tự do chỉ phủ ~24 số -> 2,54% (tệ gấp 4 lần). Đủ ceil(n/6) vé
+    (10 vé Power, 8 vé Mega) là phủ trọn dải -> CHẮC CHẮN trúng ít nhất 1 số.
+
+    Hết dải thì bắt đầu lượt phủ mới; số lẻ còn sót được ghép vào vé đầu lượt sau
+    nên không số nào bị bỏ. Trong ràng buộc rời nhau đó vẫn bốc tham lam theo bộ-3
+    mới như gen_spread, nên ở 1000 vé độ phủ bộ-3 chỉ kém "Phủ rộng" ~1 điểm.
+
+    KHÔNG áp `passes` — cùng lý do như gen_spread.
+    """
+    n = prof["n"]
+    remaining: list[int] = []          # số chưa dùng trong lượt phủ hiện tại
+    covered: set[tuple[int, ...]] = set()
+    seen: set[tuple[int, ...]] = set()
+    out: list[list[int]] = []
+    for _ in range(k):
+        forced: list[int] = []
+        if len(remaining) < 6:
+            forced = remaining         # số lẻ cuối lượt -> ghép vào vé này
+            remaining = [x for x in range(1, n + 1) if x not in forced]
+            random.shuffle(remaining)
+        need = 6 - len(forced)
+        best: tuple[int, ...] | None = None
+        best_pick: list[int] = []
+        best_new = -1
+        for _ in range(COVER_TRIES):
+            pick = random.sample(remaining, need)
+            cand = tuple(sorted(forced + pick))
+            if cand in seen:
+                continue
+            new = sum(1 for c in combinations(cand, 3) if c not in covered)
+            if new > best_new:
+                best, best_pick, best_new = cand, pick, new
+            if new == 20:              # đã phủ toàn bộ-3 mới, khỏi thử tiếp
+                break
+        if best is None:               # cực hiếm: mọi ứng viên đều trùng vé đã có
+            best_pick = random.sample(remaining, need)
+            best = tuple(sorted(forced + best_pick))
+        seen.add(best)
+        covered.update(combinations(best, 3))
+        used = set(best_pick)
+        remaining = [x for x in remaining if x not in used]
+        out.append(list(best))
+    return out
+
+
 def passes(s: list[int], prof: dict) -> bool:
     ssum = sum(s)
     if ssum < prof["p10"] or ssum > prof["p90"]:
@@ -556,6 +612,8 @@ def generate_sets(method: str, prof: dict, k: int) -> list[list[int]]:
     """k bộ theo chế độ: ưu tiên qua ràng buộc 'điển hình' + không trùng, nới dần nếu bí."""
     if method == "spread":
         return gen_spread(prof, k)
+    if method == "cover":
+        return gen_cover(prof, k)
     gen = _make_generator(method, prof)
     out: list[list[int]] = []
     seen: set[tuple[int, ...]] = set()
@@ -1065,7 +1123,7 @@ def load_scoreboard(db_path: Path | str, game_type: str) -> dict | None:
                 "sd": round(sd, 4),
                 "t": round(t, 2),
                 "periods": len(vals),
-                # ngưỡng 2.58 (p<0.01) thay vì 1.96: đang so 5 chế độ cùng lúc nên
+                # ngưỡng 2.58 (p<0.01) thay vì 1.96: đang so 7 chế độ cùng lúc nên
                 # phải chặt hơn, không thì cứ 20 lần thử là có 1 cái "trúng" do may.
                 "beats_random": abs(t) > 2.58,
             }
@@ -1162,7 +1220,7 @@ def _print_board(db_path: Path | str, game_type: str) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Backtest 6 chế độ gợi ý số Vietlott (tạo/chấm/xếp hạng)."
+        description="Backtest 7 chế độ gợi ý số Vietlott (tạo/chấm/xếp hạng)."
     )
     p.add_argument("--db", default=str(DB_PATH), help="Đường dẫn SQLite.")
     sub = p.add_subparsers(dest="cmd", required=True)
