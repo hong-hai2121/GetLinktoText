@@ -1,6 +1,7 @@
 import gc
 import os
 import re
+import sys
 import threading
 from typing import Callable
 
@@ -58,12 +59,18 @@ class GetTextService:
         self.move_processed_links = bool(move_processed_links)
 
     def initialize_whisper(self):
-        import torch as _torch
+        # The distributable CPU edition does not require PyTorch or CUDA.
+        _torch = None
+        if not getattr(sys, "frozen", False):
+            try:
+                import torch as _torch
+            except ImportError:
+                pass
         from faster_whisper import WhisperModel as _WhisperModel
 
         config.torch = _torch
         config.WhisperModel = _WhisperModel
-        config.device = "cuda" if _torch.cuda.is_available() else "cpu"
+        config.device = "cuda" if _torch is not None and _torch.cuda.is_available() else "cpu"
         config.compute_type = "float16" if config.device == "cuda" else "int8"
         self.log(f"✅ Whisper sẽ chạy trên {'GPU' if config.device=='cuda' else 'CPU'} ({config.compute_type})")
 
@@ -78,7 +85,7 @@ class GetTextService:
 
             config.MODEL_NAME = selected_model
             config.model = config.WhisperModel(
-                config.MODEL_NAME,
+                config.resolve_model(config.MODEL_NAME),
                 device=config.device,
                 compute_type=config.compute_type,
                 download_root=config.WHISPER_MODEL_PATH,

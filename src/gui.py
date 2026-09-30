@@ -15,6 +15,9 @@ class GetTextApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GetTextFromLink — Trích xuất nội dung")
+        icon = os.path.join(config.RESOURCE_DIR, "GetTextFromLink.ico")
+        if os.path.isfile(icon):
+            self.root.iconbitmap(icon)
         # Cửa sổ gọn (đã bỏ header nên thấp hơn trước)
         w, h = 1260, 680
         self.root.geometry(f"{w}x{h}")

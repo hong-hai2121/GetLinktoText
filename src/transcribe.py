@@ -305,7 +305,7 @@ def transcribe_whisper(
     if config.model is None:
         print("🔄 Đang tải lại model...")
         config.model = config.WhisperModel(
-            config.MODEL_NAME,
+            config.resolve_model(config.MODEL_NAME),
             device=config.device,
             compute_type=config.compute_type,
             download_root=config.WHISPER_MODEL_PATH,
@@ -332,11 +332,12 @@ def transcribe_whisper(
                 del config.model
                 config.model = None
                 config.model2 = None
-                config.torch.cuda.empty_cache()
+                if config.device == "cuda":
+                    config.torch.cuda.empty_cache()
                 gc.collect()
                 try:
                     config.model2 = config.WhisperModel(
-                        "large-v3",
+                        config.resolve_model("large-v3"),
                         device=config.device,
                         compute_type=config.compute_type,
                         download_root=config.WHISPER_MODEL_PATH,
@@ -346,7 +347,7 @@ def transcribe_whisper(
                     print(f"❌ Lỗi khi tải model large-v3: {e}")
                     print("⚠️ Quay lại model ban đầu...")
                     config.model = config.WhisperModel(
-                        config.MODEL_NAME,
+                        config.resolve_model(config.MODEL_NAME),
                         device=config.device,
                         compute_type=config.compute_type,
                         download_root=config.WHISPER_MODEL_PATH,

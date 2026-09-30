@@ -3,6 +3,7 @@ import shutil
 
 from config import (
     BASE_DIR,
+    BUNDLED_MODEL_DIR,
     COOKIES_BROWSER,
     FAILED_LINKS_FILE,
     GECKODRIVER_PATH,
@@ -11,10 +12,14 @@ from config import (
     PROCESSED_LINKS_FILE,
     OUTPUT_VIDEO_DIR,
     OUTPUT_WORD_FILE,
+    RESOURCE_DIR,
     WHISPER_MODEL_PATH,
 )
 from profiles_config import FIREFOX_PROFILE_PATH
 
+_bin_dir = os.path.join(RESOURCE_DIR, "bin")
+if os.path.isdir(_bin_dir):
+    os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
 FFMPEG_PATH = shutil.which("ffmpeg")
 FFPROBE_PATH = shutil.which("ffprobe")
 
@@ -98,5 +103,14 @@ device = "cpu"
 
 
 def ensure_directories():
+    os.makedirs(BASE_DIR, exist_ok=True)
     os.makedirs(WHISPER_MODEL_PATH, exist_ok=True)
     os.makedirs(OUTPUT_VIDEO_DIR, exist_ok=True)
+
+
+def resolve_model(model_name):
+    """Prefer the installed model; other selections can use the download cache."""
+    local_model = os.path.join(BUNDLED_MODEL_DIR, model_name)
+    if os.path.isfile(os.path.join(local_model, "model.bin")):
+        return local_model
+    return model_name

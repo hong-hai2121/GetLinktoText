@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><title>Hướng dẫn GetTextFromLink</title>
+<style>body{font:17px/1.6 'Segoe UI',sans-serif;max-width:850px;margin:40px auto;padding:0 24px;color:#17233b}code{background:#edf1fb;padding:2px 5px}h1,h2{color:#4338ca}</style>
+<h1>GetTextFromLink — Bản CPU</h1>
+<p>Dùng trên Windows 10/11 64-bit (Intel/AMD). Không cần cài Python, FFmpeg hoặc driver NVIDIA. Bộ cài đã kèm model <b>large-v3-turbo</b>.</p>
+<h2>Cài đặt và sử dụng</h2>
+<ol><li>Chạy <b>GetTextFromLink-Setup-1.0.0-CPU-x64.exe</b>, bấm Next → Install → Finish.</li>
+<li>Mở biểu tượng GetTextFromLink trên Desktop.</li>
+<li>Dán danh sách link hoặc chọn file video/âm thanh trên máy. Giữ model <b>large-v3-turbo</b> để dùng model có sẵn.</li>
+<li>Giữ tùy chọn bỏ qua GPT nếu chỉ cần lấy nội dung. Bấm bắt đầu và chờ nhận diện. CPU có thể xử lý lâu với video dài.</li>
+<li>Xem tab nội dung Word hoặc xuất kết quả từ giao diện.</li></ol>
+<h2>Dữ liệu và kết quả</h2>
+<p>Nhấn Windows + R, nhập <code>%LOCALAPPDATA%\GetTextFromLink</code> để mở thư mục dữ liệu. File kết quả mặc định là <code>final_result.docx</code>; lỗi khởi động được ghi vào <code>application.log</code>. Cũng có thể mở “Thu muc ket qua” trong Start Menu.</p>
+<p>Cài lại hoặc gỡ phần mềm sẽ giữ dữ liệu trong thư mục này. Nên có ít nhất 8 GB RAM và khoảng 6 GB đĩa trống cho cài đặt, cộng dung lượng video cần xử lý.</p>
+<h2>Internet, Firefox và model khác</h2>
+<p>Nhận diện file có sẵn bằng model mặc định không cần Internet. Tải video từ link, tải model khác và dùng ChatGPT cần Internet. Website có thể yêu cầu đăng nhập hoặc giới hạn tải video.</p>
+<p>Nếu muốn dùng ChatGPT: cài <a href="https://www.mozilla.org/firefox/">Firefox</a>, mở lại ứng dụng, mở Firefox từ ứng dụng và đăng nhập ChatGPT trong cửa sổ đó. Phần mềm sử dụng hồ sơ Firefox riêng trên máy mới. Cookie, tài khoản và dữ liệu của máy tạo bộ cài không được chuyển sang.</p>
+<p>Link cần đăng nhập Facebook hoặc website khác: đăng nhập bằng Firefox trên máy mới. Mặc định công cụ tải đọc cookie từ Firefox. Các model khác sẽ tự tải khi chọn lần đầu và cần thêm dung lượng đĩa.</p>
+</html>

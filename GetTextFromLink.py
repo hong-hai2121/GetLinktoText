@@ -1,3 +1,7 @@
+from src.runtime import prepare_runtime
+
+prepare_runtime()
+
 from config import (
     BASE_DIR,
     GECKODRIVER_PATH,
@@ -24,4 +28,20 @@ def retry(func, max_attempts=3):
 
 
 if __name__ == "__main__":
-    main()
+    import multiprocessing
+    import sys
+
+    multiprocessing.freeze_support()
+    if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
+        from src.diagnostics import run_self_test
+
+        raise SystemExit(run_self_test(sys.argv[2]))
+    try:
+        main()
+    except Exception:
+        import traceback
+        from tkinter import messagebox
+
+        traceback.print_exc()
+        messagebox.showerror("GetTextFromLink", "Không thể mở phần mềm.\n\n" + traceback.format_exc())
+        raise

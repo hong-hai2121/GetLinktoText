@@ -1,3 +1,5 @@
+import os
+import shutil
 import subprocess
 import threading
 import time
@@ -18,7 +20,14 @@ global_driver = None
 DRIVER_LOCK = threading.Lock()
 FIREFOX_INIT_EVENT = threading.Event()
 FIREFOX_INIT_IN_PROGRESS = False
-FIREFOX_CMD_PATH = r"C:\Program Files\Mozilla Firefox\firefox.exe"
+FIREFOX_CMD_PATH = os.environ.get("FIREFOX_BINARY") or shutil.which("firefox") or next(
+    (path for path in (
+        os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "Mozilla Firefox", "firefox.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "Mozilla Firefox", "firefox.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Mozilla Firefox", "firefox.exe"),
+    ) if os.path.isfile(path)),
+    None,
+)
 FIREFOX_CMD_URL = "https://chatgpt.com/"
 FIREFOX_CMD_WAIT_SECONDS = 15
 
@@ -36,6 +45,10 @@ def is_driver_alive(drv):
 def init_firefox():
     """Khởi tạo trình duyệt Firefox với Selenium và mở ChatGPT."""
     options = FirefoxOptions()
+    if not FIREFOX_CMD_PATH:
+        raise RuntimeError("Hãy cài Firefox để dùng chức năng ChatGPT, sau đó mở lại phần mềm.")
+    options.binary_location = FIREFOX_CMD_PATH
+    os.makedirs(config.FIREFOX_PROFILE_PATH, exist_ok=True)
     options.add_argument("-profile")
     options.add_argument(f"{config.FIREFOX_PROFILE_PATH}")
     service = FirefoxService(executable_path=config.GECKODRIVER_PATH)
