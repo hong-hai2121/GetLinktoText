@@ -118,3 +118,9 @@ linkgettoText.txt
 /tutorial run code/
 /tutorial run code
 ADS_facebook/fb_ads_noApi/service_account.json
+
+# Vietlott: local databases and generated reports
+/vietlot655/exports/stats.html
+/vietlot655/exports/stats_mega645.html
+/vietlot655/vietlott_data.db
+/vietlot655/vietlott_mega645_data.db
