@@ -3,6 +3,14 @@
 Thư mục **độc lập**: có sẵn `service_account.json`, không phụ thuộc `fb_ads_accounts`
 (không đọc FB token, không tra tab "TKQC API").
 
+**Service account:** `ads-392@hai-ads-check.iam.gserviceaccount.com` — thuộc Google Cloud project `hai-ads-check`
+của **gmail hmu (dr.bachhoihmu@gmail.com)**. Cùng một key với `fb_ads_accounts` và `fb_ads_tsAnhDuc`
+(file `service_account.json` đã gitignore, không commit). Service account cần có quyền Editor trên Sheet đích.
+Nếu email này đã có quyền chỉnh sửa thì chỉ cần dán link/ID Sheet vào app, không cần chia sẻ lại.
+Trong **Share / Chia sẻ**, giữ **General access / Quyền truy cập chung = Restricted / Bị hạn chế**;
+chỉ thêm email service account vào danh sách người có quyền với vai trò **Editor / Người chỉnh sửa** khi chưa có quyền.
+App đăng nhập bằng `service_account.json`, không yêu cầu bật quyền chỉnh sửa công khai và không tự mở chia sẻ công khai.
+
 ## Chạy
 
 Nhấp đúp **`run.bat`** (dùng venv `GetLinktoText\venv`), hoặc:
@@ -22,7 +30,7 @@ Cài thư viện nếu thiếu: `pip install -r requirements.txt`. App chạy se
    kết nối, ✕ để bỏ khỏi danh sách). Hoặc *Tạo mới* với tên `Báo cáo ADS tháng x`. Bấm **Kết nối**.
    - Service account **không tạo được file mới** (Google bỏ dung lượng Drive của service account,
      lỗi `403 storage quota`). Tool sẽ hiện hướng dẫn: **Mở sheets.new** → đặt tên → **Share** cho
-     email service account (nút Copy) quyền Editor → dán link → Kết nối.
+     riêng email service account (nút Copy) quyền Editor, giữ quyền truy cập chung **Bị hạn chế** → dán link → Kết nối.
 2. **Import file** — thêm chung mọi file (hoặc kéo thả), tool **tự phân loại theo tên file**:
    - có `_fb_billing` → **Billing** (extension FB Billing Scraper): tab = phần tên trước `_fb_billing`
      (`…_CHI_TIET_…` → `<tên> Chi tiết`); upsert theo `ID giao dịch`; chỉ giữ `Đã thanh toán`; loại dòng khác tháng

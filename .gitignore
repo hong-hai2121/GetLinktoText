@@ -13,11 +13,9 @@ __pycache__/
 venv/
 .venv/
 .build-gettext/
-/build/gettext/
-/dist/GetTextFromLink/
-/dist/installer/
-!/packaging/requirements-build.txt
-!/packaging/requirements-lock.txt
+/GetTextFromLink_Package/build/
+/GetTextFromLink_Package/dist/
+/GetTextFromLink_Package/logs/
 ENV/
 env/
 
@@ -46,6 +44,8 @@ Thumbs.db
 *.bak
 *.docx
 *.txt
+!/GetTextFromLink_Package/packaging/requirements-build.txt
+!/GetTextFromLink_Package/packaging/requirements-lock.txt
 
 #############
 # Large models / cache (you have these)

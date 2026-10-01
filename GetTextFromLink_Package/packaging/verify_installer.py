@@ -6,8 +6,8 @@ import subprocess
 import sys
 import winreg
 
-ROOT = Path(__file__).resolve().parents[1]
-WORK = ROOT / "build" / "gettext" / "verification"
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+WORK = PACKAGE_DIR / "build" / "verification"
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     except FileNotFoundError:
         pass
     WORK.mkdir(parents=True, exist_ok=True)
-    installer = ROOT / "dist" / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
+    installer = PACKAGE_DIR / "dist" / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
     install_dir = WORK / "Cài đặt thử"
     environment = os.environ.copy()
     for key in ("BASE_DIR", "WHISPER_MODEL_PATH", "LINKS_FILE", "OUTPUT_WORD_FILE",
@@ -28,7 +28,7 @@ def main():
     environment["LOCALAPPDATA"] = str(WORK / "Người dùng mới")
     environment["PATH"] = os.pathsep.join((os.path.join(os.environ["SystemRoot"], "System32"), os.environ["SystemRoot"]))
     environment["HF_HUB_OFFLINE"] = "1"
-    sample = ROOT / "build" / "gettext" / "test-data" / "speech.wav"
+    sample = PACKAGE_DIR / "build" / "test-data" / "speech.wav"
     if sample.is_file():
         environment["GETTEXT_TEST_AUDIO"] = str(sample)
     report_path = WORK / "installed-report.json"

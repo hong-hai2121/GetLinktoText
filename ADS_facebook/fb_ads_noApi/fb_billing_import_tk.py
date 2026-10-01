@@ -109,7 +109,8 @@ class TargetDialog(tk.Toplevel):
         f2.pack(fill="x", padx=44, pady=(2, 10))
         self._row(f2, "Link hoặc ID:", self._sheet, 0)
         tk.Label(f2, bg=CARD, fg=MUTED, font=("Segoe UI", 8), justify="left",
-                 text="Sheet phải được chia sẻ (Editor) cho service account bên dưới."
+                 text="Service account cần có quyền Editor; đã có quyền thì chỉ cần kết nối.\n"
+                      "Giữ Quyền truy cập chung = Bị hạn chế (Restricted)."
                  ).grid(row=1, column=1, sticky="w")
 
         # ── Service account ─────────────────────────────────────────────
@@ -205,7 +206,7 @@ class ManualCreateDialog(tk.Toplevel):
                        "  1.  Bấm  [Mở sheets.new]  → Google tạo một sheet trống trong Drive của bạn.\n"
                        f"  2.  Đặt tên sheet (gợi ý: {suggested_title}).\n"
                        "  3.  Bấm  Share / Chia sẻ  → dán email service account (nút Copy) "
-                       "→ quyền  Editor / Người chỉnh sửa.\n"
+                       "→ quyền  Editor / Người chỉnh sửa; giữ Quyền truy cập chung = Bị hạn chế.\n"
                        "  4.  Copy link sheet, dán vào ô dưới → bấm  Kết nối.")
                  ).pack(anchor="w", padx=20)
 
@@ -479,7 +480,9 @@ class App(tk.Tk):
                    "Kiểm tra lại link, hoặc sheet chưa được chia sẻ cho service account.")
         elif isinstance(exc, APIError) and "403" in str(exc):
             msg = (f"Không có quyền truy cập sheet.\n"
-                   f"Hãy Share sheet cho:  {sa_email()}  (quyền Editor).")
+                   f"Kiểm tra quyền Editor của:  {sa_email()}  trên Sheet này.\n"
+                   "Nếu chưa có, thêm riêng email này trong Share / Chia sẻ.\n"
+                   "Giữ Quyền truy cập chung = Bị hạn chế (Restricted).")
         else:
             msg = str(exc)
         messagebox.showerror("Lỗi kết nối", msg)

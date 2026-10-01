@@ -216,7 +216,8 @@
             <input class="input" type="text" id="f-sheet" placeholder="dán link đầy đủ https://docs.google.com/spreadsheets/d/…/edit hoặc ID" oninput="syncSheetHint()">
             <input class="input" type="text" id="f-name" placeholder="tên gợi nhớ (tuỳ chọn)">
           </div>
-          <span class="note" id="sheet-hint">Dán link đầy đủ, tool tự lấy ID. Sheet phải chia sẻ quyền Editor cho service account bên dưới.</span>
+          <span class="note" id="sheet-hint">Dán link đầy đủ, tool tự lấy ID.</span>
+          <span class="note">Service account bên dưới cần có quyền Editor trên Sheet. Nếu đã có quyền, chỉ cần dán link và kết nối. Giữ Quyền truy cập chung = Bị hạn chế (Restricted).</span>
           <span class="k">Đã dùng gần đây</span>
           <div class="history" id="sheet-history"></div>
         </div>
@@ -246,7 +247,7 @@
         <ol>
           <li>Bấm <b>Mở sheets.new</b>, Google tạo sheet trống trong Drive của bạn.</li>
           <li>Đặt tên sheet (gợi ý: <b id="fallback-title"></b>).</li>
-          <li>Bấm <b>Share / Chia sẻ</b>, dán email service account (nút Copy), chọn quyền <b>Editor</b>.</li>
+          <li>Bấm <b>Share / Chia sẻ</b>, thêm riêng email service account (nút Copy), chọn quyền <b>Editor</b>. Giữ <b>Quyền truy cập chung = Bị hạn chế (Restricted)</b>.</li>
           <li>Copy link sheet, dán vào ô dưới, bấm <b>Kết nối</b>.</li>
         </ol>
         <div class="row">

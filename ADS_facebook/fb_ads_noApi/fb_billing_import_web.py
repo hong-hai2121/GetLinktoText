@@ -305,7 +305,9 @@ class Core:
                 msg = ("Không tìm thấy Google Sheet với ID đã nhập. Kiểm tra lại link, "
                        "hoặc sheet chưa được chia sẻ cho service account.")
             elif isinstance(e, APIError) and "403" in str(e) and not quota:
-                msg = f"Không có quyền truy cập sheet. Hãy Share sheet cho {sa_email()} (quyền Editor)."
+                msg = (f"Không có quyền truy cập sheet. Kiểm tra quyền Editor của {sa_email()} trên Sheet này. "
+                       "Nếu chưa có, thêm riêng email này trong Share / Chia sẻ. "
+                       "Giữ Quyền truy cập chung = Bị hạn chế (Restricted).")
             else:
                 msg = str(e)
             return {"ok": False, "quota": quota, "error": msg}

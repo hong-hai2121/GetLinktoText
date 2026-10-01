@@ -1,4 +1,4 @@
-"""Build the CPU edition: python packaging/build_installer.py (Python 3.12 x64)."""
+"""Build the CPU edition inside GetTextFromLink_Package (Python 3.12 x64)."""
 import argparse
 import hashlib
 import importlib.metadata
@@ -11,9 +11,12 @@ import sys
 import urllib.request
 import zipfile
 
-ROOT = Path(__file__).resolve().parents[1]
-ENV = ROOT / ".build-gettext"
-STAGE = ROOT / "build" / "gettext" / "resources"
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+ROOT = PACKAGE_DIR.parent
+ENV = PACKAGE_DIR / ".build-gettext"
+BUILD_DIR = PACKAGE_DIR / "build"
+DIST_DIR = PACKAGE_DIR / "dist"
+STAGE = BUILD_DIR / "resources"
 DENO_VERSION = "v2.9.7"
 DENO_SHA256 = "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238"
 
@@ -29,7 +32,8 @@ def copy_file(source, destination):
 
 
 def stage_deno(destination):
-    archive = ROOT / "build" / "gettext" / f"deno-{DENO_VERSION}.zip"
+    archive = BUILD_DIR / f"deno-{DENO_VERSION}.zip"
+    archive.parent.mkdir(parents=True, exist_ok=True)
     if not archive.is_file():
         url = f"https://github.com/denoland/deno/releases/download/{DENO_VERSION}/deno-x86_64-pc-windows-msvc.zip"
         request = urllib.request.Request(url, headers={"User-Agent": "GetTextFromLink-build"})
@@ -76,7 +80,7 @@ def find_inno():
 def stage_resources(args):
     # Remove only this build's staging folder so obsolete resources cannot ship.
     if STAGE.exists():
-        assert STAGE.resolve().is_relative_to((ROOT / "build" / "gettext").resolve())
+        assert STAGE.resolve().is_relative_to(BUILD_DIR.resolve())
         shutil.rmtree(STAGE)
     bin_dir = STAGE / "bin"
     ffmpeg_dir = find_ffmpeg_bin(args.ffmpeg_dir)
@@ -96,7 +100,7 @@ def stage_resources(args):
             model_source = cache / "snapshots" / ref.read_text().strip()
         else:
             from faster_whisper.utils import download_model
-            model_source = Path(download_model("large-v3-turbo", cache_dir=str(ROOT / "whisper_cache")))
+            model_source = Path(download_model("large-v3-turbo", cache_dir=str(BUILD_DIR / "model-cache")))
     model_target = STAGE / "models" / "large-v3-turbo"
     for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json", "preprocessor_config.json"):
         copy_file(model_source / name, model_target / name)
@@ -140,7 +144,7 @@ def main():
     parser.add_argument("--ffmpeg-dir")
     args = parser.parse_args()
     if os.name != "nt" or sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
-        raise RuntimeError("Run with Python 3.12 64-bit on Windows: py -3.12 packaging/build_installer.py")
+        raise RuntimeError("Run with Python 3.12 64-bit on Windows: py -3.12 GetTextFromLink_Package/packaging/build_installer.py")
     if Path(sys.prefix).resolve() != ENV.resolve():
         python = ENV / "Scripts" / "python.exe"
         if not python.is_file():
@@ -149,18 +153,18 @@ def main():
         return
     inno = None if args.skip_installer else find_inno()
     if not args.skip_deps:
-        lock = ROOT / "packaging" / "requirements-lock.txt"
-        requirements = lock if lock.is_file() else ROOT / "packaging" / "requirements-build.txt"
+        lock = PACKAGE_DIR / "packaging" / "requirements-lock.txt"
+        requirements = lock if lock.is_file() else PACKAGE_DIR / "packaging" / "requirements-build.txt"
         run([sys.executable, "-m", "pip", "install", "--no-cache-dir", "-r", requirements])
     if not args.skip_freeze:
         stage_resources(args)
         run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-             "--distpath", ROOT / "dist", "--workpath", ROOT / "build" / "gettext" / "pyinstaller",
-             ROOT / "GetTextFromLink.spec"])
-        copy_file(ROOT / "packaging" / "HUONG_DAN.html", ROOT / "dist" / "GetTextFromLink" / "HUONG_DAN.html")
+             "--distpath", DIST_DIR, "--workpath", BUILD_DIR / "pyinstaller",
+             PACKAGE_DIR / "GetTextFromLink.spec"])
+        copy_file(PACKAGE_DIR / "packaging" / "HUONG_DAN.html", DIST_DIR / "GetTextFromLink" / "HUONG_DAN.html")
     if inno:
-        run([inno, ROOT / "packaging" / "installer.iss"])
-        installer = ROOT / "dist" / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
+        run([inno, PACKAGE_DIR / "packaging" / "installer.iss"])
+        installer = DIST_DIR / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
         with installer.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         installer.with_suffix(".sha256").write_text(f"{digest}  {installer.name}\n", encoding="ascii")

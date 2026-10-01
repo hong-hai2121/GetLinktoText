@@ -4,21 +4,32 @@
 
 Bản CPU dành cho Windows 10/11 x64, kèm Python, FFmpeg, geckodriver và model
 `large-v3-turbo`. Máy đích không cần cài Python/CUDA. Chuyển file
-`dist/installer/GetTextFromLink-Setup-1.0.0-CPU-x64.exe` sang máy khác và chạy để cài.
-Hướng dẫn sử dụng: [packaging/HUONG_DAN.html](packaging/HUONG_DAN.html).
+`GetTextFromLink_Package/dist/installer/GetTextFromLink-Setup-1.0.0-CPU-x64.exe` sang máy khác và chạy để cài.
+Hướng dẫn sử dụng: [HUONG_DAN.html](GetTextFromLink_Package/packaging/HUONG_DAN.html).
+
+Toàn bộ phần đóng gói được gom trong `GetTextFromLink_Package/`:
+
+- `.build-gettext/`: môi trường Python dùng để build, không đưa lên Git.
+- `build/`: tài nguyên, file trung gian và báo cáo kiểm tra, không đưa lên Git.
+- `dist/GetTextFromLink/`: bản chạy trực tiếp (cần giữ cả thư mục).
+- `dist/installer/`: file bộ cài `.exe` để gửi sang máy khác.
+- `packaging/`, `GetTextFromLink.spec`, `Build_GetTextFromLink.cmd`: cấu hình và script build.
+- `logs/`: nhật ký build, không đưa lên Git.
 
 Để tạo lại bộ cài trên máy phát triển: cài Python 3.12 x64 và Inno Setup 6/7,
-sau đó chạy `Build_GetTextFromLink.cmd` hoặc `py -3.12 packaging/build_installer.py`.
-Script tạo môi trường riêng `.build-gettext`, lấy FFmpeg thật (không lấy shim
+sau đó chạy `GetTextFromLink_Package/Build_GetTextFromLink.cmd` hoặc
+`py -3.12 GetTextFromLink_Package/packaging/build_installer.py`.
+Script tạo môi trường riêng `GetTextFromLink_Package/.build-gettext`, lấy FFmpeg thật (không lấy shim
 Chocolatey), model trong `whisper_cache`, và chỉ đóng gói các tài nguyên đã chỉ định.
 Có thể truyền `--ffmpeg-dir PATH_TO_BIN` và `--model-dir PATH_TO_MODEL`.
-Danh sách phiên bản đã dùng được lưu trong `packaging/requirements-lock.txt`.
+Danh sách phiên bản đã dùng được lưu trong `GetTextFromLink_Package/packaging/requirements-lock.txt`.
 
-Kiểm tra bộ cài bằng `.build-gettext\Scripts\python.exe packaging\verify_installer.py`:
+Mở terminal trong `GetTextFromLink_Package`, chạy
+`.build-gettext\Scripts\python.exe packaging\verify_installer.py` để kiểm tra bộ cài:
 script cài vào thư mục thử, kiểm tra giao diện/model offline/Word với đường dẫn tiếng
 Việt và PATH sạch, rồi gỡ bản thử. Script từ chối chạy nếu tài khoản Windows đã cài
-GetTextFromLink. Khi có `build/gettext/test-data/speech.wav`, kiểm tra thêm luồng
-FFmpeg → nhận diện CPU → xuất Word. Báo cáo nằm trong `build/gettext/verification`.
+GetTextFromLink. Khi có `build/test-data/speech.wav` bên trong thư mục tổng, kiểm tra thêm luồng
+FFmpeg → nhận diện CPU → xuất Word. Báo cáo nằm trong `GetTextFromLink_Package/build/verification`.
 
 Bản cài đặt lưu dữ liệu ở `%LOCALAPPDATA%\GetTextFromLink`, model đi kèm được đọc
 trực tiếp từ thư mục cài đặt. Chạy file Python gốc vẫn giữ đường dẫn dữ liệu hiện có

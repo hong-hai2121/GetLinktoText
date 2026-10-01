@@ -1,9 +1,10 @@
-# Build from the repository root with the isolated packaging environment.
+# All generated files live inside GetTextFromLink_Package.
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
-root = Path(SPECPATH)
-stage = root / "build" / "gettext" / "resources"
+package_dir = Path(SPECPATH)
+root = package_dir.parent
+stage = package_dir / "build" / "resources"
 datas = [(str(root / "GetTextFromLink.ico"), "."), (str(stage), ".")]
 binaries = []
 hiddenimports = ["win32clipboard", "src.diagnostics"]
