@@ -35,6 +35,7 @@ class GetTextApp:
         self.skip_gpt_var = tk.BooleanVar(value=True)
         self.skip_long_video_var = tk.BooleanVar(value=False)
         self.move_processed_links_var = tk.BooleanVar(value=False)
+        self.srt_timestamps_var = tk.BooleanVar(value=False)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
         self.max_links_per_run_var = tk.IntVar(value=0)
         self.is_running = False
@@ -49,6 +50,31 @@ class GetTextApp:
         self.build_ui()
         self.load_links()
         self.service = GetTextService(logger=self.log)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        """Tắt app bằng os._exit: bỏ qua bước Python hủy WhisperModel lúc thoát.
+
+        ctranslate2 abort (0xC0000409) khi hủy model GPU sau khi đã nhận diện file
+        dài -> thoát bình thường sẽ bị Windows ghi nhận là crash. Model được giữ
+        suốt phiên (config.loaded_models) nên đây là chỗ duy nhất nó "được giải phóng".
+        """
+        if self.is_running and not messagebox.askyesno(
+            "Đang xử lý", "Đang chạy dở. Tắt ứng dụng ngay?"
+        ):
+            return
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        try:
+            from src import browser_client
+
+            if browser_client.global_driver is not None:
+                browser_client.global_driver.quit()
+        except Exception:
+            pass
+        os._exit(0)
 
     def center_window(self, w: int = 1200, h: int = 720):
         """Canh giữa màn hình, nhô cao hơn tâm 10px cho cân mắt."""
@@ -304,6 +330,10 @@ class GetTextApp:
         ttk.Checkbutton(
             c1, text="Chuyển link đã xử lý → processed_links.txt",
             variable=self.move_processed_links_var, style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=3)
+        ttk.Checkbutton(
+            c1, text="Lấy câu văn dạng SRT: [giờ:phút:giây] ở đầu mỗi câu",
+            variable=self.srt_timestamps_var, style="Card.TCheckbutton",
         ).pack(anchor="w", pady=3)
 
         # Cột 2 — Chia nhỏ & tiêu đề
@@ -1079,6 +1109,7 @@ class GetTextApp:
             skip_gpt_processing=self.skip_gpt_var.get(),
             move_processed_links=self.move_processed_links_var.get(),
             language=language,
+            srt_timestamps=self.srt_timestamps_var.get(),
         )
 
         try:

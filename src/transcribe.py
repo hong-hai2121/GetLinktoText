@@ -140,8 +140,29 @@ def collapse_repetitions(text, max_repeat=None, max_phrase_len=6):
     return " ".join(out)
 
 
-def _segments_to_text(segments) -> str:
-    return collapse_repetitions(" ".join(seg.text.strip() for seg in segments))
+def _format_timestamp(seconds: float) -> str:
+    """Giây -> 'HH:MM:SS' cho mốc đầu câu ở chế độ SRT."""
+    total = max(0, int(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _segments_to_text(segments, offset_s: float = 0.0) -> str:
+    """Ghép segment thành văn bản.
+
+    Chế độ SRT (config.SRT_TIMESTAMPS): mỗi câu một dòng, mốc bắt đầu ở đầu dòng.
+    offset_s = giây bắt đầu của đoạn khi audio đã bị chia nhỏ — mốc phải tính theo
+    cả file chứ không theo từng đoạn.
+    """
+    if not config.SRT_TIMESTAMPS:
+        return collapse_repetitions(" ".join(seg.text.strip() for seg in segments))
+    lines = []
+    for seg in segments:
+        text = collapse_repetitions(seg.text.strip())
+        if text:
+            lines.append(f"[{_format_timestamp(seg.start + offset_s)}] {text}")
+    return "\n".join(lines)
 
 
 def extract_audio(video_path, output_wav):
@@ -320,9 +341,9 @@ def transcribe_whisper(
         print(f"🌐 Ngôn ngữ đã chọn: {config.LANGUAGE_LABELS.get(language, language)}")
     opts = build_transcribe_opts(language)
 
-    def transcribe_one(path):
+    def transcribe_one(path, offset_s=0.0):
         segments, _ = config.model.transcribe(path, **opts)
-        text_local = _segments_to_text(segments)
+        text_local = _segments_to_text(segments, offset_s)
         # Chuyển model khi lặp từ - hiện tắt (đặt ENABLE_MODEL_SWITCH_ON_REPEAT=True để bật lại)
         if config.ENABLE_MODEL_SWITCH_ON_REPEAT and detect_repetition(text_local):
             print("🔄 Phát hiện lỗi lặp từ, chuyển sang model 'large-v3'...")
@@ -355,7 +376,7 @@ def transcribe_whisper(
                     return text_local.strip()
             print("🔄 Đang nhận diện lại với model large-v3...")
             segments2, _ = config.model2.transcribe(path, **opts)
-            text_local = _segments_to_text(segments2)
+            text_local = _segments_to_text(segments2, offset_s)
             if config.device == "cuda":
                 config.torch.cuda.empty_cache()
             gc.collect()
@@ -370,10 +391,12 @@ def transcribe_whisper(
             max_take = config.DEFAULT_MAX_CHUNKS
         chunk_paths = split_audio(audio_path, chunk_length_ms=config.CHUNK_LENGTH_MS, max_chunks=max_take)
         full_text_parts = []
+        chunk_length_s = config.CHUNK_LENGTH_MS / 1000
         for idx, chunk_path in enumerate(chunk_paths, start=1):
             print(f"🧩 Đang xử lý đoạn {idx}/{len(chunk_paths)}: {chunk_path}")
             try:
-                text_chunk = transcribe_one(chunk_path)
+                # Mốc SRT tính theo cả file: cộng giây bắt đầu của đoạn này
+                text_chunk = transcribe_one(chunk_path, offset_s=(idx - 1) * chunk_length_s)
                 full_text_parts.append(text_chunk)
                 if save_chunk_transcripts and chunk_text_prefix:
                     chunk_txt_path = f"{chunk_text_prefix}_chunk_{idx}.txt"
@@ -392,7 +415,8 @@ def transcribe_whisper(
                 gc.collect()
                 if config.device == "cuda":
                     config.torch.cuda.empty_cache()
-        return " ".join(full_text_parts).strip()
+        joiner = "\n" if config.SRT_TIMESTAMPS else " "
+        return joiner.join(full_text_parts).strip()
 
     # Không chia nhỏ
     print("📝 Đang nhận diện giọng nói bằng Whisper ...")

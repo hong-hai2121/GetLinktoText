@@ -45,8 +45,10 @@ class GetTextService:
         skip_gpt_processing: bool = False,
         move_processed_links: bool = True,
         language: str = "auto",
+        srt_timestamps: bool = False,
     ):
         config.TRANSCRIBE_LANGUAGE = language or "auto"
+        config.SRT_TIMESTAMPS = bool(srt_timestamps)
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
         config.MAX_CHUNKS_RUNTIME = max(1, int(max_chunks))
@@ -75,22 +77,24 @@ class GetTextService:
         self.log(f"✅ Whisper sẽ chạy trên {'GPU' if config.device=='cuda' else 'CPU'} ({config.compute_type})")
 
     def load_model(self, selected_model: str):
-        if config.model is None or selected_model != config.MODEL_NAME:
-            self.log(f"🔄 Đang tải model '{selected_model}'...")
-            if config.model is not None:
-                del config.model
-                if config.device == "cuda":
-                    config.torch.cuda.empty_cache()
-                gc.collect()
+        # Model giữ trong VRAM tới khi tắt app (xem config.loaded_models). Đổi model
+        # thì nạp thêm chứ không xóa model cũ — xóa là crash.
+        config.MODEL_NAME = selected_model
+        cached = config.loaded_models.get(selected_model)
+        if cached is not None:
+            config.model = cached
+            self.log(f"♻️ Dùng lại model '{selected_model}' đã nạp sẵn.")
+            return
 
-            config.MODEL_NAME = selected_model
-            config.model = config.WhisperModel(
-                config.resolve_model(config.MODEL_NAME),
-                device=config.device,
-                compute_type=config.compute_type,
-                download_root=config.WHISPER_MODEL_PATH,
-            )
-            self.log(f"✅ Đã tải model '{config.MODEL_NAME}' thành công")
+        self.log(f"🔄 Đang tải model '{selected_model}'...")
+        config.model = config.WhisperModel(
+            config.resolve_model(selected_model),
+            device=config.device,
+            compute_type=config.compute_type,
+            download_root=config.WHISPER_MODEL_PATH,
+        )
+        config.loaded_models[selected_model] = config.model
+        self.log(f"✅ Đã tải model '{selected_model}' thành công")
 
     def restart_firefox(self):
         return browser_client.restart_firefox()
@@ -332,8 +336,11 @@ class GetTextService:
             if transcript is None:
                 self.log("⚠ Không có transcript, bỏ qua xử lý văn bản.")
                 transcript = ""
-            formatted_transcript = transcribe.format_transcript_by_spaces(transcript, spaces_per_line=25)
-            f.write(formatted_transcript)
+            # SRT đã mỗi câu một dòng -> không ngắt dòng lại theo số từ
+            if config.SRT_TIMESTAMPS:
+                f.write(transcript)
+            else:
+                f.write(transcribe.format_transcript_by_spaces(transcript, spaces_per_line=25))
 
         self.log(f"💾 Đã lưu transcript vào: {transcript_path}")
         return transcript, transcript_path, duration_seconds
@@ -621,21 +628,13 @@ class GetTextService:
         # nên không giữ lại trong danh sách chờ — tránh batch sau vấp lại đúng link hỏng.
         self._finalize_link_batch(succeeded_lines, remaining_links)
 
-        self.log("\n🧹 Giải phóng bộ nhớ...")
-
-        if config.model is not None:
-            del config.model
-            config.model = None
-
-        if config.model2 is not None:
-            del config.model2
-            config.model2 = None
-
+        # Không hủy model ở đây (xem load_model): chỉ dọn bộ nhớ tạm, model giữ lại
+        # cho lần chạy sau và chỉ giải phóng khi tắt app.
+        self.log("\n🧹 Dọn bộ nhớ tạm, giữ model cho lần chạy sau...")
         if config.device == "cuda":
             config.torch.cuda.empty_cache()
         gc.collect()
-
-        self.log("✅ Bộ nhớ đã được giải phóng.")
+        self.log("✅ Xong. Model vẫn trong bộ nhớ, lần chạy sau không phải tải lại.")
         self.log("🎉 Hoàn thành tất cả video! Kết quả đã lưu vào final_result.docx")
         if failed_lines:
             self.log(

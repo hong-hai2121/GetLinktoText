@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đăng video tự động</title>
+<style>
+:root{
+  --sidebar:#111827; --sidebar-2:#1f2937; --sidebar-fg:#e5e7eb; --sidebar-dim:#9ca3af;
+  --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --fg:#111827; --dim:#6b7280;
+  --primary:#dc2626; --primary-h:#b91c1c; --blue:#2563eb;
+  --green:#16a34a; --green-bg:#dcfce7; --red:#dc2626; --red-bg:#fee2e2;
+  --gray-bg:#f3f4f6; --blue-bg:#dbeafe;
+  --radius:12px; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{display:flex;background:var(--bg);color:var(--fg);
+  font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+
+/* ---------------- sidebar ---------------- */
+.sidebar{width:216px;min-width:216px;background:var(--sidebar);color:var(--sidebar-fg);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{padding:22px 20px 16px;border-bottom:1px solid #263142}
+.brand h1{margin:0;font-size:15px;letter-spacing:.14em;color:#f9fafb}
+.brand p{margin:3px 0 0;font-size:11.5px;color:var(--sidebar-dim)}
+.nav{padding:12px 10px;display:flex;flex-direction:column;gap:4px}
+.nav button{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border:0;
+  border-radius:9px;background:transparent;color:var(--sidebar-fg);font:inherit;font-size:13.5px;
+  cursor:pointer;text-align:left;transition:background .12s}
+.nav button:hover{background:var(--sidebar-2)}
+.nav button.active{background:var(--sidebar-2);box-shadow:inset 3px 0 0 var(--primary)}
+.nav .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;font-weight:700}
+.ic-yt{background:#dc2626;color:#fff}
+.ic-tt{background:#0f172a;color:#fff;border:1px solid #334155}
+.ic-za{background:#2563eb;color:#fff;font-size:13px}
+.side-foot{margin-top:auto;padding:14px 20px;font-size:11px;color:#6b7280;border-top:1px solid #263142}
+
+/* ---------------- header ---------------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;padding:10px 22px;flex-wrap:wrap}
+.topbar h2{margin:0 14px 0 0;font-size:17px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
+  font-size:12px;background:var(--gray-bg);color:var(--dim);border:1px solid var(--border);white-space:nowrap}
+.chip b{color:var(--fg);font-weight:600}
+.chip.ok{background:var(--green-bg);color:#166534;border-color:#bbf7d0}
+.chip.bad{background:var(--red-bg);color:#991b1b;border-color:#fecaca}
+.chip a{color:var(--blue);text-decoration:none;font-weight:600}
+.chip a:hover{text-decoration:underline}
+.spacer{flex:1}
+.run-ind{display:none;align-items:center;gap:7px;color:var(--blue);font-size:12.5px;font-weight:600}
+.run-ind.show{display:inline-flex}
+.spin{width:13px;height:13px;border:2px solid #bfdbfe;border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------------- nội dung ---------------- */
+.content{padding:18px 22px 30px;max-width:1180px;width:100%;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);margin-bottom:14px}
+.card>h3{margin:0;padding:12px 16px 10px;font-size:13px;color:var(--fg)}
+.card>h3 small{font-weight:400;color:var(--dim)}
+.card .body{padding:0 16px 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:980px){.grid2{grid-template-columns:1fr}}
+
+label{font-size:12.5px;color:var(--dim);display:block;margin-bottom:3px}
+input[type=text],input[type=password],input[type=date],textarea{
+  width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font:inherit;
+  background:#fff;color:var(--fg)}
+input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
+textarea{resize:vertical}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.row>div{min-width:0}
+.grow{flex:1}
+.check{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--fg);cursor:pointer}
+.check input{width:15px;height:15px;accent-color:var(--primary)}
+
+.btn{padding:7px 15px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:var(--fg);
+  font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .12s}
+.btn:hover{background:#f9fafb}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--primary-h)}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.btn.blue:hover{background:#1d4ed8}
+
+/* ---------------- bảng hàng đợi ---------------- */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:#f9fafb;color:var(--dim);font-weight:600;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.04em}
+th,td{padding:8px 10px;border-top:1px solid var(--border);text-align:left;vertical-align:top}
+tbody tr:hover{background:#f9fafb}
+.tbl-wrap{max-height:320px;overflow:auto;border-top:1px solid var(--border)}
+td.num,th.num{width:34px;color:var(--dim)}
+td.sel,th.sel{width:30px}
+.vid b{font-weight:600;word-break:break-all}
+.vid small{display:block;color:var(--dim);word-break:break-all}
+.st{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
+.st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-wait{background:var(--gray-bg);color:#4b5563}
+.st-run{background:var(--blue-bg);color:#1d4ed8}
+.st-run::before{animation:blink 1s ease-in-out infinite}
+@keyframes blink{50%{opacity:.25}}
+.st-done{background:var(--green-bg);color:#15803d}
+.st-err{background:var(--red-bg);color:#b91c1c}
+td.kq{word-break:break-all;color:var(--dim);max-width:380px}
+td.kq a{color:var(--blue)}
+.empty{padding:26px;text-align:center;color:var(--dim)}
+
+/* ---------------- nhật ký ---------------- */
+#log{background:#0b1220;color:#9fe3b4;border-radius:0 0 var(--radius) var(--radius);
+  font:12px/1.55 Consolas,monospace;padding:12px 14px;height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+
+/* ---------------- toast / placeholder ---------------- */
+#toasts{position:fixed;top:14px;right:16px;z-index:99;display:flex;flex-direction:column;gap:8px}
+.toast{background:#111827;color:#f9fafb;padding:10px 16px;border-radius:10px;font-size:13px;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:380px;animation:pop .18s ease-out}
+.toast.err{background:#7f1d1d}
+@keyframes pop{from{transform:translateY(-6px);opacity:0}}
+.placeholder{padding:60px 20px;text-align:center;color:var(--dim)}
+.placeholder .big{font-size:40px;margin-bottom:10px}
+.placeholder h3{color:var(--fg);margin:0 0 6px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand"><h1>ĐĂNG VIDEO</h1><p>tự động · lên lịch</p></div>
+  <nav class="nav">
+    <button class="active" data-page="youtube"><span class="ic ic-yt">▶</span>YouTube</button>
+    <button data-page="tiktok"><span class="ic ic-tt">♪</span>TikTok</button>
+    <button data-page="zalo"><span class="ic ic-za">Z</span>Zalo</button>
+  </nav>
+  <div class="side-foot">Server cục bộ · điều khiển Chrome đang mở qua Playwright Extension</div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="pageTitle">YouTube</h2>
+    <span class="chip">Profile <b id="profile">…</b></span>
+    <span class="chip" id="extChip">Extension: …</span>
+    <span class="chip">Kênh&nbsp;<a id="channel" href="#" target="_blank" rel="noopener">(chưa kiểm tra)</a></span>
+    <span class="spacer"></span>
+    <span class="run-ind" id="runInd"><span class="spin"></span>Đang chạy…</span>
+    <button class="btn blue" id="btnCheck">Kiểm tra kết nối</button>
+  </div>
+
+  <!-- ============================= YOUTUBE ============================= -->
+  <div class="content" id="page-youtube">
+
+    <div class="card">
+      <h3>Kết nối <small>— token của Playwright Extension (bấm icon extension trong Chrome để sao chép)</small></h3>
+      <div class="body row">
+        <div class="grow"><label>Token extension</label>
+          <input type="password" id="token" autocomplete="off" placeholder="PLAYWRIGHT_MCP_EXTENSION_TOKEN=…"></div>
+        <button class="btn" id="btnEye" title="Hiện / ẩn token">👁</button>
+        <button class="btn" id="btnSaveToken">Lưu token</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Lịch đăng mặc định <small>— YouTube tự công bố đúng giờ (chế độ Lên lịch)</small></h3>
+        <div class="body">
+          <div class="row">
+            <div class="grow"><label>Khung giờ mỗi ngày</label>
+              <input type="text" id="times" placeholder="08:00, 19:00"></div>
+            <div><label>Bắt đầu từ ngày</label><input type="date" id="start"></div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="btnSaveSchedule">Lưu lịch</button>
+            <button class="btn" id="btnReassign">Xếp lại giờ cho hàng đợi</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Mặc định cho mọi video <small>— tiêu đề tạm = tên file, sửa sau trong Studio</small></h3>
+        <div class="body">
+          <label>Mô tả</label>
+          <textarea id="desc" rows="2"></textarea>
+          <div class="row" style="margin-top:8px">
+            <div class="grow"><label>Danh sách phát</label><input type="text" id="playlist"></div>
+            <div class="grow"><label>Thẻ (phẩy)</label><input type="text" id="tags"></div>
+          </div>
+          <div class="row" style="margin-top:10px;justify-content:space-between">
+            <label class="check"><input type="checkbox" id="kids">Dành cho trẻ em</label>
+            <button class="btn" id="btnSaveDefaults">Lưu mặc định</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Thêm video <small>— mỗi dòng một link Google Drive hoặc đường dẫn file trên máy</small></h3>
+      <div class="body row">
+        <textarea id="links" rows="4" class="grow" placeholder="https://drive.google.com/file/d/…&#10;D:\video\bai1.mp4"></textarea>
+        <button class="btn blue" id="btnAdd" style="align-self:stretch">Thêm vào<br>hàng đợi</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Hàng đợi</h3>
+      <div class="toolbar">
+        <button class="btn primary" id="btnStart">▶&nbsp; Bắt đầu đăng</button>
+        <button class="btn" id="btnStop">⏹ Dừng sau video này</button>
+        <button class="btn" id="btnDelete">Xoá dòng chọn</button>
+        <button class="btn" id="btnClear">Dọn mục xong/lỗi</button>
+        <label class="check" style="margin-left:auto">
+          <input type="checkbox" id="dryRun">Chỉ chạy thử 1 video (làm hết các bước, không bấm Lưu)</label>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th class="sel"><input type="checkbox" id="selAll"></th>
+            <th class="num">#</th><th>Video</th><th>Giờ công bố (YouTube)</th>
+            <th>Trạng thái</th><th>Kết quả / lỗi</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty" id="emptyRow" style="display:none">Hàng đợi trống — dán link ở ô "Thêm video" phía trên.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Nhật ký</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- ============================ PLACEHOLDER ============================ -->
+  <div class="content" id="page-tiktok" style="display:none">
+    <div class="card"><div class="placeholder">
+      <div class="big">♪</div><h3>TikTok — sắp có</h3>
+      <p>Tab này sẽ dùng cùng cơ chế: dán danh sách link, lịch đăng mặc định,<br>điều khiển Chrome đang mở qua extension.</p>
+    </div></div>
+  </div>
+  <div class="content" id="page-zalo" style="display:none">
+    <div class="card"><div class="placeholder">
+      <div class="big">Z</div><h3>Zalo — sắp có</h3>
+      <p>Tab này sẽ dùng cùng cơ chế: dán danh sách link, lịch đăng mặc định,<br>điều khiển Chrome đang mở qua extension.</p>
+    </div></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let logSeq = 0, formLoaded = false, lastState = null;
+const checked = new Set();
+
+/* ------------------------------ tiện ích ------------------------------ */
+function toast(msg, ok = true) {
+  if (!msg) return;
+  const el = document.createElement("div");
+  el.className = "toast" + (ok ? "" : " err");
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+async function post(path, data) {
+  try {
+    const r = await fetch(path, {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(data || {})});
+    const j = await r.json();
+    toast(j.msg, j.ok);
+    poll();                       // cập nhật ngay, không chờ nhịp poll
+    return j;
+  } catch (e) { toast("Mất kết nối server — app.py còn chạy không?", false); return {ok: false}; }
+}
+const esc = s => (s || "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const linkify = s => esc(s).replace(/(https?:\/\/\S+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+function formData() {
+  return {token: $("token").value, times: $("times").value, start: $("start").value,
+          desc: $("desc").value, playlist: $("playlist").value,
+          tags: $("tags").value, kids: $("kids").checked};
+}
+
+/* ------------------------------ hiển thị ------------------------------ */
+const ST_CLASS = {"chờ": "st-wait", "đang đăng": "st-run", "xong": "st-done", "lỗi": "st-err"};
+function renderTable(items) {
+  const tb = $("tbody");
+  $("emptyRow").style.display = items.length ? "none" : "";
+  tb.innerHTML = items.map((it, i) => `
+    <tr>
+      <td class="sel"><input type="checkbox" data-id="${it.id}" ${checked.has(it.id) ? "checked" : ""}></td>
+      <td class="num">${i + 1}</td>
+      <td class="vid" title="${esc(it.link)}"><b>${esc(it.short)}</b>${it.title ? `<small>${esc(it.title)}</small>` : ""}</td>
+      <td>${esc(it.gio)}</td>
+      <td><span class="st ${ST_CLASS[it.status] || "st-wait"}">${esc(it.status)}</span></td>
+      <td class="kq">${linkify(it.kq)}</td>
+    </tr>`).join("");
+  tb.querySelectorAll("input[type=checkbox]").forEach(cb =>
+    cb.addEventListener("change", () => cb.checked ? checked.add(cb.dataset.id) : checked.delete(cb.dataset.id)));
+}
+function render(st) {
+  lastState = st;
+  if (!formLoaded) {            // chỉ nạp form 1 lần, khỏi đè lên chữ đang gõ
+    $("token").value = st.token; $("times").value = st.times; $("start").value = st.start;
+    $("desc").value = st.desc; $("playlist").value = st.playlist;
+    $("tags").value = st.tags; $("kids").checked = st.kids;
+    formLoaded = true;
+  }
+  $("profile").textContent = st.profile;
+  const ext = $("extChip");
+  ext.textContent = "Extension: " + (st.ext_ok ? "đã cài" : "CHƯA cài");
+  ext.className = "chip " + (st.ext_ok ? "ok" : "bad");
+  const ch = $("channel");
+  ch.textContent = st.channel_name || "(chưa kiểm tra)";
+  if (st.channel_url) ch.href = st.channel_url; else ch.removeAttribute("href");
+  $("runInd").classList.toggle("show", st.running);
+  $("btnStart").disabled = st.running;
+  $("btnStart").innerHTML = st.running ? "Đang chạy…" : "▶&nbsp; Bắt đầu đăng";
+  $("btnCheck").disabled = st.running;
+  renderTable(st.items);
+  if (st.logs.length) {
+    const lg = $("log");
+    const stick = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40;
+    lg.textContent += st.logs.join("\n") + "\n";
+    if (stick) lg.scrollTop = lg.scrollHeight;
+  }
+  logSeq = st.log_seq;
+}
+async function poll() {
+  try { render(await (await fetch("/api/state?after=" + logSeq)).json()); }
+  catch (e) { /* server chưa dậy / đã tắt — nhịp sau thử lại */ }
+}
+setInterval(poll, 1000); poll();
+
+/* ------------------------------ nút bấm ------------------------------ */
+$("btnEye").onclick = () => $("token").type = $("token").type === "password" ? "text" : "password";
+$("btnSaveToken").onclick = () => post("/api/save_token", {token: $("token").value});
+$("btnSaveSchedule").onclick = async () => {
+  const j = await post("/api/save_schedule", {times: $("times").value, start: $("start").value});
+  if (j.ok) { $("times").value = j.times; $("start").value = j.start; }
+};
+$("btnReassign").onclick = () => post("/api/reassign", {times: $("times").value, start: $("start").value});
+$("btnSaveDefaults").onclick = () => post("/api/save_defaults", formData());
+$("btnAdd").onclick = async () => {
+  const j = await post("/api/add_links", {text: $("links").value, times: $("times").value, start: $("start").value});
+  if (j.ok) $("links").value = "";
+};
+$("btnCheck").onclick = () => post("/api/check_connection", {token: $("token").value});
+$("btnStart").onclick = () => {
+  const dry = $("dryRun").checked;
+  const n = (lastState?.items || []).filter(it => it.status === "chờ").length;
+  if (!n) return toast("Chưa có video nào đang chờ.", false);
+  const msg = dry ? "Chạy thử 1 video (không bấm Lưu)?"
+    : `Tải lên và lên lịch ${n} video trên kênh ${lastState?.channel_name || "(chưa rõ)"}?`;
+  if (confirm(msg)) post("/api/start", {...formData(), dry_run: dry});
+};
+$("btnStop").onclick = () => post("/api/stop");
+$("btnDelete").onclick = () => {
+  if (!checked.size) return toast("Chưa chọn dòng nào.", false);
+  post("/api/delete", {ids: [...checked]}).then(() => checked.clear());
+};
+$("btnClear").onclick = () => post("/api/clear_finished");
+$("selAll").onchange = e => {
+  checked.clear();
+  if (e.target.checked) (lastState?.items || []).forEach(it => checked.add(it.id));
+  if (lastState) renderTable(lastState.items);
+};
+
+/* ------------------------------ menu trái ------------------------------ */
+document.querySelectorAll(".nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".nav button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  ["youtube", "tiktok", "zalo"].forEach(p =>
+    $("page-" + p).style.display = p === b.dataset.page ? "" : "none");
+  $("pageTitle").textContent = b.textContent.trim();
+});
+</script>
+</body>
+</html>

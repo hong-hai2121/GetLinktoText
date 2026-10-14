@@ -56,6 +56,7 @@ MAX_CHUNKS_RUNTIME = DEFAULT_MAX_CHUNKS
 
 TITLE_MODE_SUBMODE = "full"
 SKIP_GPT_PROCESSING = False
+SRT_TIMESTAMPS = False  # True: mỗi câu một dòng, mốc [HH:MM:SS] ở đầu (checkbox trong GUI)
 SKIP_LONG_VIDEOS = False
 LONG_VIDEO_THRESHOLD_SECONDS = 15 * 60
 
@@ -96,6 +97,10 @@ BLACKLIST_KEYWORDS = []
 # runtime state
 model = None
 model2 = None
+# Model đã nạp, theo tên -> giữ tới khi tắt app. Không bao giờ del/gc một WhisperModel
+# đang chạy GPU: ctranslate2 abort tiến trình (0xC0000409) khi hủy model sau khi đã
+# nhận diện file dài có temperature fallback -> app "tự tắt" không báo lỗi.
+loaded_models = {}
 WhisperModel = None
 torch = None
 compute_type = "int8"
