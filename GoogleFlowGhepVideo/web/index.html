@@ -111,16 +111,16 @@ pre#log{margin:0;height:260px;overflow:auto;background:#0b1220;color:#d1d5db;bor
 <div class="content">
   <div class="grid2">
     <div class="card">
-      <h3>1. Thư mục Gốc <small>video quay bác sĩ, tắt tiếng, lồng giọng đọc</small></h3>
+      <h3>1. Thư mục clip gốc <small>các clip ngắn quay bác sĩ, tắt tiếng, lồng giọng đọc</small></h3>
       <div class="body">
         <div class="row">
-          <input id="gocDir" type="text" class="grow" placeholder="D:\video edit\goc" spellcheck="false">
+          <input id="gocDir" type="text" class="grow" placeholder="D:\Python\GetLinktoText\GoogleFlowGhepVideo\video gốc" spellcheck="false">
           <button class="btn" onclick="chonThuMuc()">Chọn…</button>
           <button class="btn" onclick="luuGoc()">Lưu</button>
         </div>
         <div id="gocInfo" class="goc-list"></div>
-        <p class="hint">Link mới được gán video gốc <b>xoay vòng</b>: link 1 → file 1, link 2 → file 2…, hết thì quay lại file đầu.
-          Thư mục có file tên chứa chữ <b>“gốc”</b> thì chỉ dùng các file đó.</p>
+        <p class="hint">Mỗi tập <b>xáo ngẫu nhiên</b> các clip rồi nối lần lượt tới khi đủ giọng đọc; clip cuối dài hơn thì <b>cắt</b>
+          (chừa ít nhất 1,5s). Kho ngắn hơn giọng đọc thì xáo lại dùng tiếp. Mặc định là thư mục <b>video gốc</b> trong dự án.</p>
       </div>
     </div>
 
@@ -146,7 +146,7 @@ pre#log{margin:0;height:260px;overflow:auto;background:#0b1220;color:#d1d5db;bor
     </h3>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>#</th><th>Tập</th><th>Video gốc</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Tập</th><th>Clip phần sau</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
         <tbody id="tbody"><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
       </table>
     </div>
@@ -195,15 +195,19 @@ const fmt = s => { s = Math.max(0, Math.round(s)); return `${Math.floor(s/60)}:$
 function renderGoc(g){
   if (!gocDirDirty && document.activeElement !== $('gocDir')) $('gocDir').value = g.dir || '';
   let h = '';
-  if (!g.dir) h = '<span class="chip warn">Chưa chọn thư mục Gốc</span>';
+  if (!g.dir) h = '<span class="chip warn">Chưa chọn thư mục clip gốc</span>';
   else if (!g.ton_tai) h = '<span class="chip bad">Không thấy thư mục này nữa</span>';
-  else if (!g.files.length) h = '<span class="chip bad">Thư mục không có video</span>';
+  else if (!g.clips.length) h = '<span class="chip bad">Thư mục không có clip video</span>';
   else {
-    h = `<div class="muted">Xoay vòng ${g.files.length} video (ô xanh = link thêm tiếp theo sẽ dùng):</div>`;
-    h += g.files.map(f => `<span class="f${f === g.ke_tiep ? ' next' : ''}">${esc(f)}</span>`).join('');
-    if (g.bo_qua.length) h += `<details><summary>Bỏ qua ${g.bo_qua.length} video không có chữ “gốc” trong tên</summary>${g.bo_qua.map(esc).join(' · ')}</details>`;
+    h = `<div class="muted">${g.clips.length} clip, tổng ${fmt(g.tong_giay)}${g.mac_dinh ? ' · <span class="chip ok">thư mục mặc định của dự án</span>' : ''}</div>`;
+    h += g.clips.map(c => `<span class="f">${esc(c.ten)} <span class="muted">${c.giay.toFixed(1)}s</span></span>`).join('');
   }
   $('gocInfo').innerHTML = h;
+}
+function clipCell(it){
+  if (it.phan_sau) return `<div class="muted" style="white-space:normal;max-width:300px">${esc(it.phan_sau)}</div>` +
+    (it.seed ? `<div class="muted">seed ${it.seed}</div>` : '');
+  return `<span class="muted">${it.status === 'cho' ? 'xáo ngẫu nhiên khi chạy' : it.status === 'dang' ? 'đang xáo…' : '—'}</span>`;
 }
 
 function stCell(it, now){
@@ -246,7 +250,7 @@ function renderItems(s){
         <td><div class="ten${it.ten ? '' : ' cho-ten'}">${esc(it.ten || 'đang lấy tên thư mục…')}</div>
             <div class="lnk"><a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.link)}</a></div>
             ${it.canh_bao ? `<div class="warn-t">⚠ ${esc(it.canh_bao)}</div>` : ''}</td>
-        <td class="goc-c">${it.goc_ten ? esc(it.goc_ten) : '<span class="chip warn">chưa có</span>'}</td>
+        <td class="goc-c">${clipCell(it)}</td>
         <td class="st">${stCell(it, s.now)}</td>
         <td>${kqCell(it)}</td>
         <td style="white-space:nowrap;text-align:right">${actCell(it)}</td>

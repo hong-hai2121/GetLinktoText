@@ -12,10 +12,14 @@ Quy tắc bố cục (theo yêu cầu):
   4. Nếu ảnh chưa phủ tới đáy video thì phóng to cho phủ kín tới đáy, mép
      trên vẫn giữ ở 1/2 tiêu đề (phần dư hai bên bị cắt đều).
   5. Tiêu đề và ảnh hiển thị suốt toàn bộ thời lượng clip; giữ nguyên tiếng.
-  6. (Tuỳ chọn) PHẦN SAU: video gốc quay bác sĩ (--phan-sau) được TẮT TIẾNG, lồng giọng
-     đọc (--audio, mặc định là file mp3 trong thư mục Drive), dài đúng bằng audio
-     (hết audio là hết video; video ngắn hơn audio thì đứng hình frame cuối), đưa về
-     cùng kích thước clip hook rồi nối ngay sau 10 giây đầu. Không có tiêu đề/ảnh ở phần này.
+  6. PHẦN SAU: cảnh quay bác sĩ TẮT TIẾNG, lồng giọng đọc (--audio, mặc định là file mp3 trong
+     thư mục Drive), dài đúng bằng audio, đưa về cùng kích thước clip hook rồi nối ngay sau 10 giây
+     đầu. Không có tiêu đề/ảnh ở phần này. Nguồn hình (--phan-sau):
+       - THƯ MỤC clip (mặc định: thư mục "video gốc" cạnh tool, khi bộ có giọng đọc): xáo ngẫu nhiên
+         các clip rồi nối lần lượt tới khi đủ thời lượng giọng đọc; clip cuối dài hơn phần còn thiếu
+         thì CẮT (chừa tối thiểu 1,5s để không lóe lên rồi hết); kho ngắn hơn giọng đọc thì xáo lại
+         dùng tiếp. Mỗi clip chỉnh màu riêng. --seed N để ra đúng thứ tự clip như lần trước.
+       - MỘT file video: dùng từ đầu, ngắn hơn audio thì đứng hình frame cuối (cách cũ).
   7. Khi có phần sau: hook được đưa về -14 LUFS / -1 dBTP (mức YouTube, TikTok); giọng đọc
      được KHỚP THEO HOOK: đo N giây đầu của giọng đọc (N = thời lượng hook, --cua-so-khop
      để đổi, 0 = cả file) so với mức thực tế của hook, ra một mức bù duy nhất rồi áp cho
@@ -61,7 +65,7 @@ QUY ƯỚC ĐẶT TÊN FILE (để tool tự nhận ra vai trò, không phân bi
 Cách dùng:
   python ghep_tieude.py --thu-muc "D:/.../thư mục đã đặt tên theo quy ước"   # tự lấy đủ 5 file
   python ghep_tieude.py --video clip.mp4 --tieude "TIÊU ĐỀ - xxx.png" --anh "xxx.jpg"
-  python ghep_tieude.py ... --phan-sau "video gốc.mov" --audio "giọng đọc.mp3"
+  python ghep_tieude.py ... --phan-sau "D:/thư mục clip" --audio "giọng đọc.mp3"   # hoặc 1 file video
   python ghep_tieude.py                 # không tham số -> hộp thoại chọn file (mở ở Downloads)
   python ghep_tieude.py --drive <link thư mục Drive> [--phan-sau "video gốc.mov"]
                                         # tải cả thư mục về Downloads rồi tự ghép (mp3 trong thư mục = giọng đọc)
@@ -76,6 +80,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -106,7 +111,10 @@ KHOANG_CACH_CAM = 0.20     # khoảng cách cằm -> mép trên tiêu đề, tí
 TI_LE_DIEM_BAT_DAU_ANH = 0.5  # mép trên ảnh minh họa = top tiêu đề + 1/2 chiều cao tiêu đề
 NGUONG_TRANG = 235         # pixel >= ngưỡng (cả 3 kênh) coi là nền trắng của file tiêu đề
 
-# ----- phần sau (video gốc tắt tiếng + giọng đọc) -----
+# ----- phần sau (clip quay bác sĩ tắt tiếng + giọng đọc) -----
+THU_MUC_GOC = HERE / "video gốc"   # kho clip mặc định: ghép ngẫu nhiên tới khi đủ giọng đọc
+DUOI_VIDEO = (".mov", ".mp4", ".mkv", ".m4v")
+DOAN_CUOI_TOI_THIEU = 1.5  # giây: clip cuối (bị cắt) không ngắn hơn mức này, tránh cảnh lóe lên rồi hết
 FPS_RA = 30                # fps video cuối khi có phần sau (hook 24fps + body 30fps -> quy về 30)
 AUDIO_BR = "192k"          # bitrate AAC khi phải encode lại audio (concat)
 LUFS_MUC_TIEU = -14.0      # âm lượng phổ thông (YouTube/TikTok/Spotify chuẩn hóa về -14 LUFS)
@@ -310,6 +318,17 @@ def probe_media(path: Path):
     if abs(rot) % 180 == 90:
         w, h = h, w
     return w, h, dur
+
+
+def thoi_luong_hinh(path: Path) -> float:
+    """Thời lượng LUỒNG HÌNH (giây). Clip điện thoại thường có tiếng dài hơn hình vài chục ms; dùng thời lượng
+    file để xếp clip thì mỗi chỗ nối hụt ~1 frame và cuối video phải đứng hình bù."""
+    import json
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=duration:format=duration", "-of", "json", str(path)],
+                         capture_output=True, text=True, check=True).stdout
+    j = json.loads(out)
+    return float((j.get("streams") or [{}])[0].get("duration") or j.get("format", {}).get("duration") or 0)
 
 
 def probe_channels(path: Path) -> int:
@@ -618,10 +637,60 @@ def composite_preview(frame, title_item, illus_item):
 
 
 # ================================================================== ghép ffmpeg
-def body_video_filter(W: int, H: int, bw: int, bh: int, body_dur: float, D: float,
-                      mau: str = "", nhe: bool = False) -> str:
-    """Chuỗi filter cho video phần sau: (chỉnh màu) -> đưa về WxH -> fps chung -> kéo dài/cắt đúng D giây.
-    `nhe`: chế độ máy yếu -> scale bicubic, không làm nét."""
+def khoa_tu_nhien(s: str):
+    """Sắp tên kiểu người đọc: '2.mov' trước '10.mov'."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", khong_dau(s))]
+
+
+def liet_ke_clip(folder: Path) -> list[tuple[Path, float]]:
+    """Mọi video trong thư mục (không đệ quy) kèm thời lượng HÌNH, sắp theo tên; bỏ clip < 0,3s."""
+    ds = sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in DUOI_VIDEO),
+                key=lambda p: khoa_tu_nhien(p.name))
+    return [(p, d) for p in ds for d in [thoi_luong_hinh(p)] if d >= 0.3]
+
+
+def chon_clip_ngau_nhien(kho: list[tuple[Path, float]], D: float, seed: int | None = None) -> list[tuple[Path, float]]:
+    """Xáo ngẫu nhiên các clip rồi nối lần lượt cho tới khi đủ D giây -> [(clip, số giây dùng)].
+    Clip cuối dài hơn phần còn thiếu thì CẮT. Hết kho mà chưa đủ thì xáo lại dùng tiếp (không để một
+    clip đứng liền chính nó). Tránh đoạn cuối chỉ lóe lên: nếu dùng trọn một clip sẽ để lại phần thiếu
+    ngắn hơn DOAN_CUOI_TOI_THIEU giây thì cắt bớt clip đó, chừa đủ DOAN_CUOI_TOI_THIEU cho clip cuối."""
+    rng = random.Random(seed)
+    chon: list[tuple[Path, float]] = []
+    con_lai, xap, truoc = D, [], None
+    while con_lai > 0.02:
+        if not xap:
+            xap = kho[:]
+            rng.shuffle(xap)
+            if truoc is not None and len(xap) > 1 and xap[0][0] == truoc:
+                xap.append(xap.pop(0))
+        if con_lai < DOAN_CUOI_TOI_THIEU + 1.0:
+            # phần thiếu quá ngắn để chia hai đoạn -> lấy MỘT clip đủ dài rồi cắt cho vừa
+            # (ưu tiên clip còn trong lượt xáo hiện tại, không trùng clip vừa dùng)
+            du_dai = [c for c in xap if c[1] >= con_lai and c[0] != truoc]
+            if du_dai:
+                xap.remove(du_dai[0])
+                chon.append((du_dai[0][0], round(con_lai, 3)))
+                break
+            du_dai = [c for c in kho if c[1] >= con_lai and c[0] != truoc]
+            if du_dai:
+                chon.append((rng.choice(du_dai)[0], round(con_lai, 3)))
+                break
+        p, d = xap.pop(0)
+        if d >= con_lai:
+            dung = con_lai                                     # clip cuối: cắt cho vừa giọng đọc
+        elif con_lai - d < DOAN_CUOI_TOI_THIEU and con_lai - DOAN_CUOI_TOI_THIEU >= 1.0:
+            dung = con_lai - DOAN_CUOI_TOI_THIEU
+        else:
+            dung = d
+        chon.append((p, round(dung, 3)))
+        con_lai -= dung
+        truoc = p
+    return chon
+
+
+def clip_filter(W: int, H: int, bw: int, bh: int, dung: float, mau: str = "", nhe: bool = False) -> str:
+    """Chuỗi filter cho MỘT clip phần sau: (chỉnh màu riêng clip) -> đưa về WxH -> fps chung -> lấy đúng
+    `dung` giây đầu. `nhe`: chế độ máy yếu -> scale bicubic, không làm nét."""
     target = W / H
     fl = scale_flags(nhe)
     if bw and bh and abs(bw / bh - target) / target < 0.05:
@@ -632,25 +701,24 @@ def body_video_filter(W: int, H: int, bw: int, bh: int, body_dur: float, D: floa
         fit = (f"scale={W}:{H}:force_original_aspect_ratio=decrease:flags={fl},"
                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2")
     parts = ([mau] if mau else []) + [fit] + (lam_net(nhe) if mau else []) + [f"fps={FPS_RA}"]
-    if body_dur < D - 0.05:                      # video ngắn hơn giọng đọc -> đứng hình frame cuối
-        parts.append(f"tpad=stop_mode=clone:stop_duration={D - body_dur:.3f}")
-    parts += [f"trim=duration={D:.3f}", "setpts=PTS-STARTPTS", "format=yuv420p"]
+    parts += [f"trim=duration={dung:.3f}", "setpts=PTS-STARTPTS", "format=yuv420p"]
     return ",".join(parts)
 
 
 def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
-           body: Path | None = None, audio: Path | None = None,
-           lufs: float | None = LUFS_MUC_TIEU, mau_hook: str = "", mau_body: str = "",
+           phan_sau: list[tuple[Path, float, str]] | None = None, audio: Path | None = None,
+           lufs: float | None = LUFS_MUC_TIEU, mau_hook: str = "",
            che_do: dict | None = None, cua_so_khop: float | None = None, lech_giong: float = 0.0,
            srt: Path | None = None, sub_style: str | None = None,
            kich_thuoc_ra: tuple[int, int] | None = None) -> dict:
-    """Render clip hook đã ghép tiêu đề/ảnh. Nếu có `body` + `audio`: nối thêm phần sau =
-    video body TẮT TIẾNG, lồng `audio`, dài đúng bằng audio (hết audio là hết video).
+    """Render clip hook đã ghép tiêu đề/ảnh. Nếu có `phan_sau` + `audio`: nối thêm phần sau =
+    các clip [(clip, số giây dùng, filter màu riêng clip)] nối liền nhau, TẮT TIẾNG, lồng `audio`,
+    dài đúng bằng audio (hết audio là hết video; tổng clip ngắn hơn thì đứng hình frame cuối).
     `lufs`: đưa hook về mức này (None = giữ nguyên âm lượng cả hai đoạn).
     Giọng đọc được KHỚP THEO HOOK: đo `cua_so_khop` giây đầu của giọng đọc (None = bằng thời lượng
     hook, 0 = cả file) so với mức thực tế của hook, ra MỘT mức bù rồi áp cho toàn bộ giọng đọc.
     `lech_giong`: cộng thêm dB cho giọng đọc so với hook (âm = nhỏ hơn hook) nếu tai thấy chưa đều.
-    `mau_hook`/`mau_body`: chuỗi filter chỉnh màu áp lên hình gốc (trước khi đè tiêu đề/ảnh).
+    `mau_hook`: chuỗi filter chỉnh màu áp lên hình hook (trước khi đè tiêu đề/ảnh).
     `che_do`: kết quả chon_che_do() -> bộ mã hóa + chế độ máy yếu (bicubic, không làm nét);
     None = đầy đủ với libx264.
     `kich_thuoc_ra`: (W, H) video xuất; khác kích thước hook thì hook (đã đè tiêu đề/ảnh ở độ phân giải
@@ -683,19 +751,28 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
             chains.append("[0:v]" + ",".join([mau_hook, *lam_net(nhe)]) + "[c0]")
             src = "[c0]"
         chains.append(f"{src}[1:v]overlay={ix}:{iy}:format=auto[a0]")
-        if body is None:
+        if not phan_sau:
             chains.append(f"[a0][2:v]overlay={tx}:{ty}:format=auto{thu_nho},format=yuv420p{v_cuoi}")
             maps = ["-map", "[v]", "-map", "0:a?", "-c:a", "copy"]
         else:
-            bw, bh, body_dur = probe_media(body)
             _, _, D = probe_media(audio)
             if D <= 0:
                 sys.exit(f"Không đọc được thời lượng audio: {audio}")
-            cmd += [*hwdec_args(enc), "-t", f"{D:.3f}", "-i", str(body), "-i", str(audio)]
+            # input: 0 hook, 1 ảnh, 2 tiêu đề, 3..3+K-1 các clip (đọc dư 0,5s rồi trim trong filter), 3+K giọng đọc
+            K = len(phan_sau)
+            clip_chains, kich_co = [], set()
+            for k, (p, dung, mau) in enumerate(phan_sau):
+                bw, bh, _ = probe_media(p)
+                kich_co.add(f"{bw}x{bh}")
+                cmd += [*hwdec_args(enc), "-t", f"{dung + 0.5:.3f}", "-i", str(p)]
+                clip_chains.append(f"[{3 + k}:v]{clip_filter(Wo, Ho, bw, bh, dung, mau, nhe)}[c{k}]")
+            cmd += ["-i", str(audio)]
+            a_in = 3 + K
+            thieu = max(D - sum(d for _, d, _ in phan_sau), 0) + 0.5   # tổng clip ngắn hơn -> đứng hình frame cuối
             st_hook, st_voice = to_stereo_filter(video), to_stereo_filter(audio)
             norm_hook = norm_voice = ""
-            info.update(hook=round(hook_dur, 2), body_goc=round(body_dur, 2), audio=round(D, 2),
-                        tong=round(hook_dur + D, 2), body_size=f"{bw}x{bh}->{Wo}x{Ho}")
+            info.update(hook=round(hook_dur, 2), audio=round(D, 2), tong=round(hook_dur + D, 2), so_clip=K,
+                        body_size=f"{'/'.join(sorted(kich_co))}->{Wo}x{Ho}")
             if lufs is not None:
                 print("Đo & chuẩn hóa âm lượng: hook về mức chuẩn, giọng đọc khớp theo hook...")
                 f_hook, m_hook, hook_out = chuan_am(video, st_hook, lufs)
@@ -712,9 +789,14 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
                 f"[a0][2:v]overlay={tx}:{ty}:format=auto{thu_nho},fps={FPS_RA},format=yuv420p[hv]",
                 f"[0:a]atrim=duration={hook_dur:.3f},asetpts=PTS-STARTPTS,"
                 f"apad=whole_dur={hook_dur:.3f},{st_hook}{norm_hook}[ha]",
-                # phần sau: video tắt tiếng (không map [3:a]) + giọng đọc, dài = D, đưa thẳng về WoxHo
-                f"[3:v]{body_video_filter(Wo, Ho, bw, bh, body_dur, D, mau_body, nhe)}[bv]",
-                f"[4:a]atrim=duration={D:.3f},asetpts=PTS-STARTPTS,{st_voice}{norm_voice}[ba]",
+                # phần sau: các clip tắt tiếng (không map audio của clip) nối liền, đưa thẳng về WoxHo,
+                # cắt đúng D giây + giọng đọc
+                *clip_chains,
+                # fps sau concat: tpad cần nhịp frame của luồng, thiếu thì frame bù có mốc thời gian không
+                # tăng -> bộ mã hóa bỏ đi (video hụt vài frame so với tiếng)
+                "".join(f"[c{k}]" for k in range(K)) + f"concat=n={K}:v=1:a=0,fps={FPS_RA},"
+                f"tpad=stop_mode=clone:stop_duration={thieu:.3f},trim=duration={D:.3f},setpts=PTS-STARTPTS[bv]",
+                f"[{a_in}:a]atrim=duration={D:.3f},asetpts=PTS-STARTPTS,{st_voice}{norm_voice}[ba]",
                 f"[hv][ha][bv][ba]concat=n=2:v=1:a=1{v_cuoi}[a]",
             ]
             maps = ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", AUDIO_BR]
@@ -858,7 +940,11 @@ def main():
     ap.add_argument("--video"); ap.add_argument("--tieude"); ap.add_argument("--anh")
     ap.add_argument("--drive", help="link thư mục Google Drive (chia sẻ công khai) -> tải về rồi ghép")
     ap.add_argument("--thu-muc", help="thư mục trên máy đã đặt tên file theo quy ước (Hook - / Tiêu đề - / ...)")
-    ap.add_argument("--phan-sau", help="video phần sau (tắt tiếng, nối sau clip 10s)")
+    ap.add_argument("--phan-sau", help="phần sau (tắt tiếng, nối sau clip 10s): THƯ MỤC clip -> xáo ngẫu nhiên nối tới "
+                                       "khi đủ giọng đọc, clip cuối dài hơn thì cắt; hoặc MỘT file video. "
+                                       f"Mặc định = thư mục '{THU_MUC_GOC.name}' cạnh tool (khi bộ có giọng đọc)")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="hạt giống xáo clip (cùng số = cùng thứ tự clip, để làm lại y hệt); mặc định ngẫu nhiên mỗi lần")
     ap.add_argument("--audio", help="giọng đọc lồng vào phần sau; mặc định = file mp3 trong thư mục Drive")
     ap.add_argument("--out", help="thư mục ghi kết quả (mặc định: Downloads)")
     ap.add_argument("--ti-le-tieude", type=float, default=TI_LE_RONG_TIEUDE,
@@ -920,6 +1006,9 @@ def main():
     else:
         video, tieude, anh, b, au = ask_files()
         body, audio = body or b, audio or au
+    # phần sau mặc định = kho clip "video gốc" của dự án (chỉ khi bộ có giọng đọc); --phan-sau để chọn khác
+    if body is None and audio and THU_MUC_GOC.is_dir():
+        body = THU_MUC_GOC
     if body and not audio:
         sys.exit("Có video phần sau thì cần giọng đọc: --audio hoặc file 'Giọng đọc - ....mp3' trong thư mục.")
     for p in (video, tieude, anh, body, audio, kich_ban):
@@ -929,12 +1018,33 @@ def main():
     # phụ đề chỉ ở PHẦN SAU (10s hook đã có tiêu đề + ảnh minh họa nên để sạch) -> không có phần sau thì bỏ
     lam_sub = bool(kich_ban) and bool(body) and not args.khong_sub
 
+    # các đoạn phần sau: thư mục -> xáo ngẫu nhiên clip tới khi đủ giọng đọc; một file -> dùng file đó
+    clips_sau: list[tuple[Path, float]] = []
+    if body:
+        _, _, D = probe_media(audio)
+        if body.is_dir():
+            kho = liet_ke_clip(body)
+            if not kho:
+                sys.exit(f"Thư mục {body} không có clip video nào ({', '.join(DUOI_VIDEO)}).")
+            clips_sau = chon_clip_ngau_nhien(kho, D, args.seed)
+        else:
+            clips_sau = [(body, round(min(thoi_luong_hinh(body), D), 3))]
+
     print(f"Bộ      : {ten}")
     print(f"Hook     : {video.name}")
     print(f"Tiêu đề  : {tieude.name}")
     print(f"Minh họa : {anh.name}")
     if body:
-        print(f"Gốc      : {body.name}  (tắt tiếng)")
+        if body.is_dir():
+            dai = dict(kho)
+            tong_kho = sum(dai.values())
+            print(f"Gốc      : thư mục {body.name} — {len(kho)} clip ({tong_kho:.0f}s), ghép ngẫu nhiên tới đủ giọng "
+                  f"đọc {D:.1f}s (tắt tiếng)" + ("; giọng đọc dài hơn cả kho -> có clip dùng lại" if D > tong_kho else ""))
+            print(f"Phần sau : {len(clips_sau)} clip: " + " → ".join(
+                f"{p.name} {dung:.1f}s" + (f" (cắt từ {dai[p]:.1f}s)" if dung < dai[p] - 0.05 else "")
+                for p, dung in clips_sau))
+        else:
+            print(f"Gốc      : {body.name}  (tắt tiếng)")
         print(f"Giọng đọc: {audio.name}")
     else:
         print("Phần sau : không có (chỉ ghép clip hook)")
@@ -970,21 +1080,28 @@ def main():
     imwrite_unicode(preview_path, composite_preview(frame, title_item, illus_item))
     print(f"Xem trước: {preview_path}")
 
-    mau_hook = mau_body = ""
+    mau_hook = ""
+    mau_clips = [""] * len(clips_sau)
     if not args.khong_chinh_mau:
         print("Phân tích màu để chỉnh tự động...")
         p_hook = phan_tich_mau(video, n=6)
         mau_hook = chinh_mau_filter(p_hook)
         print(f"  hook    : {p_hook}")
         items = [(video, mau_hook, [dur * 0.1, dur * 0.5, dur * 0.9])]
-        if body:
-            _, _, D = probe_media(audio)
-            p_body = phan_tich_mau(body, n=12, max_t=D)
-            mau_body = chinh_mau_filter(p_body)
+        if len(clips_sau) == 1:                   # một video gốc dài: như trước, 12 frame, 4 ảnh so sánh
+            p, L = clips_sau[0]
+            p_body = phan_tich_mau(p, n=12, max_t=L)
+            mau_clips[0] = chinh_mau_filter(p_body)
             print(f"  phần sau: {p_body}")
-            _, _, bdur = probe_media(body)
-            L = min(D, bdur)
-            items.append((body, mau_body, [L * k for k in (0.08, 0.35, 0.62, 0.9)]))
+            items.append((p, mau_clips[0], [L * k for k in (0.08, 0.35, 0.62, 0.9)]))
+        elif clips_sau:                           # nhiều clip: chỉnh màu RIÊNG từng clip (mỗi cảnh quay một khác)
+            cache: dict[Path, str] = {}
+            for i, (p, dung) in enumerate(clips_sau):
+                if p not in cache:
+                    cache[p] = chinh_mau_filter(phan_tich_mau(p, n=4, max_t=dung))
+                mau_clips[i] = cache[p]
+            print(f"  phần sau: chỉnh màu riêng {len(cache)} clip")
+            items += [(p, mau_clips[i], [dung * 0.5]) for i, (p, dung) in enumerate(clips_sau[:6])]
         mau_preview = unique_path(out_dir, f"{ten}_ghep_{stamp}_mau_truoc_sau.jpg")
         preview_mau(items, mau_preview, ffmpeg, nhe=che_do["nhe"])
         print(f"So sánh màu trước/sau: {mau_preview}")
@@ -1011,13 +1128,14 @@ def main():
     if srt_path:
         import viet_sub
         sub_style = viet_sub.force_style(args.sub_font, args.sub_co, args.sub_le_duoi)
-    info = render(video, title_item, illus_item, out_path, ffmpeg, body, audio,
+    phan_sau = [(p, dung, mau_clips[i]) for i, (p, dung) in enumerate(clips_sau)] or None
+    info = render(video, title_item, illus_item, out_path, ffmpeg, phan_sau, audio,
                   lufs=None if args.khong_chuan_am else args.lufs,
-                  mau_hook=mau_hook, mau_body=mau_body, che_do=che_do,
+                  mau_hook=mau_hook, che_do=che_do,
                   cua_so_khop=args.cua_so_khop, lech_giong=args.lech_giong,
                   srt=srt_path, sub_style=sub_style, kich_thuoc_ra=kt_ra)
     if info.get("hook"):
-        print(f"Thời lượng: hook {info['hook']}s + phần sau {info['audio']}s (video gốc {info['body_goc']}s, "
+        print(f"Thời lượng: hook {info['hook']}s + phần sau {info['audio']}s ({info['so_clip']} clip, "
               f"{info['body_size']}) = {info['tong']}s")
     if info.get("am_luong"):
         print(f"Âm lượng : {info['am_luong']}")

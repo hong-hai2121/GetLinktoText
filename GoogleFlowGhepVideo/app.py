@@ -6,23 +6,24 @@ Chạy:  python app.py  ->  tự mở trình duyệt tại http://127.0.0.1:8766
 Giao diện nằm ở web/index.html; app.py chỉ là server: giữ hàng đợi, nhật ký và chạy worker.
 
 Cách dùng:
-  1. Chọn THƯ MỤC GỐC (chứa video quay bác sĩ). Nếu trong thư mục có file mà tên chứa chữ "gốc"
-     thì chỉ dùng các file đó (bỏ qua outro, mẫu ...); không có thì dùng mọi video trong thư mục.
+  1. THƯ MỤC CLIP GỐC: kho clip ngắn quay bác sĩ, mặc định là thư mục "video gốc" cạnh tool (đã có 13 clip);
+     "Chọn…" để dùng thư mục khác. Mỗi tập, ghep_tieude.py xáo ngẫu nhiên các clip rồi nối tới khi đủ
+     giọng đọc (clip cuối dài hơn thì cắt) — xem mục 6 trong ghep_tieude.py.
   2. Dán danh sách link THƯ MỤC Drive (mỗi dòng một link; mỗi thư mục = một tập có đủ
      Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản theo quy ước tên của ghep_tieude.py).
-  3. Mỗi link được gán video gốc XOAY VÒNG: link 1 -> file 1, link 2 -> file 2 ..., hết thì quay lại
-     file đầu (tiếp nối giữa các lần thêm). Đổi thư mục Gốc thì các mục chưa xong được gán lại từ đầu.
-  4. Bấm Chạy: worker làm TỪNG tập một (GPU dùng chung): tải thư mục Drive về Downloads\\drive_<giờ>
-     (drive_thu_muc.py, không dùng gdown) -> chạy ghep_tieude.py --thu-muc <đó> --phan-sau <gốc>
-     trong tiến trình con -> video _full_ ra Downloads như chạy tay.
+  3. Bấm Chạy: worker làm TỪNG tập một (GPU dùng chung): tải thư mục Drive về Downloads\\drive_<giờ>
+     (drive_thu_muc.py, không dùng gdown) -> chạy ghep_tieude.py --thu-muc <đó> --phan-sau <thư mục clip>
+     --seed <số ngẫu nhiên> trong tiến trình con -> video _full_ ra Downloads như chạy tay. Số seed và
+     thứ tự clip đã dùng được ghi lại ở từng mục (chạy tay cùng --seed sẽ ra đúng thứ tự đó).
 
-Hàng đợi + thư mục Gốc lưu ở ~/.ghep_video_flow.json (không để file dữ liệu trong thư mục dự án).
+Hàng đợi + thư mục clip lưu ở ~/.ghep_video_flow.json (không để file dữ liệu trong thư mục dự án).
 Server chỉ nghe trên 127.0.0.1.
 """
 from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import socket
 import subprocess
@@ -37,7 +38,7 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
 import drive_thu_muc as dtm
-from ghep_tieude import TEN_VAI_TRO, downloads_dir, khong_dau, unique_path, vai_tro_theo_ten
+from ghep_tieude import THU_MUC_GOC, TEN_VAI_TRO, downloads_dir, liet_ke_clip, unique_path, vai_tro_theo_ten
 
 APP_DIR = Path(__file__).resolve().parent
 INDEX_PATH = APP_DIR / "web" / "index.html"
@@ -46,7 +47,6 @@ HOST, PORT = "127.0.0.1", 8766                  # 8765 là của tool Đăng vid
 # kiểm thử: GHEP_VIDEO_SETTINGS = file trạng thái khác, GHEP_VIDEO_OUT = thư mục ra khác Downloads
 SETTINGS_PATH = Path(os.environ.get("GHEP_VIDEO_SETTINGS") or Path.home() / ".ghep_video_flow.json")
 MAX_LOG_LINES = 3000
-DUOI_VIDEO = (".mov", ".mp4", ".mkv", ".m4v")
 VAI_BAT_BUOC = ("video", "tieude", "anh", "audio")   # thiếu thì cảnh báo ngay khi thêm link
 
 CHO, DANG, XONG, LOI = "cho", "dang", "xong", "loi"
@@ -59,22 +59,27 @@ def thu_muc_ra() -> Path:
     return Path(os.environ["GHEP_VIDEO_OUT"]) if os.environ.get("GHEP_VIDEO_OUT") else downloads_dir()
 
 
-def _khoa_tu_nhien(s: str):
-    """'gốc 2' đứng trước 'gốc 10'."""
-    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", khong_dau(s))]
+_KHO_CACHE: dict[str, tuple[tuple, list]] = {}   # thư mục -> (chữ ký file, [(tên, giây)]); web poll mỗi giây
 
 
-def danh_sach_goc(thu_muc: str) -> tuple[list[Path], list[Path]]:
-    """-> (video dùng để xoay vòng, video bị bỏ qua). Có file tên chứa chữ 'gốc' thì chỉ dùng các file đó."""
+def kho_clip(thu_muc: str) -> list[tuple[str, float]]:
+    """[(tên clip, giây)] trong thư mục clip gốc; ffprobe từng file chỉ khi danh sách file/kích thước/mtime đổi."""
     d = Path(thu_muc) if thu_muc else None
     if not d or not d.is_dir():
-        return [], []
-    vids = sorted((p for p in d.iterdir() if p.is_file() and p.suffix.lower() in DUOI_VIDEO),
-                  key=lambda p: _khoa_tu_nhien(p.name))
-    co_goc = [p for p in vids if re.search(r"\bgoc\b", khong_dau(p.stem))]
-    if co_goc:
-        return co_goc, [p for p in vids if p not in co_goc]
-    return vids, []
+        return []
+    try:
+        ky = tuple(sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in d.iterdir() if p.is_file()))
+    except OSError:
+        return []
+    cu = _KHO_CACHE.get(thu_muc)
+    if cu and cu[0] == ky:
+        return cu[1]
+    try:
+        kq = [(p.name, round(giay, 2)) for p, giay in liet_ke_clip(d)]
+    except Exception:
+        kq = []
+    _KHO_CACHE[thu_muc] = (ky, kq)
+    return kq
 
 
 def python_exe() -> str:
@@ -100,8 +105,8 @@ class State:
     def __init__(self):
         self.lock = threading.RLock()
         d = self._doc()
-        self.goc_dir = d.get("goc_dir", "")
-        self.xoay = int(d.get("xoay", 0))          # chỉ số file gốc cho link thêm tiếp theo
+        # thư mục clip gốc: đã lưu -> dùng; chưa có -> "video gốc" cạnh tool (nếu tồn tại)
+        self.goc_dir = d.get("goc_dir") or (str(THU_MUC_GOC) if THU_MUC_GOC.is_dir() else "")
         self.items = d.get("items", []) if isinstance(d.get("items"), list) else []
         for it in self.items:                      # lần trước tắt giữa chừng -> làm lại
             if it.get("status") == DANG:
@@ -124,7 +129,7 @@ class State:
 
     def save(self):
         with self.lock:
-            data = {"goc_dir": self.goc_dir, "xoay": self.xoay, "items": self.items}
+            data = {"goc_dir": self.goc_dir, "items": self.items}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -144,15 +149,6 @@ class State:
             return None
         return next((it for it in self.items if it.get("id") == item_id), None)
 
-    def gan_goc(self, it):
-        """Gán video gốc kế tiếp theo vòng xoay (gọi trong lock)."""
-        dung, _ = danh_sach_goc(self.goc_dir)
-        if dung:
-            it["goc"] = str(dung[self.xoay % len(dung)])
-            self.xoay += 1
-        else:
-            it["goc"] = ""
-
 
 S = State()
 
@@ -160,8 +156,8 @@ S = State()
 # ------------------------------------------------------------------ API
 def state_payload(after: int) -> dict:
     with S.lock:
-        dung, bo = danh_sach_goc(S.goc_dir)
-        items = [dict(it, goc_ten=Path(it["goc"]).name if it.get("goc") else "") for it in S.items]
+        kho = kho_clip(S.goc_dir)
+        items = list(S.items)
         logs = [t for n, t in S.logs if n > after]
         if after == 0:
             logs = logs[-400:]
@@ -174,8 +170,9 @@ def state_payload(after: int) -> dict:
             "current": S.current,
             "stopping": S.running and S.stop_flag.is_set(),
             "goc": {"dir": S.goc_dir, "ton_tai": bool(S.goc_dir) and Path(S.goc_dir).is_dir(),
-                    "files": [p.name for p in dung], "bo_qua": [p.name for p in bo],
-                    "ke_tiep": dung[S.xoay % len(dung)].name if dung else ""},
+                    "mac_dinh": bool(S.goc_dir) and Path(S.goc_dir) == THU_MUC_GOC,
+                    "clips": [{"ten": t, "giay": g} for t, g in kho],
+                    "tong_giay": round(sum(g for _, g in kho), 1)},
             "downloads": str(thu_muc_ra()),
             "now": time.time(),
         }
@@ -186,19 +183,14 @@ def api_set_goc_dir(data):
     if not p or not Path(p).is_dir():
         return {"ok": False, "msg": f"Không thấy thư mục: {p or '(trống)'}"}
     p = str(Path(p))
-    dung, bo = danh_sach_goc(p)
-    if not dung:
-        return {"ok": False, "msg": f"Thư mục {p} không có video nào (.mov/.mp4/.mkv)."}
+    kho = kho_clip(p)
+    if not kho:
+        return {"ok": False, "msg": f"Thư mục {p} không có clip video nào (.mov/.mp4/.mkv)."}
     with S.lock:
-        S.goc_dir, S.xoay = p, 0
-        gan_lai = 0
-        for it in S.items:                        # mục chưa xong: gán lại theo vòng mới
-            if it.get("status") in (CHO, LOI):
-                S.gan_goc(it)
-                gan_lai += 1
+        S.goc_dir = p
         S.save()
-    msg = f"Thư mục Gốc: {p} — xoay vòng {len(dung)} video" + (f", bỏ qua {len(bo)} video không có chữ 'gốc' trong tên" if bo else "")
-    S.log(msg + (f"; gán lại gốc cho {gan_lai} mục chưa xong." if gan_lai else "."))
+    msg = f"Thư mục clip gốc: {p} — {len(kho)} clip, tổng {sum(g for _, g in kho):.0f}s; mỗi tập xáo ngẫu nhiên tới đủ giọng đọc."
+    S.log(msg)
     return {"ok": True, "msg": msg}
 
 
@@ -215,7 +207,7 @@ def api_chon_thu_muc(_data):
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        p = filedialog.askdirectory(parent=root, title="Chọn thư mục chứa video Gốc",
+        p = filedialog.askdirectory(parent=root, title="Chọn thư mục chứa các clip gốc (quay bác sĩ)",
                                     initialdir=S.goc_dir or str(Path.home()))
         root.destroy()
     finally:
@@ -268,10 +260,9 @@ def api_add_links(data):
                 trung += 1
                 continue
             dang_co.add(fid)
-            it = {"id": S.next_id, "link": t, "fid": fid, "ten": "", "goc": "", "status": CHO, "buoc": "",
+            it = {"id": S.next_id, "link": t, "fid": fid, "ten": "", "status": CHO, "buoc": "",
                   "loi": "", "canh_bao": "", "them_luc": datetime.now().strftime("%d/%m %H:%M")}
             S.next_id += 1
-            S.gan_goc(it)
             S.items.append(it)
             them.append(it["id"])
         S.save()
@@ -283,8 +274,8 @@ def api_add_links(data):
     if sai:
         la_sheet = any("docs.google.com" in s for s in sai)
         phan.append(f"{len(sai)} dòng không phải link THƯ MỤC Drive" + (" (link Sheet/Docs không dùng được, mở Sheet lấy link thư mục ở cột F)" if la_sheet else ""))
-    if them and not S.goc_dir:
-        phan.append("chưa chọn thư mục Gốc — chọn rồi mới chạy được")
+    if them and not kho_clip(S.goc_dir):
+        phan.append("chưa có thư mục clip gốc — chọn rồi mới chạy được")
     msg = "; ".join(phan) + "."
     S.log(msg)
     return {"ok": bool(them), "msg": msg, "sai": sai[:10]}
@@ -309,9 +300,7 @@ def api_retry(data):
         n = 0
         for it in ds:
             if it and it.get("status") in (LOI, XONG):
-                it.update(status=CHO, buoc="", loi="")
-                if not it.get("goc") or not Path(it["goc"]).is_file():
-                    S.gan_goc(it)
+                it.update(status=CHO, buoc="", loi="")      # chạy lại = xáo clip lần nữa (seed mới)
                 n += 1
         S.save()
     return {"ok": True, "msg": f"Đưa {n} mục về chờ."}
@@ -332,8 +321,8 @@ def api_start(_data):
         cho = [it for it in S.items if it.get("status") == CHO]
         if not cho:
             return {"ok": False, "msg": "Không có mục nào đang chờ."}
-        if not danh_sach_goc(S.goc_dir)[0]:
-            return {"ok": False, "msg": "Chưa chọn thư mục Gốc (hoặc thư mục không có video)."}
+        if not kho_clip(S.goc_dir):
+            return {"ok": False, "msg": "Chưa có thư mục clip gốc (hoặc thư mục không có video)."}
         S.running = True
         S.stop_flag.clear()
     threading.Thread(target=_worker, daemon=True, name="worker").start()
@@ -386,7 +375,7 @@ def _doc_dong(it, s: str):
     for dau, buoc in _BUOC:
         if s.startswith(dau):
             it["buoc"] = buoc
-    m = re.match(r"^(XONG|Xem trước|Phụ đề|Thời lượng)\s*:\s*(.+)$", s)
+    m = re.match(r"^(XONG|Xem trước|Phụ đề|Thời lượng|Phần sau)\s*:\s*(.+)$", s)
     if not m:
         return
     k, v = m.group(1), m.group(2).strip()
@@ -394,6 +383,8 @@ def _doc_dong(it, s: str):
         it["out"] = v
     elif k == "Xem trước":
         it["preview"] = v
+    elif k == "Phần sau" and "clip:" in v:         # "6 clip: 9.mov 4.2s → 14.mov 6.7s → ..."
+        it["phan_sau"] = v
     elif k == "Phụ đề" and v.endswith("(đã đốt vào video)"):
         it["srt"] = v.split("  (")[0].strip()
     elif k == "Thời lượng":
@@ -413,14 +404,16 @@ def _ket_thuc(it, status, loi="", t0=None):
 def _chay_muc(it):
     t0 = time.time()
     with S.lock:
-        ten, link, goc = it.get("ten") or it["link"], it["link"], it.get("goc", "")
-        it.update(status=DANG, buoc="Tải Drive", loi="", bat_dau=t0, out="", srt="", preview="")
+        ten, link, goc = it.get("ten") or it["link"], it["link"], S.goc_dir
+        seed = random.randrange(1, 10 ** 9)        # mỗi lần chạy một thứ tự clip khác; ghi lại để làm lại được
+        it.update(status=DANG, buoc="Tải Drive", loi="", bat_dau=t0, out="", srt="", preview="", phan_sau="", seed=seed)
         S.current = it["id"]
         S.save()
-    S.log(f"▶ [{it['id']}] {ten}  —  gốc: {Path(goc).name if goc else '(chưa có)'}")
-    if not goc or not Path(goc).is_file():
-        S.log(f"✗ [{it['id']}] không có video Gốc")
-        return _ket_thuc(it, LOI, "Không có video Gốc (chọn lại thư mục Gốc).", t0)
+    kho = kho_clip(goc)
+    S.log(f"▶ [{it['id']}] {ten}  —  clip gốc: {Path(goc).name if goc else '(chưa có)'} ({len(kho)} clip), seed {seed}")
+    if not kho:
+        S.log(f"✗ [{it['id']}] thư mục clip gốc trống hoặc không tồn tại")
+        return _ket_thuc(it, LOI, "Không có clip gốc (chọn lại thư mục clip).", t0)
 
     # 1) tải thư mục Drive
     try:
@@ -437,7 +430,7 @@ def _chay_muc(it):
         return _ket_thuc(it, LOI, f"Tải Drive lỗi: {e}", t0)
 
     # 2) ghép bằng ghep_tieude.py (tiến trình riêng: ffmpeg/whisper nặng, lỗi không kéo sập server)
-    cmd = [python_exe(), "-u", str(TOOL), "--thu-muc", str(dest), "--phan-sau", goc]
+    cmd = [python_exe(), "-u", str(TOOL), "--thu-muc", str(dest), "--phan-sau", goc, "--seed", str(seed)]
     if os.environ.get("GHEP_VIDEO_OUT"):
         cmd += ["--out", str(thu_muc_ra())]
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}

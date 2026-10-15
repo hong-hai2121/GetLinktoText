@@ -87,7 +87,7 @@ class Api:
             "xong": dem[app.XONG], "loi": dem[app.LOI],
             "worker": worker,
             "dang_lam": dang_lam,
-            "goc": Path(goc_dir).name if goc_dir else "",
+            "goc": (f"{Path(goc_dir).name} ({len(app.kho_clip(goc_dir))} clip)" if goc_dir else ""),
             "logs": logs,
         }
 
@@ -173,7 +173,7 @@ HTML = r"""<!doctype html>
     <div><span class="k">Hàng đợi:</span> <span id="q" class="v q">0 tập</span></div>
     <div><span class="k">Worker:</span> <span id="worker" class="chip wait">dừng</span></div>
     <div><span class="k">Đang làm:</span> <span id="dang" class="v">0</span> · <span class="k">chờ:</span> <span id="cho" class="v">0</span></div>
-    <div><span class="k">Gốc:</span> <span id="goc" class="v">—</span></div>
+    <div><span class="k">Clip gốc:</span> <span id="goc" class="v">—</span></div>
     <div class="full"><span class="k">Hiện tại:</span> <span id="dl">—</span></div>
   </div>
 
