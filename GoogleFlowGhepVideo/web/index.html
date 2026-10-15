@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghép video Flow</title>
+<style>
+:root{
+  --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --fg:#111827; --dim:#6b7280;
+  --primary:#dc2626; --primary-h:#b91c1c; --blue:#2563eb; --blue-h:#1d4ed8;
+  --green:#16a34a; --green-bg:#dcfce7; --red:#dc2626; --red-bg:#fee2e2;
+  --amber:#b45309; --amber-bg:#fef3c7; --gray-bg:#f3f4f6; --blue-bg:#dbeafe;
+  --radius:12px; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);
+  font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+
+.topbar{position:sticky;top:0;z-index:20;background:#111827;color:#f9fafb;
+  display:flex;align-items:center;gap:10px;padding:10px 22px;flex-wrap:wrap}
+.topbar h1{margin:0 12px 0 0;font-size:15px;letter-spacing:.12em}
+.topbar .sub{font-size:12px;color:#9ca3af}
+.spacer{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
+  font-size:12px;background:var(--gray-bg);color:var(--dim);border:1px solid var(--border);white-space:nowrap}
+.chip b{color:var(--fg);font-weight:600}
+.chip.ok{background:var(--green-bg);color:#166534;border-color:#bbf7d0}
+.chip.bad{background:var(--red-bg);color:#991b1b;border-color:#fecaca}
+.chip.run{background:var(--blue-bg);color:#1e40af;border-color:#bfdbfe}
+.chip.warn{background:var(--amber-bg);color:var(--amber);border-color:#fde68a}
+.spin{width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.content{padding:18px 22px 30px;max-width:1180px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);margin-bottom:14px}
+.card>h3{margin:0;padding:12px 16px 8px;font-size:13.5px;display:flex;align-items:center;gap:10px}
+.card>h3 small{font-weight:400;color:var(--dim)}
+.card .body{padding:0 16px 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:980px){.grid2{grid-template-columns:1fr}}
+.hint{font-size:12px;color:var(--dim);margin:8px 0 0}
+.hint b{color:var(--fg);font-weight:600}
+.row{display:flex;gap:8px;align-items:center}
+.grow{flex:1;min-width:0}
+
+input[type=text],textarea{width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;
+  font:inherit;background:#fff;color:var(--fg)}
+textarea{font:12.5px/1.5 Consolas,"Cascadia Mono",monospace;resize:vertical;min-height:112px}
+input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
+
+.btn{border:1px solid #d1d5db;background:#fff;color:var(--fg);border-radius:8px;padding:7px 13px;
+  font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f9fafb}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--primary-h)}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.btn.blue:hover{background:var(--blue-h)}
+.btn.sm{padding:3px 9px;font-size:12px}
+.btn.link{border:0;background:none;color:var(--blue);padding:2px 4px}
+.btn.link:hover{text-decoration:underline}
+.btn.danger{color:var(--red)}
+
+.goc-list{margin:8px 0 0;font-size:12.5px}
+.goc-list .f{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border-radius:6px;background:var(--gray-bg);
+  border:1px solid var(--border)}
+.goc-list .f.next{background:var(--blue-bg);border-color:#bfdbfe;color:#1e40af;font-weight:600}
+details{font-size:12px;color:var(--dim);margin-top:6px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--border);
+  background:#fafafa;position:sticky;top:0}
+td{padding:8px;border-bottom:1px solid #f1f2f4;vertical-align:top}
+tr.dang td{background:#f5f9ff}
+td.num{width:34px;color:var(--dim);font-variant-numeric:tabular-nums}
+.ten{font-weight:600}
+.ten.cho-ten{font-weight:400;color:var(--dim);font-style:italic}
+.lnk{font-size:11.5px;color:var(--dim);word-break:break-all}
+.lnk a{color:var(--dim)}
+.warn-t{font-size:12px;color:var(--amber);margin-top:2px}
+.err-t{font-size:12px;color:var(--red);margin-top:3px;max-width:340px;word-break:break-word}
+.goc-c{font-size:12.5px;white-space:nowrap}
+.st{white-space:nowrap}
+.muted{color:var(--dim);font-size:12px}
+.empty{padding:22px;text-align:center;color:var(--dim)}
+.tbl-wrap{max-height:460px;overflow:auto;border-top:1px solid var(--border)}
+
+pre#log{margin:0;height:260px;overflow:auto;background:#0b1220;color:#d1d5db;border-radius:0 0 var(--radius) var(--radius);
+  padding:10px 12px;font:12px/1.5 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word}
+
+#toast{position:fixed;right:20px;bottom:20px;max-width:460px;background:#111827;color:#fff;padding:10px 14px;
+  border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);
+  transition:all .2s;pointer-events:none;z-index:50}
+#toast.show{opacity:1;transform:none}
+#toast.err{background:#7f1d1d}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>GHÉP VIDEO FLOW</h1>
+  <span class="sub">Hook + tiêu đề + minh họa + video gốc + giọng đọc + phụ đề</span>
+  <span class="spacer"></span>
+  <span id="chipRun" class="chip">Đang dừng</span>
+  <span id="chipQ" class="chip">0 tập</span>
+  <button class="btn sm" onclick="api('/api/mo',{loai:'downloads'})">Mở Downloads</button>
+</div>
+
+<div class="content">
+  <div class="grid2">
+    <div class="card">
+      <h3>1. Thư mục Gốc <small>video quay bác sĩ, tắt tiếng, lồng giọng đọc</small></h3>
+      <div class="body">
+        <div class="row">
+          <input id="gocDir" type="text" class="grow" placeholder="D:\video edit\goc" spellcheck="false">
+          <button class="btn" onclick="chonThuMuc()">Chọn…</button>
+          <button class="btn" onclick="luuGoc()">Lưu</button>
+        </div>
+        <div id="gocInfo" class="goc-list"></div>
+        <p class="hint">Link mới được gán video gốc <b>xoay vòng</b>: link 1 → file 1, link 2 → file 2…, hết thì quay lại file đầu.
+          Thư mục có file tên chứa chữ <b>“gốc”</b> thì chỉ dùng các file đó.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2. Thêm link thư mục Drive <small>mỗi dòng một link</small></h3>
+      <div class="body">
+        <textarea id="links" placeholder="https://drive.google.com/drive/folders/14UIsTKTCXNaWSJCmG5jEgIkOCn-R4whq&#10;https://drive.google.com/drive/folders/..." spellcheck="false"></textarea>
+        <div class="row" style="margin-top:8px">
+          <span class="muted grow">Mỗi thư mục là một tập, có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet không dùng được.</span>
+          <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>3. Hàng đợi <small id="qSum"></small>
+      <span class="spacer"></span>
+      <button id="btnStart" class="btn blue sm" onclick="api('/api/start')">▶ Chạy</button>
+      <button id="btnStop" class="btn sm" onclick="api('/api/stop')">■ Dừng</button>
+      <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
+      <button class="btn sm" onclick="api('/api/clear_done')">Bỏ mục đã xong</button>
+    </h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Tập</th><th>Video gốc</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Nhật ký <small>tải Drive + log của ghep_tieude.py</small><span class="spacer"></span>
+      <button class="btn sm" onclick="logLines=[];$('log').textContent=''">Xóa màn hình</button></h3>
+    <pre id="log"></pre>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let seq = 0, logLines = [], lastKey = '', state = null, gocDirDirty = false, toastT = 0;
+
+function toast(msg, err){
+  if (!msg) return;
+  const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 4200);
+}
+async function api(path, body){
+  try{
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {})});
+    const j = await r.json();
+    if (j.msg) toast(j.msg, !j.ok);
+    tick();
+    return j;
+  }catch(e){ toast('Mất kết nối server: ' + e, true); return {ok:false}; }
+}
+async function chonThuMuc(){ toast('Đang mở hộp thoại chọn thư mục…'); gocDirDirty = false; await api('/api/chon_thu_muc'); }
+async function luuGoc(){ const j = await api('/api/set_goc_dir', {dir: $('gocDir').value}); if (j.ok) gocDirDirty = false; }
+$('gocDir').addEventListener('input', () => gocDirDirty = true);
+$('gocDir').addEventListener('keydown', e => { if (e.key === 'Enter') luuGoc(); });
+async function themLink(){
+  const text = $('links').value.trim();
+  if (!text) return toast('Dán link thư mục Drive vào ô trước.', true);
+  const j = await api('/api/add_links', {text});
+  if (j.ok) $('links').value = (j.sai || []).join('\n');
+}
+
+const fmt = s => { s = Math.max(0, Math.round(s)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+
+function renderGoc(g){
+  if (!gocDirDirty && document.activeElement !== $('gocDir')) $('gocDir').value = g.dir || '';
+  let h = '';
+  if (!g.dir) h = '<span class="chip warn">Chưa chọn thư mục Gốc</span>';
+  else if (!g.ton_tai) h = '<span class="chip bad">Không thấy thư mục này nữa</span>';
+  else if (!g.files.length) h = '<span class="chip bad">Thư mục không có video</span>';
+  else {
+    h = `<div class="muted">Xoay vòng ${g.files.length} video (ô xanh = link thêm tiếp theo sẽ dùng):</div>`;
+    h += g.files.map(f => `<span class="f${f === g.ke_tiep ? ' next' : ''}">${esc(f)}</span>`).join('');
+    if (g.bo_qua.length) h += `<details><summary>Bỏ qua ${g.bo_qua.length} video không có chữ “gốc” trong tên</summary>${g.bo_qua.map(esc).join(' · ')}</details>`;
+  }
+  $('gocInfo').innerHTML = h;
+}
+
+function stCell(it, now){
+  if (it.status === 'dang'){
+    const t = it.bat_dau ? fmt(now - it.bat_dau) : '';
+    return `<span class="chip run"><span class="spin"></span> ${esc(it.buoc || 'Đang chạy')}</span> <span class="muted" data-bd="${it.bat_dau||''}">${t}</span>`;
+  }
+  if (it.status === 'xong'){
+    const tl = it.thoi_luong ? ` · video ${fmt(it.thoi_luong)}` : '';
+    return `<span class="chip ok">✓ Xong</span><div class="muted">làm ${fmt(it.giay_chay||0)}${tl}</div>`;
+  }
+  if (it.status === 'loi') return `<span class="chip bad">✗ Lỗi</span><div class="err-t">${esc(it.loi)}</div>`;
+  return `<span class="chip">Chờ</span>` + (it.loi ? `<div class="muted">${esc(it.loi)}</div>` : '');
+}
+function kqCell(it){
+  const b = [];
+  if (it.out && it.status === 'xong'){
+    b.push(`<button class="btn sm blue" onclick="api('/api/mo',{id:${it.id},loai:'video'})">▶ Xem</button>`);
+    b.push(`<button class="btn sm" title="Mở thư mục, chọn sẵn file video" onclick="api('/api/mo',{id:${it.id},loai:'thu_muc_video'})">📁</button>`);
+  }
+  if (it.preview) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'preview'})">ảnh bố cục</button>`);
+  if (it.thu_muc) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'tai'})">file Drive</button>`);
+  return b.join(' ');
+}
+function actCell(it){
+  if (it.status === 'dang') return '';
+  const b = [];
+  if (it.status === 'xong' || it.status === 'loi') b.push(`<button class="btn sm" onclick="api('/api/retry',{id:${it.id}})">Chạy lại</button>`);
+  b.push(`<button class="btn sm link danger" onclick="if(confirm('Bỏ mục này khỏi hàng đợi?'))api('/api/delete',{id:${it.id}})">Xóa</button>`);
+  return b.join(' ');
+}
+function renderItems(s){
+  const items = s.items;
+  const key = JSON.stringify([items, s.running, s.stopping]);
+  if (key !== lastKey){
+    lastKey = key;
+    $('tbody').innerHTML = items.length ? items.map((it, i) => `
+      <tr class="${it.status}">
+        <td class="num">${i + 1}</td>
+        <td><div class="ten${it.ten ? '' : ' cho-ten'}">${esc(it.ten || 'đang lấy tên thư mục…')}</div>
+            <div class="lnk"><a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.link)}</a></div>
+            ${it.canh_bao ? `<div class="warn-t">⚠ ${esc(it.canh_bao)}</div>` : ''}</td>
+        <td class="goc-c">${it.goc_ten ? esc(it.goc_ten) : '<span class="chip warn">chưa có</span>'}</td>
+        <td class="st">${stCell(it, s.now)}</td>
+        <td>${kqCell(it)}</td>
+        <td style="white-space:nowrap;text-align:right">${actCell(it)}</td>
+      </tr>`).join('') : '<tr><td colspan="6" class="empty">Chưa có link nào — dán link thư mục Drive ở ô số 2.</td></tr>';
+  } else {
+    document.querySelectorAll('[data-bd]').forEach(el => { const bd = +el.dataset.bd; if (bd) el.textContent = fmt(s.now - bd); });
+  }
+  const c = st => items.filter(x => x.status === st).length;
+  $('qSum').textContent = items.length ? `${items.length} tập · ${c('cho')} chờ · ${c('dang')} đang làm · ${c('xong')} xong · ${c('loi')} lỗi` : '';
+  $('chipQ').innerHTML = `<b>${items.length}</b> tập`;
+  const run = $('chipRun');
+  if (s.stopping){ run.className = 'chip warn'; run.textContent = 'Đang dừng…'; }
+  else if (s.running){ const cur = items.find(x => x.id === s.current); run.className = 'chip run';
+    run.innerHTML = `<span class="spin"></span> Đang chạy${cur ? ': ' + esc(cur.buoc || '') : ''}`; }
+  else { run.className = 'chip'; run.textContent = 'Đang dừng'; }
+  $('btnStart').disabled = s.running || !c('cho');
+  $('btnStop').disabled = !s.running || s.stopping;
+}
+function renderLog(lines){
+  if (!lines.length) return;
+  const pre = $('log'), atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
+  logLines = logLines.concat(lines).slice(-1500);
+  pre.textContent = logLines.join('\n');
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+let busy = false;
+async function tick(){
+  if (busy) return; busy = true;
+  try{
+    const s = await (await fetch('/api/state?after=' + seq)).json();
+    if (s.log_seq < seq){ seq = 0; logLines = []; }       // server khởi động lại
+    seq = s.log_seq; state = s;
+    renderGoc(s.goc); renderItems(s); renderLog(s.logs);
+  }catch(e){
+    $('chipRun').className = 'chip bad'; $('chipRun').textContent = 'Mất kết nối server';
+  }finally{ busy = false; }
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>
