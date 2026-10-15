@@ -186,25 +186,31 @@ class GetTextService:
             pass
 
     def clean_link(self, line: str, fallback_index: int | None = None):
+        """Tách (số thứ tự, link, nhãn) từ một dòng danh sách.
+
+        Nhãn = phần chữ đứng trước https://... (ví dụ 'Kb25:'), được ghi SAU số
+        thứ tự tự đánh trong file Word. Dòng chỉ có link trần thì nhãn = None.
+        """
         line = line.strip()
         match = re.match(r"^\s*(\d+)[\.\s]+\s*(https?://[^\s\"'<>]+)", line)
         if match:
-            return int(match.group(1)), match.group(2).rstrip(".,;)]}>")
+            return int(match.group(1)), match.group(2).rstrip(".,;)]}>"), None
 
         url_match = re.search(r"(https?://[^\s\"'<>]+)", line)
         if url_match:
             extracted_url = url_match.group(1).rstrip(".,;)]}>")
+            label = line[: url_match.start()].strip().rstrip(":-–—.").strip() or None
             if fallback_index is not None:
-                return fallback_index, extracted_url
+                return fallback_index, extracted_url, label
 
             self._link_counter += 1
-            return self._link_counter, extracted_url
+            return self._link_counter, extracted_url, label
 
         if fallback_index is not None:
-            return fallback_index, line
+            return fallback_index, line, None
 
         self._link_counter += 1
-        return self._link_counter, line
+        return self._link_counter, line, None
 
     def check_title_blacklist(self, title: str):
         if not title or title == "Không thể lấy tiêu đề":
@@ -372,9 +378,11 @@ class GetTextService:
         refined_text: str | None,
         title_suggestion: str | None = None,
         audio_duration: float | None = None,
+        label: str | None = None,
     ):
         para = doc.add_paragraph()
-        run = para.add_run(f"{video_number}. {link}")
+        heading = f"{video_number} {label}. {link}" if label else f"{video_number}. {link}"
+        run = para.add_run(heading)
         run.font.color.rgb = RGBColor(255, 0, 0)
         run.font.size = Pt(11)
         doc.add_paragraph(f"Tiêu đề: {title}")
@@ -412,10 +420,11 @@ class GetTextService:
     def process_video(self, index: int, link: str, doc: Document, driver, browser):
         self._check_stop_requested()
         self._fail_reason = None
-        video_number, link = self.clean_link(link, index)
+        video_number, link, label = self.clean_link(link, index)
         link = link.strip().strip('"').strip("'")
         video_number = video_number if video_number is not None else index
-        self.log(f"\n🎥 Đang xử lý video {video_number}: {link}")
+        display_name = f"{video_number} {label}" if label else str(video_number)
+        self.log(f"\n🎥 Đang xử lý video {display_name}: {link}")
 
         download_result = self.download_video(link, video_number, browser)
         if not download_result:
@@ -463,7 +472,9 @@ class GetTextService:
             refined_text = "Đây là video quá dài để lấy nội dung."
             title_suggestion = None
 
-        self.export_word(doc, video_number, link, title, transcript, refined_text, title_suggestion, audio_duration)
+        self.export_word(
+            doc, video_number, link, title, transcript, refined_text, title_suggestion, audio_duration, label=label
+        )
         return transcript_path
 
     def process_videos(self):
@@ -506,7 +517,7 @@ class GetTextService:
 
         for idx, raw_line in enumerate(links_for_run, start=1):
             self._check_stop_requested()
-            video_number, link_key = self.clean_link(raw_line)
+            video_number, link_key, _label = self.clean_link(raw_line)
             link_key = link_key.strip().strip('"').strip("'")
             self.log(f"🔄 Đang xử lý video {idx}/{len(links_for_run)} (ID={video_number})...")
 

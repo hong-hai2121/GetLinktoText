@@ -375,13 +375,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "msg": str(e)})
 
 
-def main():
+def make_server():
+    """Mở server trên PORT; cổng bận (app đang chạy sẵn?) thì lấy cổng trống bất kỳ.
+    Trả về (httpd, url). Dùng chung cho main() và cửa sổ trạng thái app_gui.py."""
     try:
         httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError:
-        # cổng bận (có thể app đang chạy sẵn) -> lấy cổng trống bất kỳ
         httpd = ThreadingHTTPServer((HOST, 0), Handler)
-    url = f"http://{HOST}:{httpd.server_address[1]}/"
+    return httpd, f"http://{HOST}:{httpd.server_address[1]}/"
+
+
+def main():
+    httpd, url = make_server()
     print(f"Đăng video tự động — giao diện web: {url}   (Ctrl+C để thoát)")
     S.log(f"✓ Server sẵn sàng tại {url} — giao diện web thay cửa sổ desktop, backend giữ nguyên.")
     threading.Timer(0.4, lambda: webbrowser.open(url)).start()

@@ -909,7 +909,7 @@ class GetTextApp:
                 self.log(f"❌ Lỗi khi copy: {e2}")
 
     def _make_download_path(self, ext):
-        """Tạo đường dẫn file tải xuống trong Downloads với timestamp và đuôi ext."""
+        """Tạo đường dẫn file tải xuống trong Downloads: tên theo ngày tải + hậu tố phiên bản _v1, _v2, ..."""
         downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
         try:
             os.makedirs(downloads_dir, exist_ok=True)
@@ -919,8 +919,13 @@ class GetTextApp:
         import datetime
 
         base = os.path.splitext(os.path.basename(config.OUTPUT_WORD_FILE))[0] or "final_result"
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        return os.path.join(downloads_dir, f"{base}_{timestamp}.{ext}")
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        version = 1
+        while True:
+            file_path = os.path.join(downloads_dir, f"{base}_{date_str}_v{version}.{ext}")
+            if not os.path.exists(file_path):
+                return file_path
+            version += 1
 
     def download_result_docx(self):
         """Lưu nội dung tab 'Nội dung Word' thành file .docx giữ màu trong thư mục Downloads."""
