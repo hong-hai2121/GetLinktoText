@@ -27,7 +27,9 @@ CHUNK_LENGTH_MS = 3 * 60 * 1000  # 3 phút/đoạn
 DEFAULT_MAX_CHUNKS = 2  # Mặc định nhận diện 5 đoạn đầu
 
 # Ngôn ngữ nhận diện: "auto" = dò theo audio, hoặc mã ngôn ngữ Whisper ("vi", "en", ...)
-TRANSCRIBE_LANGUAGE = "auto"
+# Mặc định Tiếng Việt — nội dung xử lý chủ yếu là tiếng Việt, khỏi bị nhạc/intro đánh lừa;
+# video tiếng khác thì chọn "Tự động nhận diện" trong GUI.
+TRANSCRIBE_LANGUAGE = "vi"
 DEFAULT_LANGUAGE = "vi"  # Dùng khi dò ngôn ngữ thất bại hoặc độ tin cậy thấp
 LANGUAGE_DETECT_MIN_PROB = 0.5  # Ngưỡng cho tiếng Việt / tiếng Anh
 LANGUAGE_DETECT_OTHER_MIN_PROB = 0.85  # Ngôn ngữ lạ phải chắc hơn mới nhận (tránh audio nhiễu)
@@ -50,6 +52,22 @@ LOG_PROB_THRESHOLD = -1.0  # Segment tệ hơn mức này -> giải mã lại �
 REPETITION_PENALTY = 1.1  # >1 phạt token đã sinh, chặn vòng lặp ngay từ lúc giải mã
 NO_REPEAT_NGRAM_SIZE = 0  # >0 cấm lặp n-gram (4 là hợp lý); 0 = tắt vì có thể hạ nhẹ độ chính xác
 MAX_WORD_REPEAT = 3  # Dọn hậu kỳ: giữ tối đa bấy nhiêu lần lặp liên tiếp của một từ
+
+# --- Chế độ bài hát (video ca nhạc) ---
+# Giọng hát trên nền nhạc: VAD cắt nhầm thành "không phải tiếng nói" và turbo chỉ bịa
+# câu spam. Chế độ này tắt VAD, tách nhạc bằng Demucs rồi nhận diện 2 lượt bằng large-v3.
+SONG_MODE = False  # GUI đặt theo checkbox mỗi lần chạy
+SONG_MODE_MODEL = "large-v3"  # Giọng hát cần model đầy đủ; turbo gần như chỉ ảo giác
+# Câu Whisper hay bịa ra khi gặp nhạc (học từ video YouTube Việt) — chỉ lọc ở chế độ bài hát
+SONG_SPAM_PATTERNS = (
+    "hãy subscribe",
+    "subscribe cho kênh",
+    "đăng ký kênh",
+    "ghiền mì gõ",
+    "la la school",
+    "cảm ơn các bạn đã theo dõi",
+    "không bỏ lỡ những video",
+)
 
 USE_TITLE_MODE = False
 MAX_CHUNKS_RUNTIME = DEFAULT_MAX_CHUNKS

@@ -36,6 +36,7 @@ class GetTextApp:
         self.skip_long_video_var = tk.BooleanVar(value=False)
         self.move_processed_links_var = tk.BooleanVar(value=False)
         self.srt_timestamps_var = tk.BooleanVar(value=False)
+        self.song_mode_var = tk.BooleanVar(value=False)
         self.max_chunks_var = tk.IntVar(value=config.DEFAULT_MAX_CHUNKS)
         self.max_links_per_run_var = tk.IntVar(value=0)
         self.is_running = False
@@ -334,6 +335,10 @@ class GetTextApp:
         ttk.Checkbutton(
             c1, text="Lấy câu văn dạng SRT: [giờ:phút:giây] ở đầu mỗi câu",
             variable=self.srt_timestamps_var, style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=3)
+        ttk.Checkbutton(
+            c1, text="🎵 Video ca nhạc: tách nhạc để lấy lời bài hát",
+            variable=self.song_mode_var, style="Card.TCheckbutton",
         ).pack(anchor="w", pady=3)
 
         # Cột 2 — Chia nhỏ & tiêu đề
@@ -1115,6 +1120,7 @@ class GetTextApp:
             move_processed_links=self.move_processed_links_var.get(),
             language=language,
             srt_timestamps=self.srt_timestamps_var.get(),
+            song_mode=self.song_mode_var.get(),
         )
 
         try:

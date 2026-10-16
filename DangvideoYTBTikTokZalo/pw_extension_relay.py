@@ -431,7 +431,10 @@ class ExtensionRelay:
         from websockets.asyncio.server import serve
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
-        async with serve(self._handler, "127.0.0.1", 0) as server:
+        # max_size: websockets mặc định chặn khung > 1 MB -> HTML YouTube Studio (~900 KB sau khi
+        # bọc JSON) hay screenshot lớn làm extension bị ngắt "message too big". Nới lên 256 MB
+        # (chỉ loopback, không lo bị tấn công); max_queue giữ mặc định.
+        async with serve(self._handler, "127.0.0.1", 0, max_size=256 * 1024 * 1024) as server:
             sockets = getattr(server, "sockets", None) or server.server.sockets
             self._port = sockets[0].getsockname()[1]
             self._started.set()
@@ -563,4 +566,12 @@ class ExtensionRelay:
         ws = self._cdp_ws
         if ws is None:
             return
-        asyncio.ensure_future(ws.send(json.dumps(msg)))
+
+        async def gui():
+            # Kết nối Playwright có thể vừa đóng (vd. đóng tab điều khiển -> extension ngắt) ->
+            # nuốt lỗi để asyncio không in "Task exception was never retrieved" ra nhật ký.
+            try:
+                await ws.send(json.dumps(msg))
+            except Exception:
+                pass
+        asyncio.ensure_future(gui())

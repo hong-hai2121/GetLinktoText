@@ -72,7 +72,9 @@ class Api:
             dem = {st: sum(1 for it in items if it.get("status") == st)
                    for st in (pq.STATUS_WAIT, pq.STATUS_RUNNING, pq.STATUS_DONE, pq.STATUS_ERROR)}
             logs = [t for _, t in S.logs[-40:]]
-            worker, chrome = S.running, S.ext_ok
+            worker = S.running
+            # ext_ok giờ là dict theo nền tảng {youtube, tiktok, zalo}; đèn "Chrome" lấy YouTube
+            chrome = bool(S.ext_ok.get("youtube")) if isinstance(S.ext_ok, dict) else bool(S.ext_ok)
         song = bool(self._thread and self._thread.is_alive()) and not self._dung_roi
         giay = int(time.time() - self._t0)
         return {

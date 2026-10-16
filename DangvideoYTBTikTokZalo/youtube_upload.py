@@ -87,10 +87,16 @@ def _fill_textbox(page, container_ids, text, log):
     sel = ", ".join(f'ytcp-uploads-dialog #{cid} #textbox' for cid in container_ids)
     box = page.locator(sel).first
     box.wait_for(state="visible", timeout=60000)
-    box.click()
-    page.keyboard.press("Control+a")
-    page.keyboard.press("Delete")
+    # Studio tự điền tên file vào tiêu đề -> xoá sạch và KIỂM TRA trống trước khi gõ (dang_common.clear_field)
+    from dang_common import clear_field
+    clear_field(page, box, log, "ô " + container_ids[0])
     box.fill(text)
+    page.wait_for_timeout(300)
+    got = " ".join(box.inner_text().split())
+    if not got.startswith(" ".join(text.split())[:40]):
+        # fill không ăn (hiếm) -> gõ lại bằng insert_text
+        clear_field(page, box, log, "ô " + container_ids[0])
+        page.keyboard.insert_text(text)
 
 
 def _norm(s):
@@ -195,7 +201,36 @@ def _remove_last_tag(page, container, tag_input):
     return False
 
 
+TAGS_NHAP_TOI_DA = 490     # ngưỡng an toàn dưới 500 của Studio: lọc trong code TRƯỚC khi nhập
+
+
+def studio_tag_count(tags):
+    """Cách Studio đếm (đo thật 15/10/2026: 16 thẻ, 396 ký tự chữ -> Studio báo 413/500):
+    mỗi thẻ = số ký tự + 2 nếu có dấu cách (Studio bọc ngoặc kép), cộng 1 dấu phẩy giữa các thẻ."""
+    tags = [t for t in tags if t]
+    if not tags:
+        return 0
+    return sum(len(t) + (2 if " " in t else 0) for t in tags) + (len(tags) - 1)
+
+
+def loc_the_truoc_khi_nhap(tags, log, toi_da=TAGS_NHAP_TOI_DA):
+    """Bỏ các từ khóa làm tổng vượt `toi_da` (theo cách đếm của Studio) NGAY TRONG CODE, trước khi gõ.
+    Giữ thứ tự, bỏ từ cuối danh sách trở lên; không bao giờ bỏ 'bác sĩ hội' nếu còn chỗ."""
+    tags = [t.strip() for t in tags if t and t.strip()]
+    giu = list(tags)
+    bo = []
+    while giu and studio_tag_count(giu) > toi_da:
+        # bỏ thẻ cuối cùng KHÔNG thuộc đuôi thương hiệu trước; hết thì mới bỏ từ cuối
+        idx = next((i for i in range(len(giu) - 1, -1, -1) if "bác sĩ hội" not in giu[i].lower()), len(giu) - 1)
+        bo.append(giu.pop(idx))
+    if bo:
+        log(f"  Bỏ {len(bo)} từ khóa để tổng <= {toi_da} ký tự (Studio đếm): {', '.join(reversed(bo))}")
+    log(f"  Thẻ sẽ nhập: {len(giu)} thẻ, {studio_tag_count(giu)}/{toi_da} ký tự (cách đếm Studio)")
+    return giu
+
+
 def _fill_tags(page, tags, log):
+    tags = loc_the_truoc_khi_nhap(tags, log)
     log(f"Điền thẻ: {', '.join(tags)}")
     container = page.locator('ytcp-form-input-container#tags-container').first
     # Ô thẻ nằm trong phần nâng cao -> bấm "Hiện chế độ cài đặt nâng cao" nếu chưa mở
@@ -218,7 +253,8 @@ def _fill_tags(page, tags, log):
     # 2) Thêm từng thẻ (dấu phẩy để chốt thẻ), kiểm tra giới hạn sau mỗi thẻ
     tag_input = container.locator('input#text-input, input').first
     tag_input.wait_for(state="visible", timeout=10000)
-    tag_input.click()
+    from dang_common import clear_field
+    clear_field(page, tag_input, log, "ô nhập thẻ")       # xoá chữ dở trong ô trước khi gõ
     added, dropped = [], []
     for t in tags:
         t = t.strip()
@@ -373,61 +409,92 @@ def _set_schedule(page, when, log):
     bước đều đọc lại chữ Studio hiển thị; lệch là dừng (raise) để KHÔNG bấm Lưu."""
     when = _round_15(when)
     log(f"Lên lịch công bố: {when:%d/%m/%Y %H:%M}")
+    # Studio có 2 giao diện: (cũ) radio SCHEDULE trong nhóm chế độ hiển thị; (mới, 10/2026) khung
+    # riêng "Lên lịch" (ytcp-video-visibility-select #second-container, p#visibility-title) bên
+    # dưới khung "Lưu hoặc xuất bản" — bấm vào khung đó mới hiện ytcp-datetime-picker.
     radio = page.locator('tp-yt-paper-radio-button[name="SCHEDULE"]').first
-    radio.scroll_into_view_if_needed()
-    radio.click()
-    page.wait_for_timeout(800)
+    try:
+        radio.wait_for(state="visible", timeout=3000)
+        radio.scroll_into_view_if_needed()
+        radio.click()
+        log("  (giao diện cũ: radio Lên lịch)")
+    except Exception:
+        khung = page.locator('ytcp-video-visibility-select p#visibility-title, p#visibility-title').filter(
+            has_text=re.compile(r"Lên lịch|Schedule", re.I)).first
+        khung.wait_for(state="attached", timeout=15000)
+        khung.scroll_into_view_if_needed()
+        khung.click()
+        log("  (giao diện mới: khung Lên lịch)")
+    page.wait_for_timeout(1000)
     picker = page.locator('ytcp-datetime-picker').first
     picker.wait_for(state="attached", timeout=15000)
 
-    # --- Ngày: mở hộp chọn, gõ theo đúng định dạng đang hiển thị ---
+    # --- Ngày: nếu ô ngày đã đúng thì thôi; không thì mở hộp chọn, gõ theo định dạng đang hiển thị ---
     date_trig = picker.locator('#datepicker-trigger').first
     date_trig.scroll_into_view_if_needed()
-    date_trig.click()
-    page.wait_for_timeout(600)
-    date_input = page.locator('ytcp-date-picker input, ytcp-date-picker tp-yt-paper-input input').first
-    date_input.wait_for(state="visible", timeout=10000)
-    sample = ""
-    try:
-        sample = date_input.input_value(timeout=2000)
-    except Exception:
-        pass
-    if not sample:
-        sample = date_trig.inner_text()
-    text = _format_date_like(sample, when)
-    log(f"  Ngày: mẫu '{sample.strip()}' -> gõ '{text}'")
-    date_input.click()
-    page.keyboard.press("Control+a")
-    page.keyboard.type(text)
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(800)
+    shown0 = re.sub(r"\s+", " ", date_trig.inner_text(timeout=3000)).strip()
+    digits0 = re.findall(r"\d+", shown0)
+    if (str(when.day) in digits0 and str(when.year) in shown0
+            and (str(when.month) in digits0 or f"{when.month:02d}" in digits0)):
+        log(f"  Ngày đang hiện '{shown0}' đã đúng.")
+    else:
+        date_trig.click()
+        page.wait_for_timeout(600)
+        date_input = page.locator('ytcp-date-picker input, ytcp-date-picker tp-yt-paper-input input').first
+        date_input.wait_for(state="visible", timeout=10000)
+        sample = ""
+        try:
+            sample = date_input.input_value(timeout=2000)
+        except Exception:
+            pass
+        if not sample:
+            sample = shown0
+        text = _format_date_like(sample, when)
+        log(f"  Ngày: mẫu '{sample.strip()}' -> gõ '{text}'")
+        date_input.click()
+        page.keyboard.press("Control+a")
+        page.keyboard.type(text)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(800)
 
-    # --- Giờ: chọn trong danh sách bước 15 phút ---
+    # --- Giờ ---
     hhmm = f"{when:%H:%M}"
     hhmm_12 = when.strftime("%I:%M %p").lstrip("0")
     time_trig = picker.locator('#time-of-day-trigger').first
-    time_trig.scroll_into_view_if_needed()
-    time_trig.click()
-    page.wait_for_timeout(600)
-    item = page.locator('tp-yt-paper-item').filter(
-        has_text=re.compile(rf"^\s*({re.escape(hhmm)}|{re.escape(hhmm_12)})\s*$", re.I)).first
-    try:
-        item.wait_for(state="visible", timeout=5000)
-        item.scroll_into_view_if_needed()
-        item.click()
-    except Exception:
-        # Có bản Studio cho gõ thẳng giờ vào ô
-        tin = page.locator('ytcp-datetime-picker input[type="text"], ytcp-time-of-day-picker input').first
-        tin.wait_for(state="visible", timeout=5000)
-        tin.click()
+    time_box = picker.locator('#time-of-day-container input').first
+    if time_trig.count():
+        # giao diện cũ: danh sách bước 15 phút
+        time_trig.scroll_into_view_if_needed()
+        time_trig.click()
+        page.wait_for_timeout(600)
+        item = page.locator('tp-yt-paper-item').filter(
+            has_text=re.compile(rf"^\s*({re.escape(hhmm)}|{re.escape(hhmm_12)})\s*$", re.I)).first
+        try:
+            item.wait_for(state="visible", timeout=5000)
+            item.scroll_into_view_if_needed()
+            item.click()
+        except Exception:
+            tin = page.locator('ytcp-datetime-picker input[type="text"], ytcp-time-of-day-picker input').first
+            tin.wait_for(state="visible", timeout=5000)
+            tin.click()
+            page.keyboard.press("Control+a")
+            page.keyboard.type(hhmm)
+            page.keyboard.press("Enter")
+        page.wait_for_timeout(800)
+        shown_time = re.sub(r"\s+", " ", time_trig.inner_text(timeout=3000)).strip()
+    else:
+        # giao diện mới: ô text gõ thẳng HH:MM + Enter (đã xác nhận 15/10/2026)
+        time_box.wait_for(state="visible", timeout=10000)
+        time_box.click()
+        page.wait_for_timeout(300)
         page.keyboard.press("Control+a")
-        page.keyboard.type(hhmm)
+        page.keyboard.type(hhmm, delay=60)
         page.keyboard.press("Enter")
-    page.wait_for_timeout(800)
+        page.wait_for_timeout(1000)
+        shown_time = (time_box.input_value(timeout=3000) or "").strip()
 
     # --- Xác minh bằng chữ Studio hiển thị ---
     shown_date = re.sub(r"\s+", " ", date_trig.inner_text(timeout=3000)).strip()
-    shown_time = re.sub(r"\s+", " ", time_trig.inner_text(timeout=3000)).strip()
     log(f"  Studio hiển thị: ngày '{shown_date}', giờ '{shown_time}'")
     digits = re.findall(r"\d+", shown_date)
     ok_date = (str(when.day) in digits or f"{when.day:02d}" in digits) and str(when.year) in shown_date
@@ -548,8 +615,20 @@ def upload_video(page, video_path, title, description, playlist=None, tags=None,
     done_btn.click()
     log("✓ Đã bấm Lưu/Xuất bản.")
 
-    # Hộp thoại 'video đang xử lý' hoặc 'chia sẻ video' sau khi lưu -> đóng
-    page.wait_for_timeout(2000)
+    # Hộp thoại sau khi lưu: 'Đã lên lịch cho video' (có link, nút Đóng) / 'video đang xử lý' /
+    # 'chia sẻ video' -> lấy link nếu có rồi đóng
+    page.wait_for_timeout(3000)
+    try:
+        kq = page.locator('tp-yt-paper-dialog').filter(visible=True).filter(
+            has_text=re.compile(r"Đã lên lịch|đã lên lịch|đã xuất bản|Đã xuất bản|Video published|scheduled", re.I)).first
+        if kq.count():
+            txt = " ".join(kq.inner_text(timeout=3000).split())
+            m = re.search(r"https://(?:youtu\.be|www\.youtube\.com|youtube\.com)/\S+", txt)
+            if m:
+                video_link = m.group(0)
+            log(f"  Studio: {txt[:140]}")
+    except Exception:
+        pass
     for sel in ['ytcp-uploads-still-processing-dialog #close-button',
                 'ytcp-uploads-still-processing-dialog ytcp-button',
                 'ytcp-uploads-share-dialog #close-icon-button',
@@ -559,6 +638,14 @@ def upload_video(page, video_path, title, description, playlist=None, tags=None,
             if btn.is_visible(timeout=2000):
                 btn.click(timeout=3000)
                 break
+        except Exception:
+            pass
+    else:
+        try:
+            dong = page.locator('tp-yt-paper-dialog ytcp-button, tp-yt-paper-dialog button').filter(
+                has_text=re.compile(r"^\s*(Đóng|Close)\s*$")).filter(visible=True).first
+            if dong.count():
+                dong.click(timeout=3000)
         except Exception:
             pass
 

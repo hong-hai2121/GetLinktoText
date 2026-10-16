@@ -4,5 +4,45 @@
   "profile_dir": "Profile 9",
   "extension_token": "zHRVIe2RvNEqBe-6E-9jiFPEcjNFztVOPIF41LIJ7SI",
   "client_name": "Đăng video YouTube",
-  "connect_timeout_sec": 60
+  "connect_timeout_sec": 60,
+  "channel_name": "",
+  "channel_url": "",
+  "schedule_times": [
+    "08:00",
+    "19:00"
+  ],
+  "schedule_start": "2026-10-15",
+  "default_desc": "",
+  "default_playlist": "Dạ dày tiêu hóa",
+  "default_tags": "",
+  "default_kids": false,
+  "default_hashtags": "",
+  "default_platforms": [
+    "youtube",
+    "tiktok",
+    "zalo"
+  ],
+  "platforms": {
+    "youtube": {
+      "browser_path": "",
+      "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
+      "profile_dir": "Profile 9",
+      "extension_token": "zHRVIe2RvNEqBe-6E-9jiFPEcjNFztVOPIF41LIJ7SI",
+      "client_name": "Đăng video YouTube"
+    },
+    "tiktok": {
+      "browser_path": "",
+      "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
+      "profile_dir": "Profile 85",
+      "extension_token": "71csQ4X5qrD9FvPEQz9F80DGWnJGhTfp9orsHBUpQlE",
+      "client_name": "Đăng video TikTok"
+    },
+    "zalo": {
+      "browser_path": "C:\\Program Files\\CocCoc\\Browser\\Application\\browser.exe",
+      "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\CocCoc\\Browser\\User Data",
+      "profile_dir": "Profile 12",
+      "extension_token": "MBN0IOlz1x3eALhylmaKK1kuPYQUMejPF89DelOknn4",
+      "client_name": "Đăng video Zalo"
+    }
+  }
 }

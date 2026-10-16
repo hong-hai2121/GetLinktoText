@@ -1,7 +1,9 @@
 import gc
 import os
 import re
+import shutil
 import subprocess
+import sys
 from collections import Counter
 
 from pydub import AudioSegment
@@ -37,11 +39,12 @@ def build_transcribe_opts(language):
     return opts
 
 
-def _make_language_probe(audio_path, seconds=30):
-    """Cắt đoạn đầu ra file tạm để dò ngôn ngữ — tránh nạp cả file dài vào RAM."""
-    probe_path = f"{audio_path}_langprobe.wav"
+def _make_language_probe(audio_path, seconds=30, offset=0.0):
+    """Cắt một đoạn ngắn ra file tạm để dò ngôn ngữ — tránh nạp cả file dài vào RAM."""
+    probe_path = f"{audio_path}_langprobe_{int(offset)}.wav"
     command = [
         config.FFMPEG_PATH, "-y",
+        "-ss", str(offset),
         "-t", str(seconds),
         "-i", audio_path,
         "-ac", "1", "-ar", "16000", "-vn",
@@ -55,31 +58,76 @@ def _make_language_probe(audio_path, seconds=30):
         return None
 
 
+def _language_probe_offsets(duration, probe_len):
+    """Chọn mốc dò: đầu + giữa + gần cuối. Video mở đầu bằng nhạc không còn đánh lừa được
+    vì hai điểm sau thường rơi vào phần có tiếng nói."""
+    if not duration or duration <= probe_len * 2:
+        return [0.0]
+    offsets = [
+        0.0,
+        max(0.0, duration / 2 - probe_len / 2),
+        # lùi 2 lần probe_len khỏi cuối: 30s cuối thường là nhạc kết / lời chào
+        max(0.0, duration - probe_len * 2),
+    ]
+    # Các mốc cách nhau tối thiểu nửa probe: file 1-2 phút vẫn có 2 điểm dò
+    picked = []
+    for off in offsets:
+        if all(abs(off - prev) >= probe_len / 2 for prev in picked):
+            picked.append(off)
+    return picked
+
+
 def detect_language(audio_path):
-    """Dò ngôn ngữ dựa trên đoạn đầu của audio; thất bại hoặc thiếu tin cậy -> DEFAULT_LANGUAGE."""
+    """Dò ngôn ngữ ở nhiều điểm của audio rồi cộng dồn độ tin cậy theo ngôn ngữ;
+    thất bại hoặc thiếu tin cậy -> DEFAULT_LANGUAGE."""
     from faster_whisper.audio import decode_audio
     from faster_whisper.vad import VadOptions
 
     fallback = config.DEFAULT_LANGUAGE
     fallback_label = config.LANGUAGE_LABELS.get(fallback, fallback)
-    probe_path = _make_language_probe(audio_path)
-    try:
-        audio = decode_audio(probe_path or audio_path, sampling_rate=16000)
-        # vad_filter: bỏ nhạc nền / khoảng lặng, chỉ dò trên phần có giọng nói
-        language, probability, _ = config.model.detect_language(
-            audio,
-            vad_filter=True,
-            vad_parameters=VadOptions(min_silence_duration_ms=500),
-        )
-    except Exception as e:
-        print(f"⚠️ Không dò được ngôn ngữ ({e}), dùng {fallback_label}.")
+    probe_len = 30
+    offsets = _language_probe_offsets(get_audio_duration(audio_path), probe_len)
+
+    results = []
+    for offset in offsets:
+        probe_path = _make_language_probe(audio_path, seconds=probe_len, offset=offset)
+        try:
+            audio = decode_audio(probe_path or audio_path, sampling_rate=16000)
+            # vad_filter: bỏ nhạc nền / khoảng lặng, chỉ dò trên phần có giọng nói
+            language, probability, _ = config.model.detect_language(
+                audio,
+                vad_filter=True,
+                vad_parameters=VadOptions(min_silence_duration_ms=500),
+            )
+            results.append((offset, language, probability))
+        except Exception as e:
+            print(f"⚠️ Không dò được ngôn ngữ tại giây {offset:.0f} ({e}).")
+        finally:
+            if probe_path and os.path.exists(probe_path):
+                try:
+                    os.remove(probe_path)
+                except Exception:
+                    pass
+
+    if not results:
+        print(f"⚠️ Không dò được ngôn ngữ, dùng {fallback_label}.")
         return fallback
-    finally:
-        if probe_path and os.path.exists(probe_path):
-            try:
-                os.remove(probe_path)
-            except Exception:
-                pass
+
+    if len(results) > 1:
+        detail = " | ".join(
+            f"{off:.0f}s: {config.LANGUAGE_LABELS.get(lang, lang)} ({prob:.0%})"
+            for off, lang, prob in results
+        )
+        print(f"🔎 Dò ngôn ngữ tại các mốc — {detail}")
+
+    # Cộng dồn độ tin cậy theo ngôn ngữ: thắng ở nhiều điểm ăn đứt thắng đậm ở một điểm.
+    # Độ tin cậy lấy theo điểm dò tốt nhất của ngôn ngữ thắng — điểm rơi vào nhạc
+    # cho phiếu bầu sai/thấp, không được phép kéo tụt điểm rơi vào tiếng nói rõ.
+    totals = {}
+    for _, lang, prob in results:
+        totals[lang] = totals.get(lang, 0.0) + prob
+    language = max(totals, key=totals.get)
+    probability = max(prob for _, lang, prob in results if lang == language)
 
     label = config.LANGUAGE_LABELS.get(language, language)
     threshold = (
@@ -92,6 +140,135 @@ def detect_language(audio_path):
         return fallback
     print(f"🌐 Ngôn ngữ nhận diện: {label} ({probability:.0%})")
     return language
+
+
+# ── Chế độ bài hát ──────────────────────────────────────────────────────────
+# Tham số riêng cho giọng hát: tắt VAD (VAD coi giọng hát là "không phải tiếng nói"),
+# word_timestamps + hallucination_silence_threshold để model tự bỏ đoạn bịa quanh khoảng lặng.
+_SONG_EXTRA_OPTS = dict(
+    vad_filter=False,
+    word_timestamps=True,
+    hallucination_silence_threshold=2.0,
+)
+
+
+def _is_song_spam(text):
+    low = text.lower()
+    return any(pattern in low for pattern in config.SONG_SPAM_PATTERNS)
+
+
+def _get_song_model():
+    """Nạp model cho chế độ bài hát, cache vào loaded_models — không bao giờ del (xem config)."""
+    name = config.SONG_MODE_MODEL
+    cached = config.loaded_models.get(name)
+    if cached is not None:
+        return cached
+    print(f"🔄 Đang tải model '{name}' cho chế độ bài hát (lần đầu có thể mất vài phút)...")
+    model = config.WhisperModel(
+        config.resolve_model(name),
+        device=config.device,
+        compute_type=config.compute_type,
+        download_root=config.WHISPER_MODEL_PATH,
+    )
+    config.loaded_models[name] = model
+    print(f"✅ Đã tải model '{name}'.")
+    return model
+
+
+def _separate_vocals(audio_path):
+    """Tách giọng hát khỏi nhạc bằng Demucs (tiến trình riêng). None nếu không tách được."""
+    if getattr(sys, "frozen", False):
+        print("⚠️ Bản đóng gói không kèm Demucs — bỏ qua bước tách nhạc.")
+        return None
+    out_dir = f"{audio_path}_demucs"
+    try:
+        if config.device != "cuda":
+            print("🎛️ Đang tách giọng hát khỏi nhạc (Demucs, chạy CPU — có thể mất vài phút)...")
+        else:
+            print("🎛️ Đang tách giọng hát khỏi nhạc (Demucs)...")
+        subprocess.run(
+            [sys.executable, "-m", "demucs", "--two-stems=vocals", "-o", out_dir, audio_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        stem = os.path.splitext(os.path.basename(audio_path))[0]
+        vocals = os.path.join(out_dir, "htdemucs", stem, "vocals.wav")
+        if not os.path.isfile(vocals):
+            print("⚠️ Không thấy file giọng hát sau khi tách — chỉ nhận diện trên audio gốc.")
+            return None
+        print("✅ Đã tách xong giọng hát.")
+        return vocals
+    except Exception as e:
+        print(f"⚠️ Tách nhạc thất bại ({e}) — chỉ nhận diện trên audio gốc.")
+        return None
+
+
+def _collect_song_segments(model, path, opts):
+    """Nhận diện một lượt, trả về [(start, end, text)] đã lọc câu spam/ảo giác."""
+    segments, _ = model.transcribe(path, **opts)
+    collected = []
+    for seg in segments:
+        text = collapse_repetitions(seg.text.strip())
+        if not text:
+            continue
+        if _is_song_spam(text):
+            print(f"🧹 Bỏ câu model bịa: {text[:60]}")
+            continue
+        collected.append((seg.start, seg.end, text))
+    return collected
+
+
+def _merge_song_segments(base, extra):
+    """Ghép lượt giọng-đã-tách vào lượt bản gốc: chỉ thêm segment rơi vào khoảng trống."""
+    merged = list(base)
+    for start, end, text in extra:
+        duration = max(end - start, 1e-6)
+        covered = 0.0
+        for base_start, base_end, _ in base:
+            lo, hi = max(start, base_start), min(end, base_end)
+            if hi > lo:
+                covered += hi - lo
+        if covered / duration < 0.5:
+            merged.append((start, end, text))
+    merged.sort(key=lambda item: item[0])
+    return merged
+
+
+def _transcribe_song(audio_path, offset_s, language):
+    """Nhận diện lời bài hát: 2 lượt (bản gốc + giọng đã tách nhạc) rồi ghép theo mốc thời gian.
+
+    Mỗi lượt bắt được những đoạn lượt kia bỏ sót — giọng hát là trường hợp khó,
+    kết quả thường đạt phần lớn lời nhưng không tuyệt đối.
+    """
+    model = _get_song_model()
+    opts = build_transcribe_opts(language)
+    opts.pop("initial_prompt", None)  # prompt khiến model bịa nhiều hơn khi gặp nhạc
+    opts.update(_SONG_EXTRA_OPTS)
+
+    print("🎼 Lượt 1/2: nhận diện trên bản gốc...")
+    segments = _collect_song_segments(model, audio_path, opts)
+
+    vocals = _separate_vocals(audio_path)
+    if vocals:
+        try:
+            print("🎤 Lượt 2/2: nhận diện trên giọng đã tách nhạc...")
+            vocal_segments = _collect_song_segments(model, vocals, opts)
+            before = len(segments)
+            segments = _merge_song_segments(segments, vocal_segments)
+            if len(segments) > before:
+                print(f"🧩 Lượt 2 bổ sung {len(segments) - before} câu vào khoảng lượt 1 bỏ sót.")
+        finally:
+            shutil.rmtree(f"{audio_path}_demucs", ignore_errors=True)
+
+    if not segments:
+        print("⚠️ Không nhận diện được lời bài hát trong audio này.")
+        return ""
+    if config.SRT_TIMESTAMPS:
+        return "\n".join(
+            f"[{_format_timestamp(start + offset_s)}] {text}" for start, _, text in segments
+        )
+    return " ".join(text for _, _, text in segments)
 
 
 def collapse_repetitions(text, max_repeat=None, max_phrase_len=6):
@@ -336,12 +513,21 @@ def transcribe_whisper(
     # Khóa ngôn ngữ một lần cho cả video: các chunk của cùng video không bị nhận nhầm khác nhau
     language = config.TRANSCRIBE_LANGUAGE
     if language == "auto":
-        language = detect_language(audio_path)
+        if config.SONG_MODE:
+            # Nhạc đánh lừa bước dò ngôn ngữ nên không dò — dùng ngôn ngữ mặc định
+            language = config.DEFAULT_LANGUAGE
+            print(
+                f"🎵 Chế độ bài hát: bỏ qua dò ngôn ngữ, dùng {config.LANGUAGE_LABELS.get(language, language)}."
+            )
+        else:
+            language = detect_language(audio_path)
     else:
         print(f"🌐 Ngôn ngữ đã chọn: {config.LANGUAGE_LABELS.get(language, language)}")
     opts = build_transcribe_opts(language)
 
     def transcribe_one(path, offset_s=0.0):
+        if config.SONG_MODE:
+            return _transcribe_song(path, offset_s, language).strip()
         segments, _ = config.model.transcribe(path, **opts)
         text_local = _segments_to_text(segments, offset_s)
         # Chuyển model khi lặp từ - hiện tắt (đặt ENABLE_MODEL_SWITCH_ON_REPEAT=True để bật lại)

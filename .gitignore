@@ -127,3 +127,7 @@ ADS_facebook/fb_ads_noApi/service_account.json
 
 # model whisper cho tool ghép video (bản đóng gói mới cần)
 GoogleFlowGhepVideo/models/
+
+# HTML/screenshot dò DOM (có thể chứa thông tin tài khoản)
+DangvideoYTBTikTokZalo/dom_dump/
+DangvideoYTBTikTokZalo/video_qua_dai.json

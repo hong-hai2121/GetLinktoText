@@ -14,8 +14,8 @@
   --radius:12px; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{display:flex;background:var(--bg);color:var(--fg);
+html{height:100%}
+body{margin:0;min-height:100%;display:flex;background:var(--bg);color:var(--fg);
   font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
 
 /* ---------------- sidebar ---------------- */
@@ -31,6 +31,8 @@ body{display:flex;background:var(--bg);color:var(--fg);
 .nav button:hover{background:var(--sidebar-2)}
 .nav button.active{background:var(--sidebar-2);box-shadow:inset 3px 0 0 var(--primary)}
 .nav .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;font-weight:700}
+.nav .cnt{margin-left:auto;font-size:11px;color:var(--sidebar-dim)}
+.nav .cnt b{color:#fbbf24;font-weight:600}
 .ic-yt{background:#dc2626;color:#fff}
 .ic-tt{background:#0f172a;color:#fff;border:1px solid #334155}
 .ic-za{background:#2563eb;color:#fff;font-size:13px}
@@ -64,6 +66,8 @@ body{display:flex;background:var(--bg);color:var(--fg);
 .card .body{padding:0 16px 14px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media (max-width:980px){.grid2{grid-template-columns:1fr}}
+.hint{font-size:12px;color:var(--dim);margin:8px 0 0}
+.hint b{color:var(--fg);font-weight:600}
 
 label{font-size:12.5px;color:var(--dim);display:block;margin-bottom:3px}
 input[type=text],input[type=password],input[type=date],textarea{
@@ -76,6 +80,9 @@ textarea{resize:vertical}
 .grow{flex:1}
 .check{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--fg);cursor:pointer}
 .check input{width:15px;height:15px;accent-color:var(--primary)}
+.pfchecks{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.pfchecks .check input{accent-color:var(--blue)}
+.pfchecks .lbl{font-size:12.5px;color:var(--dim)}
 
 .btn{padding:7px 15px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:var(--fg);
   font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .12s}
@@ -90,14 +97,18 @@ textarea{resize:vertical}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 10px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{position:sticky;top:0;background:#f9fafb;color:var(--dim);font-weight:600;font-size:11.5px;
-  text-transform:uppercase;letter-spacing:.04em}
+  text-transform:uppercase;letter-spacing:.04em;z-index:1}
 th,td{padding:8px 10px;border-top:1px solid var(--border);text-align:left;vertical-align:top}
 tbody tr:hover{background:#f9fafb}
-.tbl-wrap{max-height:320px;overflow:auto;border-top:1px solid var(--border)}
+.tbl-wrap{max-height:340px;overflow:auto;border-top:1px solid var(--border)}
 td.num,th.num{width:34px;color:var(--dim)}
 td.sel,th.sel{width:30px}
+th.pf,td.pf{width:98px;white-space:nowrap}
 .vid b{font-weight:600;word-break:break-all}
 .vid small{display:block;color:var(--dim);word-break:break-all}
+.vid .ttl{display:block;color:var(--fg);word-break:break-word;cursor:text;border-radius:5px;padding:0 3px;margin-left:-3px}
+.vid .ttl:hover{background:#eef2ff;outline:1px dashed #a5b4fc}
+.vid .ttl.none{color:#9ca3af;font-style:italic}
 .st{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
 .st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .st-wait{background:var(--gray-bg);color:#4b5563}
@@ -106,53 +117,53 @@ td.sel,th.sel{width:30px}
 @keyframes blink{50%{opacity:.25}}
 .st-done{background:var(--green-bg);color:#15803d}
 .st-err{background:var(--red-bg);color:#b91c1c}
-td.kq{word-break:break-all;color:var(--dim);max-width:380px}
+.na{color:#c7cdd6}
+td.kq{word-break:break-all;color:var(--dim);max-width:360px;font-size:12.5px}
 td.kq a{color:var(--blue)}
+td.kq .pfn{color:var(--fg);font-weight:600}
+td.kq .er{color:#b91c1c}
 .empty{padding:26px;text-align:center;color:var(--dim)}
 
 /* ---------------- nhật ký ---------------- */
-#log{background:#0b1220;color:#9fe3b4;border-radius:0 0 var(--radius) var(--radius);
+.logbox{background:#0b1220;color:#9fe3b4;border-radius:0 0 var(--radius) var(--radius);
   font:12px/1.55 Consolas,monospace;padding:12px 14px;height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 
-/* ---------------- toast / placeholder ---------------- */
+/* ---------------- toast ---------------- */
 #toasts{position:fixed;top:14px;right:16px;z-index:99;display:flex;flex-direction:column;gap:8px}
 .toast{background:#111827;color:#f9fafb;padding:10px 16px;border-radius:10px;font-size:13px;
   box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:380px;animation:pop .18s ease-out}
 .toast.err{background:#7f1d1d}
 @keyframes pop{from{transform:translateY(-6px);opacity:0}}
-.placeholder{padding:60px 20px;text-align:center;color:var(--dim)}
-.placeholder .big{font-size:40px;margin-bottom:10px}
-.placeholder h3{color:var(--fg);margin:0 0 6px}
 </style>
 </head>
 <body>
 
 <aside class="sidebar">
-  <div class="brand"><h1>ĐĂNG VIDEO</h1><p>tự động · lên lịch</p></div>
+  <div class="brand"><h1>ĐĂNG VIDEO</h1><p>tự động · lên lịch · 3 nền tảng</p></div>
   <nav class="nav">
-    <button class="active" data-page="youtube"><span class="ic ic-yt">▶</span>YouTube</button>
-    <button data-page="tiktok"><span class="ic ic-tt">♪</span>TikTok</button>
-    <button data-page="zalo"><span class="ic ic-za">Z</span>Zalo</button>
+    <button class="active" data-page="youtube"><span class="ic ic-yt">▶</span>YouTube<span class="cnt" id="cnt-youtube"></span></button>
+    <button data-page="tiktok"><span class="ic ic-tt">♪</span>TikTok<span class="cnt" id="cnt-tiktok"></span></button>
+    <button data-page="zalo"><span class="ic ic-za">Z</span>Zalo<span class="cnt" id="cnt-zalo"></span></button>
   </nav>
-  <div class="side-foot">Server cục bộ · điều khiển Chrome đang mở qua Playwright Extension</div>
+  <div class="side-foot">Server cục bộ · điều khiển trình duyệt đang mở qua Playwright Extension · mỗi nền tảng một profile</div>
 </aside>
 
 <div class="main">
   <div class="topbar">
     <h2 id="pageTitle">YouTube</h2>
-    <span class="chip">Profile <b id="profile">…</b></span>
+    <span class="chip" id="chipBrowser">Chrome · Profile <b>…</b></span>
     <span class="chip" id="extChip">Extension: …</span>
-    <span class="chip">Kênh&nbsp;<a id="channel" href="#" target="_blank" rel="noopener">(chưa kiểm tra)</a></span>
+    <span class="chip" id="chipAcc">Kênh&nbsp;<a id="account" href="#" target="_blank" rel="noopener">(chưa kiểm tra)</a></span>
     <span class="spacer"></span>
-    <span class="run-ind" id="runInd"><span class="spin"></span>Đang chạy…</span>
+    <span class="run-ind" id="runInd"><span class="spin"></span><span id="runText">Đang chạy…</span></span>
     <button class="btn blue" id="btnCheck">Kiểm tra kết nối</button>
   </div>
 
-  <!-- ============================= YOUTUBE ============================= -->
+  <!-- ============================= YOUTUBE (+ hàng đợi chung) ============================= -->
   <div class="content" id="page-youtube">
 
     <div class="card">
-      <h3>Kết nối <small>— token của Playwright Extension (bấm icon extension trong Chrome để sao chép)</small></h3>
+      <h3>Kết nối <small>— token của Playwright Extension trong profile YouTube (bấm icon extension trong Chrome để sao chép)</small></h3>
       <div class="body row">
         <div class="grow"><label>Token extension</label>
           <input type="password" id="token" autocomplete="off" placeholder="PLAYWRIGHT_MCP_EXTENSION_TOKEN=…"></div>
@@ -163,7 +174,7 @@ td.kq a{color:var(--blue)}
 
     <div class="grid2">
       <div class="card">
-        <h3>Lịch đăng mặc định <small>— YouTube tự công bố đúng giờ (chế độ Lên lịch)</small></h3>
+        <h3>Lịch đăng mặc định <small>— dùng chung: YouTube "Lên lịch", TikTok "Lên lịch", Zalo "Hẹn giờ"</small></h3>
         <div class="body">
           <div class="row">
             <div class="grow"><label>Khung giờ mỗi ngày</label>
@@ -174,11 +185,12 @@ td.kq a{color:var(--blue)}
             <button class="btn" id="btnSaveSchedule">Lưu lịch</button>
             <button class="btn" id="btnReassign">Xếp lại giờ cho hàng đợi</button>
           </div>
+          <p class="hint">TikTok chỉ nhận lịch trong 10 ngày tới (sớm nhất 15 phút); YouTube làm tròn 15 phút, TikTok 5 phút.</p>
         </div>
       </div>
 
       <div class="card">
-        <h3>Mặc định cho mọi video <small>— tiêu đề tạm = tên file, sửa sau trong Studio</small></h3>
+        <h3>Mặc định cho mọi video <small>— YouTube: mô tả + thẻ + playlist; TikTok/Zalo chỉ lấy hashtag ở dòng cuối mô tả</small></h3>
         <div class="body">
           <label>Mô tả</label>
           <textarea id="desc" rows="2"></textarea>
@@ -194,30 +206,70 @@ td.kq a{color:var(--blue)}
       </div>
     </div>
 
-    <div class="card">
-      <h3>Thêm video <small>— mỗi dòng một link Google Drive hoặc đường dẫn file trên máy</small></h3>
-      <div class="body row">
-        <textarea id="links" rows="4" class="grow" placeholder="https://drive.google.com/file/d/…&#10;D:\video\bai1.mp4"></textarea>
-        <button class="btn blue" id="btnAdd" style="align-self:stretch">Thêm vào<br>hàng đợi</button>
+    <div class="card" id="seoCard">
+      <h3>Tạo nội dung bằng AI <small>— chọn video trong Downloads hoặc dán link Drive → bóc băng (large-v3-turbo) → Gemini viết tiêu đề, mô tả, thẻ, hashtag → thêm vào hàng đợi</small></h3>
+      <div class="body">
+        <div class="row">
+          <select id="seoFile" class="grow"><option value="">— Chọn video trong Downloads —</option></select>
+          <button class="btn" id="btnSeoRefresh" title="Đọc lại thư mục Downloads">↻</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="seoDrive" class="grow" placeholder="hoặc dán link Google Drive của video…">
+          <button class="btn blue" id="btnSeoRun">Tạo nội dung</button>
+        </div>
+        <div class="hint" id="seoStatus" style="margin-top:8px">Chưa chạy.</div>
+        <div id="seoQuaDai" style="display:none;margin-top:8px">
+          <div class="hint" style="margin:0 0 4px">Video dài hơn 3 phút đã bỏ qua (chưa bóc băng), link lưu lại:</div>
+          <ul id="seoQuaDaiList" style="margin:0;padding-left:18px;font-size:12.5px"></ul>
+        </div>
+        <div id="seoResult" style="display:none;margin-top:10px">
+          <div class="row"><span class="lbl" style="width:90px">Tiêu đề</span><input type="text" id="seoTitle" class="grow"></div>
+          <div class="row" style="margin-top:6px"><span class="lbl" style="width:90px">Thẻ YouTube</span><input type="text" id="seoTags" class="grow"></div>
+          <div class="row" style="margin-top:6px"><span class="lbl" style="width:90px">Hashtag</span><input type="text" id="seoHashtags" class="grow" placeholder="TikTok/Zalo: tiêu đề + các hashtag này"></div>
+          <div class="row" style="margin-top:6px"><span class="lbl" style="width:90px">Mô tả YouTube</span><textarea id="seoDesc" rows="8" class="grow"></textarea></div>
+          <div class="row" style="margin-top:8px;justify-content:flex-end;gap:8px">
+            <span class="hint" style="margin:0">Sửa trực tiếp nếu cần, rồi</span>
+            <button class="btn primary" id="btnSeoAdd">Thêm vào hàng đợi với nội dung này</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="card">
-      <h3>Hàng đợi</h3>
+      <h3>Thêm video <small>— mỗi dòng: link Google Drive hoặc đường dẫn file, thêm <b>| tiêu đề</b> (TikTok/Zalo đăng đúng dòng tiêu đề này; thiếu thì tạm dùng tên file)</small></h3>
+      <div class="body">
+        <div class="row">
+          <textarea id="links" rows="4" class="grow" placeholder="https://drive.google.com/file/d/… | 2 cốc nước mỗi sáng giúp hết trào ngược&#10;D:\video\bai1.mp4 | Tiêu đề video 2"></textarea>
+          <button class="btn blue" id="btnAdd" style="align-self:stretch">Thêm vào<br>hàng đợi</button>
+        </div>
+        <div class="pfchecks" style="margin-top:10px">
+          <span class="lbl">Đăng lên:</span>
+          <label class="check"><input type="checkbox" class="pfsel" value="youtube" checked>YouTube</label>
+          <label class="check"><input type="checkbox" class="pfsel" value="tiktok" checked>TikTok</label>
+          <label class="check"><input type="checkbox" class="pfsel" value="zalo" checked>Zalo</label>
+          <span class="hint" style="margin:0">— cùng một giờ công bố cho cả ba</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Hàng đợi <small>— trạng thái riêng từng nền tảng; worker chạy YouTube → TikTok → Zalo, mỗi nền tảng nối một trình duyệt</small></h3>
       <div class="toolbar">
         <button class="btn primary" id="btnStart">▶&nbsp; Bắt đầu đăng</button>
         <button class="btn" id="btnStop">⏹ Dừng sau video này</button>
+        <button class="btn" id="btnRetry" title="Đưa các ô 'lỗi' về 'chờ' để đăng lại phần chưa xong">↻ Đăng lại lỗi</button>
         <button class="btn" id="btnDelete">Xoá dòng chọn</button>
         <button class="btn" id="btnClear">Dọn mục xong/lỗi</button>
         <label class="check" style="margin-left:auto">
-          <input type="checkbox" id="dryRun">Chỉ chạy thử 1 video (làm hết các bước, không bấm Lưu)</label>
+          <input type="checkbox" id="dryRun">Chỉ chạy thử 1 video mỗi nền tảng (làm hết các bước, không bấm nút cuối)</label>
       </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
             <th class="sel"><input type="checkbox" id="selAll"></th>
-            <th class="num">#</th><th>Video</th><th>Giờ công bố (YouTube)</th>
-            <th>Trạng thái</th><th>Kết quả / lỗi</th>
+            <th class="num">#</th><th>Video · tiêu đề (bấm để sửa)</th><th>Giờ công bố</th>
+            <th class="pf">YouTube</th><th class="pf">TikTok</th><th class="pf">Zalo</th>
+            <th>Kết quả / lỗi</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -227,30 +279,23 @@ td.kq a{color:var(--blue)}
 
     <div class="card">
       <h3>Nhật ký</h3>
-      <div id="log"></div>
+      <div class="logbox" id="log"></div>
     </div>
   </div>
 
-  <!-- ============================ PLACEHOLDER ============================ -->
-  <div class="content" id="page-tiktok" style="display:none">
-    <div class="card"><div class="placeholder">
-      <div class="big">♪</div><h3>TikTok — sắp có</h3>
-      <p>Tab này sẽ dùng cùng cơ chế: dán danh sách link, lịch đăng mặc định,<br>điều khiển Chrome đang mở qua extension.</p>
-    </div></div>
-  </div>
-  <div class="content" id="page-zalo" style="display:none">
-    <div class="card"><div class="placeholder">
-      <div class="big">Z</div><h3>Zalo — sắp có</h3>
-      <p>Tab này sẽ dùng cùng cơ chế: dán danh sách link, lịch đăng mặc định,<br>điều khiển Chrome đang mở qua extension.</p>
-    </div></div>
-  </div>
+  <!-- ===================== TIKTOK / ZALO: sinh từ template trong JS ===================== -->
+  <div class="content" id="page-tiktok" style="display:none"></div>
+  <div class="content" id="page-zalo" style="display:none"></div>
 </div>
 
 <div id="toasts"></div>
 
 <script>
 const $ = id => document.getElementById(id);
-let logSeq = 0, formLoaded = false, lastState = null;
+const PF = ["youtube", "tiktok", "zalo"];
+const PF_LABEL = {youtube: "YouTube", tiktok: "TikTok", zalo: "Zalo"};
+const PF_SHORT = {youtube: "YT", tiktok: "TT", zalo: "Zalo"};
+let logSeq = 0, formLoaded = false, lastState = null, currentPage = "youtube";
 const checked = new Set();
 
 /* ------------------------------ tiện ích ------------------------------ */
@@ -260,7 +305,7 @@ function toast(msg, ok = true) {
   el.className = "toast" + (ok ? "" : " err");
   el.textContent = msg;
   $("toasts").appendChild(el);
-  setTimeout(() => el.remove(), 4200);
+  setTimeout(() => el.remove(), 4800);
 }
 async function post(path, data) {
   try {
@@ -280,9 +325,102 @@ function formData() {
           desc: $("desc").value, playlist: $("playlist").value,
           tags: $("tags").value, kids: $("kids").checked};
 }
+const selectedPlatforms = () => [...document.querySelectorAll(".pfsel:checked")].map(c => c.value);
+const pending = (it, p) => it.platforms.includes(p) && it.pf[p].status === "chờ";
+
+/* ------------------------------ trang TikTok / Zalo (template) ------------------------------ */
+function platformPage(n) {
+  const L = PF_LABEL[n];
+  const noiDung = n === "tiktok"
+    ? "ô mô tả TikTok = tiêu đề (một dòng) rồi từng hashtag gõ + Enter để thành thẻ có hiệu lực; lên lịch tối đa 10 ngày"
+    : "ô nội dung Zalo = tiêu đề (một dòng) + hashtag cách nhau dấu cách; hẹn giờ đăng";
+  return `
+    <div class="card">
+      <h3>Kết nối <small>— ${L} dùng trình duyệt/profile riêng (config.json → "platforms" → "${n}")</small></h3>
+      <div class="body">
+        <div class="row">
+          <span class="chip">Trình duyệt <b id="${n}-browser">…</b></span>
+          <span class="chip">Profile <b id="${n}-profile">…</b></span>
+          <span class="chip" id="${n}-ext">Extension: …</span>
+          <span class="chip" id="${n}-acc">Tài khoản: (chưa kiểm tra)</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="grow"><label>Token extension (trong profile ${L})</label>
+            <input type="password" id="${n}-token" autocomplete="off" placeholder="PLAYWRIGHT_MCP_EXTENSION_TOKEN=…"></div>
+          <button class="btn" id="${n}-eye" title="Hiện / ẩn token">👁</button>
+          <button class="btn" id="${n}-saveToken">Lưu token</button>
+          <button class="btn blue" id="${n}-check">Kiểm tra đăng nhập</button>
+        </div>
+        <p class="hint">Chuẩn bị một lần cho profile này: cài Playwright Extension → bật "Cho phép truy cập URL tệp" → sao chép token dán vào đây → đăng nhập ${L} sẵn.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Nội dung đăng <small>— ${noiDung}</small></h3>
+      <div class="body">
+        <div class="row">
+          <div class="grow"><label>Hashtag (dùng chung TikTok &amp; Zalo; trống = lấy dòng cuối của Mô tả ở tab YouTube)</label>
+            <input type="text" id="${n}-hashtags" placeholder="#daday #traonguoc #bacsihoi"></div>
+          <button class="btn" id="${n}-saveHashtags">Lưu hashtag</button>
+        </div>
+        <p class="hint">Sẽ đăng: <b>&lt;tiêu đề của từng video&gt;</b> <b id="${n}-preview">…</b></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Hàng đợi ${L} <small>— cùng danh sách với tab YouTube, chỉ các mục có tick ${L}; thêm video ở tab YouTube</small></h3>
+      <div class="toolbar">
+        <button class="btn primary" id="${n}-start">▶&nbsp; Chỉ đăng ${L}</button>
+        <button class="btn" id="${n}-stop">⏹ Dừng sau video này</button>
+        <button class="btn" id="${n}-retry">↻ Đăng lại lỗi ${L}</button>
+        <span class="hint" style="margin:0 0 0 auto">Ô "Chỉ chạy thử" ở tab YouTube cũng áp dụng cho nút này.</span>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th class="num">#</th><th>Video · tiêu đề (bấm để sửa)</th><th>Giờ công bố</th>
+            <th class="pf">Trạng thái</th><th>Kết quả / lỗi (${L})</th></tr></thead>
+          <tbody id="${n}-tbody"></tbody>
+        </table>
+        <div class="empty" id="${n}-empty" style="display:none">Chưa có mục nào tick ${L} — thêm video ở tab YouTube và tick ${L}.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Nhật ký <small>— chung cho cả ba nền tảng</small></h3>
+      <div class="logbox" id="${n}-log"></div>
+    </div>`;
+}
+["tiktok", "zalo"].forEach(n => $("page-" + n).innerHTML = platformPage(n));
 
 /* ------------------------------ hiển thị ------------------------------ */
 const ST_CLASS = {"chờ": "st-wait", "đang đăng": "st-run", "xong": "st-done", "lỗi": "st-err"};
+const stPill = (st, title) => `<span class="st ${ST_CLASS[st] || "st-wait"}" title="${esc(title || "")}">${esc(st)}</span>`;
+function pfCell(it, p) {
+  if (!it.platforms.includes(p)) return `<td class="pf"><span class="na" title="không đăng ${PF_LABEL[p]}">–</span></td>`;
+  const e = it.pf[p];
+  return `<td class="pf">${stPill(e.status, e.error || e.result)}</td>`;
+}
+function kqCell(it, only) {
+  const lines = it.platforms.filter(p => !only || p === only).map(p => {
+    const e = it.pf[p];
+    const txt = e.error ? `<span class="er">❌ ${esc(e.error)}</span>` : linkify(e.result);
+    if (!txt) return "";
+    return only ? txt : `<span class="pfn">${PF_SHORT[p]}:</span> ${txt}`;
+  }).filter(Boolean);
+  return `<td class="kq">${lines.join("<br>")}</td>`;
+}
+function vidCell(it) {
+  const t = it.title
+    ? `<span class="ttl" data-id="${it.id}" data-title="${esc(it.title)}" title="Bấm để sửa tiêu đề">${esc(it.title)}</span>`
+    : `<span class="ttl none" data-id="${it.id}" data-title="" title="Bấm để đặt tiêu đề">(tiêu đề = tên file — bấm để đặt)</span>`;
+  return `<td class="vid" title="${esc(it.link)}"><b>${esc(it.short)}</b>${t}</td>`;
+}
+function bindTitleEdit(root) {
+  root.querySelectorAll(".ttl").forEach(el => el.onclick = () => {
+    const v = prompt("Tiêu đề video (TikTok/Zalo đăng đúng dòng này; YouTube dùng làm tiêu đề):", el.dataset.title || "");
+    if (v !== null) post("/api/set_title", {id: el.dataset.id, title: v});
+  });
+}
 function renderTable(items) {
   const tb = $("tbody");
   $("emptyRow").style.display = items.length ? "none" : "";
@@ -290,13 +428,64 @@ function renderTable(items) {
     <tr>
       <td class="sel"><input type="checkbox" data-id="${it.id}" ${checked.has(it.id) ? "checked" : ""}></td>
       <td class="num">${i + 1}</td>
-      <td class="vid" title="${esc(it.link)}"><b>${esc(it.short)}</b>${it.title ? `<small>${esc(it.title)}</small>` : ""}</td>
+      ${vidCell(it)}
       <td>${esc(it.gio)}</td>
-      <td><span class="st ${ST_CLASS[it.status] || "st-wait"}">${esc(it.status)}</span></td>
-      <td class="kq">${linkify(it.kq)}</td>
+      ${pfCell(it, "youtube")}${pfCell(it, "tiktok")}${pfCell(it, "zalo")}
+      ${kqCell(it)}
     </tr>`).join("");
   tb.querySelectorAll("input[type=checkbox]").forEach(cb =>
     cb.addEventListener("change", () => cb.checked ? checked.add(cb.dataset.id) : checked.delete(cb.dataset.id)));
+  bindTitleEdit(tb);
+}
+function renderPfTable(n, items) {
+  const rows = items.filter(it => it.platforms.includes(n));
+  const tb = $(n + "-tbody");
+  $(n + "-empty").style.display = rows.length ? "none" : "";
+  tb.innerHTML = rows.map((it, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      ${vidCell(it)}
+      <td>${esc(it.gio)}</td>
+      ${pfCell(it, n)}
+      ${kqCell(it, n)}
+    </tr>`).join("");
+  bindTitleEdit(tb);
+}
+function renderTopbar(st) {
+  const info = st.platforms[currentPage];
+  $("pageTitle").textContent = info.label;
+  $("chipBrowser").innerHTML = `${esc(info.browser)} · Profile <b>${esc(info.profile)}</b>`;
+  const ext = $("extChip");
+  ext.textContent = "Extension: " + (info.ext_ok ? "đã cài" : "CHƯA cài");
+  ext.className = "chip " + (info.ext_ok ? "ok" : "bad");
+  const acc = $("chipAcc");
+  if (currentPage === "youtube") {
+    acc.innerHTML = `Kênh&nbsp;<a id="account" href="#" target="_blank" rel="noopener"></a>`;
+    const a = $("account");
+    a.textContent = info.account || "(chưa kiểm tra)";
+    if (info.account_url) a.href = info.account_url; else a.removeAttribute("href");
+    acc.className = "chip";
+  } else {
+    acc.textContent = "Tài khoản: " + (info.account ? `${info.account}${info.checked_at ? " · " + info.checked_at : ""}` : "(chưa kiểm tra)");
+    acc.className = "chip " + (info.account ? (info.account.startsWith("đã") ? "ok" : "bad") : "");
+  }
+  $("btnCheck").textContent = currentPage === "youtube" ? "Kiểm tra kết nối" : `Kiểm tra đăng nhập ${info.label}`;
+}
+function renderPlatformCards(st) {
+  ["tiktok", "zalo"].forEach(n => {
+    const info = st.platforms[n];
+    $(n + "-browser").textContent = info.browser;
+    $(n + "-profile").textContent = info.profile;
+    const ext = $(n + "-ext");
+    ext.textContent = "Extension: " + (info.ext_ok ? "đã cài" : "CHƯA cài");
+    ext.className = "chip " + (info.ext_ok ? "ok" : "bad");
+    const acc = $(n + "-acc");
+    acc.textContent = "Tài khoản: " + (info.account ? `${info.account}${info.checked_at ? " (kiểm tra " + info.checked_at + ")" : ""}` : "(chưa kiểm tra)");
+    acc.className = "chip " + (info.account ? (info.account.startsWith("đã") ? "ok" : "bad") : "");
+    $(n + "-preview").textContent = st.hashtags || "(không có hashtag)";
+    $(n + "-start").disabled = st.running;
+    $(n + "-check").disabled = st.running;
+  });
 }
 function render(st) {
   lastState = st;
@@ -304,37 +493,45 @@ function render(st) {
     $("token").value = st.token; $("times").value = st.times; $("start").value = st.start;
     $("desc").value = st.desc; $("playlist").value = st.playlist;
     $("tags").value = st.tags; $("kids").checked = st.kids;
+    document.querySelectorAll(".pfsel").forEach(c => c.checked = st.default_platforms.includes(c.value));
+    ["tiktok", "zalo"].forEach(n => {
+      $(n + "-token").value = st.platforms[n].token;
+      $(n + "-hashtags").value = st.hashtags_raw;
+    });
     formLoaded = true;
   }
-  $("profile").textContent = st.profile;
-  const ext = $("extChip");
-  ext.textContent = "Extension: " + (st.ext_ok ? "đã cài" : "CHƯA cài");
-  ext.className = "chip " + (st.ext_ok ? "ok" : "bad");
-  const ch = $("channel");
-  ch.textContent = st.channel_name || "(chưa kiểm tra)";
-  if (st.channel_url) ch.href = st.channel_url; else ch.removeAttribute("href");
+  renderTopbar(st);
+  renderPlatformCards(st);
   $("runInd").classList.toggle("show", st.running);
+  $("runText").textContent = st.current ? `Đang chạy: ${st.current}…` : "Đang chạy…";
   $("btnStart").disabled = st.running;
   $("btnStart").innerHTML = st.running ? "Đang chạy…" : "▶&nbsp; Bắt đầu đăng";
   $("btnCheck").disabled = st.running;
   renderTable(st.items);
+  ["tiktok", "zalo"].forEach(n => renderPfTable(n, st.items));
+  PF.forEach(p => {
+    const n = st.items.filter(it => pending(it, p)).length;
+    const e = st.items.filter(it => it.platforms.includes(p) && it.pf[p].status === "lỗi").length;
+    $("cnt-" + p).innerHTML = (n ? `${n} chờ` : "") + (e ? ` <b>${e} lỗi</b>` : "");
+  });
   if (st.logs.length) {
-    const lg = $("log");
-    const stick = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40;
-    lg.textContent += st.logs.join("\n") + "\n";
-    if (stick) lg.scrollTop = lg.scrollHeight;
+    document.querySelectorAll(".logbox").forEach(lg => {
+      const stick = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40;
+      lg.textContent += st.logs.join("\n") + "\n";
+      if (stick) lg.scrollTop = lg.scrollHeight;
+    });
   }
   logSeq = st.log_seq;
 }
 async function poll() {
-  try { render(await (await fetch("/api/state?after=" + logSeq)).json()); }
+  try { const st = await (await fetch("/api/state?after=" + logSeq)).json(); render(st); renderSeo(st); }
   catch (e) { /* server chưa dậy / đã tắt — nhịp sau thử lại */ }
 }
 setInterval(poll, 1000); poll();
 
-/* ------------------------------ nút bấm ------------------------------ */
+/* ------------------------------ nút bấm: tab YouTube ------------------------------ */
 $("btnEye").onclick = () => $("token").type = $("token").type === "password" ? "text" : "password";
-$("btnSaveToken").onclick = () => post("/api/save_token", {token: $("token").value});
+$("btnSaveToken").onclick = () => post("/api/save_token", {platform: "youtube", token: $("token").value});
 $("btnSaveSchedule").onclick = async () => {
   const j = await post("/api/save_schedule", {times: $("times").value, start: $("start").value});
   if (j.ok) { $("times").value = j.times; $("start").value = j.start; }
@@ -342,19 +539,81 @@ $("btnSaveSchedule").onclick = async () => {
 $("btnReassign").onclick = () => post("/api/reassign", {times: $("times").value, start: $("start").value});
 $("btnSaveDefaults").onclick = () => post("/api/save_defaults", formData());
 $("btnAdd").onclick = async () => {
-  const j = await post("/api/add_links", {text: $("links").value, times: $("times").value, start: $("start").value});
+  const pf = selectedPlatforms();
+  if (!pf.length) return toast("Tick ít nhất một nền tảng (YouTube / TikTok / Zalo).", false);
+  const j = await post("/api/add_links", {text: $("links").value, platforms: pf,
+                                          times: $("times").value, start: $("start").value});
   if (j.ok) $("links").value = "";
 };
-$("btnCheck").onclick = () => post("/api/check_connection", {token: $("token").value});
-$("btnStart").onclick = () => {
-  const dry = $("dryRun").checked;
-  const n = (lastState?.items || []).filter(it => it.status === "chờ").length;
-  if (!n) return toast("Chưa có video nào đang chờ.", false);
-  const msg = dry ? "Chạy thử 1 video (không bấm Lưu)?"
-    : `Tải lên và lên lịch ${n} video trên kênh ${lastState?.channel_name || "(chưa rõ)"}?`;
-  if (confirm(msg)) post("/api/start", {...formData(), dry_run: dry});
+$("btnCheck").onclick = () => {
+  const tok = currentPage === "youtube" ? $("token").value : $(currentPage + "-token").value;
+  post("/api/check_connection", {platform: currentPage, token: tok});
 };
+function startRun(only) {
+  const dry = $("dryRun").checked;
+  const items = lastState?.items || [];
+  const pfs = only ? [only] : PF;
+  const counts = pfs.map(p => [p, items.filter(it => pending(it, p)).length]).filter(([, n]) => n);
+  if (!counts.length) return toast("Chưa có video nào đang chờ" + (only ? ` ở ${PF_LABEL[only]}.` : "."), false);
+  const chi_tiet = counts.map(([p, n]) => `${PF_LABEL[p]} ${n}`).join(", ");
+  const msg = dry ? `Chạy thử 1 video mỗi nền tảng (${chi_tiet}) — làm hết các bước, không bấm nút cuối?`
+    : `Tải lên và lên lịch: ${chi_tiet} video?${only ? "" : "\nThứ tự: YouTube → TikTok → Zalo, mỗi nền tảng nối một trình duyệt."}`;
+  if (confirm(msg)) post("/api/start", {...formData(), dry_run: dry, platforms: only ? [only] : null});
+}
+// ---------- Tạo nội dung bằng AI (bóc băng + Gemini) ----------
+let seoJobShown = 0;
+async function loadDownloads() {
+  const sel = $("seoFile"), cur = sel.value;
+  const r = await fetch("/api/list_downloads", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+  const j = await r.json();
+  if (!j.ok) return toast(j.msg, false);
+  sel.innerHTML = '<option value="">— Chọn video trong Downloads —</option>' +
+    j.files.map(f => `<option value="${esc(f.path)}">${esc(f.name)}  (${f.size_mb} MB · ${f.mtime})</option>`).join("");
+  if (cur) sel.value = cur;
+}
+$("btnSeoRefresh").onclick = loadDownloads;
+$("btnSeoRun").onclick = () => {
+  const src = $("seoDrive").value.trim() || $("seoFile").value;
+  if (!src) return toast("Chọn video trong Downloads hoặc dán link Drive.", false);
+  post("/api/tao_noi_dung", {source: src});
+};
+function renderSeo(st) {
+  const qd = st.qua_dai || [];
+  $("seoQuaDai").style.display = qd.length ? "" : "none";
+  if (qd.length) $("seoQuaDaiList").innerHTML = qd.map(m =>
+    `<li>${linkify(m.nguon)} <span class="dim">— ${esc(m.thoi_luong)} · ${esc(m.luc)}</span></li>`).join("");
+  const s = st.seo; if (!s) return;
+  const box = $("seoStatus");
+  if (s.status === "running") box.textContent = "⏳ " + s.buoc;
+  else if (s.status === "error") box.textContent = "✗ " + s.loi;
+  else if (s.status === "done") box.textContent = "✓ Xong — kiểm tra rồi bấm 'Thêm vào hàng đợi'. Video: " + (s.ket_qua?.file || "");
+  else box.textContent = "Chưa chạy.";
+  if (s.status === "done" && s.ket_qua && s.job !== seoJobShown) {
+    seoJobShown = s.job;
+    const k = s.ket_qua;
+    $("seoTitle").value = k.tieu_de || "";
+    $("seoTags").value = k.tags || "";
+    $("seoHashtags").value = (k.hashtags || []).join(" ");
+    $("seoDesc").value = k.mo_ta_youtube || ((k.tieu_de ? k.tieu_de + "\n\n" : "") + (k.mo_ta || ""));
+    $("seoResult").style.display = "";
+    toast("Gemini đã trả nội dung — xem lại rồi thêm vào hàng đợi.", true);
+  }
+}
+$("btnSeoAdd").onclick = async () => {
+  const pf = selectedPlatforms();
+  if (!pf.length) return toast("Tick ít nhất một nền tảng ở mục 'Thêm video'.", false);
+  const k = lastState?.seo?.ket_qua;
+  if (!k) return toast("Chưa có kết quả AI.", false);
+  const j = await post("/api/add_seo_item", {link: k.file, title: $("seoTitle").value, desc: $("seoDesc").value,
+    tags: $("seoTags").value, hashtags: $("seoHashtags").value, platforms: pf,
+    times: $("times").value, start: $("start").value});
+  if (j.ok) $("seoResult").style.display = "none";
+};
+loadDownloads();
+
+$("btnStart").onclick = () => startRun(null);
 $("btnStop").onclick = () => post("/api/stop");
+$("btnRetry").onclick = () => post("/api/retry_errors", {});
 $("btnDelete").onclick = () => {
   if (!checked.size) return toast("Chưa chọn dòng nào.", false);
   post("/api/delete", {ids: [...checked]}).then(() => checked.clear());
@@ -366,13 +625,27 @@ $("selAll").onchange = e => {
   if (lastState) renderTable(lastState.items);
 };
 
+/* ------------------------------ nút bấm: tab TikTok / Zalo ------------------------------ */
+["tiktok", "zalo"].forEach(n => {
+  $(n + "-eye").onclick = () => $(n + "-token").type = $(n + "-token").type === "password" ? "text" : "password";
+  $(n + "-saveToken").onclick = () => post("/api/save_token", {platform: n, token: $(n + "-token").value});
+  $(n + "-check").onclick = () => post("/api/check_connection", {platform: n, token: $(n + "-token").value});
+  $(n + "-saveHashtags").onclick = async () => {
+    const j = await post("/api/save_hashtags", {hashtags: $(n + "-hashtags").value});
+    if (j.ok) ["tiktok", "zalo"].forEach(m => $(m + "-hashtags").value = $(n + "-hashtags").value);
+  };
+  $(n + "-start").onclick = () => startRun(n);
+  $(n + "-stop").onclick = () => post("/api/stop");
+  $(n + "-retry").onclick = () => post("/api/retry_errors", {platform: n});
+});
+
 /* ------------------------------ menu trái ------------------------------ */
 document.querySelectorAll(".nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".nav button").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
-  ["youtube", "tiktok", "zalo"].forEach(p =>
-    $("page-" + p).style.display = p === b.dataset.page ? "" : "none");
-  $("pageTitle").textContent = b.textContent.trim();
+  currentPage = b.dataset.page;
+  PF.forEach(p => $("page-" + p).style.display = p === currentPage ? "" : "none");
+  if (lastState) renderTopbar(lastState);
 });
 </script>
 </body>

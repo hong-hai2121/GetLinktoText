@@ -48,6 +48,13 @@ DEFAULT_CONFIG = {
     "default_playlist": "Dạ dày tiêu hóa",
     "default_tags": "",
     "default_kids": False,
+    # --- TikTok / Zalo: nội dung = 1 dòng tiêu đề + hashtag ---
+    "default_hashtags": "",                # "#a #b"; trống = lấy dòng cuối của mô tả (nếu toàn hashtag)
+    "default_platforms": ["youtube", "tiktok", "zalo"],   # ô tick mặc định khi thêm video
+    # --- trình duyệt + token Playwright Extension riêng từng nền tảng (xem platform_config) ---
+    # {"tiktok": {"browser_path", "user_data_dir", "profile_dir", "extension_token", "client_name",
+    #             "account" (kết quả Kiểm tra kết nối)}, "zalo": {...}}
+    "platforms": {},
 }
 
 _relay = None  # ExtensionRelay đang dùng (giữ giữa launch_chrome và connect_playwright)
@@ -209,9 +216,25 @@ def cdp_send(method, params=None, timeout=30.0):
     return _relay.send_cdp(method, params, timeout=timeout)
 
 
-def disconnect(pw):
-    """Ngắt Playwright và tắt relay. Chrome và tab vẫn mở (extension chỉ gỡ debugger khỏi tab)."""
+def close_tab(page, log=None):
+    """Đóng tab điều khiển (relay chuyển Target.closeTarget -> chrome.tabs.remove). Lỗi thì bỏ qua."""
+    if page is None:
+        return False
+    try:
+        page.close(run_before_unload=False)
+        if log:
+            log("✓ Đã đóng tab điều khiển.")
+        return True
+    except Exception:
+        return False
+
+
+def disconnect(pw, page=None):
+    """Ngắt Playwright và tắt relay. Truyền `page` để ĐÓNG tab điều khiển trước khi ngắt (mặc định
+    không: Chrome và tab vẫn mở, extension chỉ gỡ debugger khỏi tab)."""
     global _relay
+    if page is not None:
+        close_tab(page)
     try:
         if pw is not None:
             pw.stop()
@@ -220,3 +243,28 @@ def disconnect(pw):
     if _relay is not None:
         _relay.stop()
         _relay = None
+
+
+# ------------------------------------------------------------------ nhiều nền tảng
+def platform_config(cfg, name):
+    """Cấu hình trình duyệt cho một nền tảng ("youtube" / "tiktok" / "zalo").
+
+    config.json có mục "platforms": {tên: {browser_path, user_data_dir, profile_dir,
+    extension_token, client_name}}. Trả về bản sao cfg với các khóa cấp cao nhất
+    (chrome_path, user_data_dir, profile_dir, extension_token, client_name) được ghi đè theo
+    nền tảng, nên mọi hàm hiện có (find_chrome, profile_path, connect...) dùng được ngay.
+    Zalo chạy Cốc Cốc: browser_path trỏ tới browser.exe của Cốc Cốc (cùng nhân Chromium).
+    Không có mục cho nền tảng đó thì trả về cfg gốc (YouTube)."""
+    pfs = cfg.get("platforms") or {}
+    p = pfs.get(name)
+    if not p and name == "gemini":          # Gemini chưa có mục riêng -> dùng trình duyệt/profile của Zalo
+        p = pfs.get("zalo")
+    if not p:
+        return dict(cfg)
+    out = dict(cfg)
+    if p.get("browser_path"):
+        out["chrome_path"] = p["browser_path"]
+    for k in ("user_data_dir", "profile_dir", "extension_token", "client_name"):
+        if p.get(k):
+            out[k] = p[k]
+    return out

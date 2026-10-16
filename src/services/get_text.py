@@ -46,9 +46,11 @@ class GetTextService:
         move_processed_links: bool = True,
         language: str = "auto",
         srt_timestamps: bool = False,
+        song_mode: bool = False,
     ):
         config.TRANSCRIBE_LANGUAGE = language or "auto"
         config.SRT_TIMESTAMPS = bool(srt_timestamps)
+        config.SONG_MODE = bool(song_mode)
         config.USE_TITLE_MODE = use_title_mode
         config.TITLE_MODE_SUBMODE = title_submode
         config.MAX_CHUNKS_RUNTIME = max(1, int(max_chunks))
