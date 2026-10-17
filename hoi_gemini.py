@@ -24,11 +24,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cli_chung   # noqa: E402  (tìm CLI kể cả khi PATH của Explorer thiếu thư mục npm/nvm)
 
 TEN = "Gemini"
 CLI = "gemini"
@@ -60,10 +64,11 @@ class TraLoi:
 
 
 def _exe() -> str:
-    exe = shutil.which(CLI)
-    if not exe:
-        raise GeminiLoi(f"Không tìm thấy lệnh `{CLI}` trên PATH. Cài bằng: {LENH_CAI}")
-    return exe
+    """gemini mới nhất tìm được (PATH + thư mục npm/nvm — app mở từ shortcut có thể thiếu PATH)."""
+    ds = cli_chung.tim_lenh_moi_nhat(CLI)
+    if not ds:
+        raise GeminiLoi(f"Không tìm thấy lệnh `{CLI}`. Cài bằng: {LENH_CAI}")
+    return ds[0][0]
 
 
 def _env() -> dict:
@@ -140,6 +145,50 @@ class Phien:
         self.session_id, self.lich_su = None, []
 
 
+MODEL_MAC_DINH = [{"id": "gemini-2.5-pro", "ten": "Gemini 2.5 Pro"}, {"id": "gemini-2.5-flash", "ten": "Gemini 2.5 Flash"},
+                  {"id": "gemini-2.5-flash-lite", "ten": "Gemini 2.5 Flash Lite"}]
+_MODEL_CACHE: dict = {}
+
+
+def _thu_muc_bundle() -> Path | None:
+    ds = cli_chung.tim_lenh_moi_nhat(CLI)
+    if not ds:
+        return None
+    exe = ds[0][0]
+    for goc in (Path(exe).parent, Path(exe).resolve().parent):
+        b = goc / "node_modules" / "@google" / "gemini-cli" / "bundle"
+        if b.is_dir():
+            return b
+    return None
+
+
+def danh_sach_model() -> list[dict]:
+    """[{"id","ten"}] các model Gemini mà bản CLI đang cài biết (quét tên trong bundle JS; cập nhật khi
+    nâng cấp CLI). Không quét được thì dùng danh sách mặc định."""
+    b = _thu_muc_bundle()
+    if b is None:
+        return list(MODEL_MAC_DINH)
+    js = sorted(b.glob("*.js"))
+    ky = (str(b), tuple((p.name, p.stat().st_mtime_ns) for p in js))
+    if _MODEL_CACHE.get("ky") == ky:
+        return _MODEL_CACHE["kq"]
+    mau = re.compile(rb"gemini-(\d+)\.(\d+)-(pro|flash-lite|flash)(-preview)?(?![\w-])")
+    thay: dict[str, tuple] = {}
+    for p in js:
+        try:
+            data = p.read_bytes()
+        except OSError:
+            continue
+        for m in mau.finditer(data):
+            ten = m.group(0).decode()
+            hang = {b"pro": 0, b"flash": 1, b"flash-lite": 2}[m.group(3)]
+            thay[ten] = (-int(m.group(1)), -int(m.group(2)), hang, 1 if m.group(4) else 0)
+    kq = [{"id": t, "ten": t.replace("gemini-", "Gemini ").replace("-", " ").title().replace("Lite", "Lite")}
+          for t, _ in sorted(thay.items(), key=lambda kv: kv[1])] or list(MODEL_MAC_DINH)
+    _MODEL_CACHE.update(ky=ky, kq=kq)
+    return kq
+
+
 # ------------------------------------------------------------------ trạng thái / đăng nhập (cho ket_noi_ai.py)
 def chon_dang_nhap_google() -> None:
     """Ghi ~/.gemini/settings.json: cách xác thực = Login with Google (giữ các mục khác)."""
@@ -154,17 +203,15 @@ def chon_dang_nhap_google() -> None:
 
 def trang_thai() -> dict:
     """{"ten","cli","cai","phien_ban","ket_noi","email","ghi_chu"} — chỉ xem file, không mở mạng."""
-    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="")
-    exe = shutil.which(CLI)
-    if not exe:
+    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="", duong_dan="")
+    ds = cli_chung.tim_lenh_moi_nhat(CLI)
+    if not ds:
         kq["ghi_chu"] = f"chưa cài Gemini CLI ({LENH_CAI})"
         return kq
+    exe, ver = ds[0]
     kq["cai"] = True
-    try:
-        v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW).stdout
-        kq["phien_ban"] = v.strip().splitlines()[-1] if v.strip() else ""
-    except Exception:
-        pass
+    kq["duong_dan"] = exe
+    kq["phien_ban"] = cli_chung.chuoi_phien_ban(ver)
     if FILE_CREDS.exists():
         kq["ket_noi"] = True
         try:

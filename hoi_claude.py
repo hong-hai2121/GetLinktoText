@@ -34,6 +34,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cli_chung   # noqa: E402  (tìm CLI kể cả khi PATH của Explorer thiếu thư mục npm/nvm)
+
 TEN = "Claude"
 CLI = "claude"
 LENH_CAI = "npm install -g @anthropic-ai/claude-code"
@@ -62,10 +65,11 @@ class TraLoi:
 
 
 def _claude_exe() -> str:
-    exe = shutil.which("claude")
-    if not exe:
-        raise ClaudeLoi("Không tìm thấy lệnh `claude` trên PATH. Cài Claude Code rồi chạy `claude` đăng nhập trước.")
-    return exe
+    """claude mới nhất tìm được (PATH + ~/.local/bin + thư mục npm/nvm — app mở từ shortcut có thể thiếu PATH)."""
+    ds = cli_chung.tim_lenh_moi_nhat(CLI)
+    if not ds:
+        raise ClaudeLoi("Không tìm thấy lệnh `claude`. Cài Claude Code rồi chạy `claude` đăng nhập trước.")
+    return ds[0][0]
 
 
 def hoi(cau_hoi: str, *, he_thong: str | None = None, model: str | None = None, phien: str | None = None,
@@ -126,19 +130,46 @@ class Phien:
         self.session_id, self.lich_su = None, []
 
 
+MODEL_BI_DANH = [{"id": "fable", "ten": "Fable (mạnh nhất)"}, {"id": "opus", "ten": "Opus"},
+                 {"id": "sonnet", "ten": "Sonnet (nhanh)"}, {"id": "haiku", "ten": "Haiku (rẻ quota)"}]
+
+
+def danh_sach_model() -> list[dict]:
+    """[{"id","ten"}]: bí danh CLI hiểu (fable/opus/sonnet/haiku -> bản mới nhất của dòng đó) + các id đầy đủ
+    tài khoản được dùng nếu ~/.claude.json có cache."""
+    kq = list(MODEL_BI_DANH)
+    try:
+        d = json.loads((Path.home() / ".claude.json").read_text(encoding="utf-8"))
+        # Claude Code cache danh sách model hiện trong /model: [{"value": "claude-fable-5[1m]", "label": "Fable",
+        # "description": ..., "disabled": bool}] — mục disabled là model cần bản CLI mới hơn
+        for mo in d.get("additionalModelOptionsCache") or []:
+            v = str(mo.get("value") or "")
+            if mo.get("disabled") or not v.startswith("claude-"):
+                continue
+            if v not in {m["id"] for m in kq}:
+                kq.append({"id": v, "ten": f"{mo.get('label') or v} — {v}"})
+        for mid in (d.get("modelAccessCache") or []):
+            if isinstance(mid, str) and mid.startswith("claude-") and mid not in {m["id"] for m in kq}:
+                kq.append({"id": mid, "ten": mid})
+    except Exception:
+        pass
+    return kq
+
+
 # ------------------------------------------------------------------ trạng thái / đăng nhập (cho ket_noi_ai.py)
 def trang_thai() -> dict:
     """{"ten","cli","cai","phien_ban","ket_noi","email","ghi_chu"} từ `claude auth status` (không mở mạng)."""
-    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="")
-    exe = shutil.which(CLI)
-    if not exe:
+    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="", duong_dan="")
+    ds = cli_chung.tim_lenh_moi_nhat(CLI)
+    if not ds:
         kq["ghi_chu"] = f"chưa cài Claude Code ({LENH_CAI})"
         return kq
+    exe, ver = ds[0]
     kq["cai"] = True
+    kq["duong_dan"] = exe
+    kq["phien_ban"] = cli_chung.chuoi_phien_ban(ver)
     env = {k: v for k, v in os.environ.items() if k not in _ENV_BO}
     try:
-        v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30, env=env, creationflags=NO_WINDOW).stdout
-        kq["phien_ban"] = v.strip().split()[0] if v.strip() else ""
         st = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=30, env=env,
                             creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
         d = json.loads(st.stdout[st.stdout.find("{"):]) if "{" in st.stdout else {}

@@ -303,7 +303,8 @@ def tao_srt(kich_ban: Path, nguon: list[tuple[Path, float, float | None]], tong_
             giu.append(c)
         cues = giu
     ghi_srt(cues, out_srt)
-    tk.update(cau=len(cues), bo=bo, srt=str(out_srt))
+    # trả cả danh sách từ đã có mốc để bước khác dùng (minh_hoa.py: ghép cảnh minh họa theo câu)
+    tk.update(cau=len(cues), bo=bo, srt=str(out_srt), tu=tu)
     log(f"Khớp: {tk['khop']}/{tk['tong']} từ trùng máy nghe, {tk['muon']} từ máy nghe sai (lấy chữ kịch bản), "
         f"{tk['noi_suy']} từ nội suy; {len(cues)} câu phụ đề"
         + (f" (bỏ {bo} câu trước giây {bo_truoc:g} vì thuộc hook)" if bo_truoc > 0 else "") + f" -> {out_srt.name}")

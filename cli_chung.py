@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+"""Tìm file thực thi của các CLI AI (claude / codex / gemini) một cách bền hơn shutil.which.
+
+Vấn đề: app mở từ shortcut Desktop nhận PATH của Explorer — có thể thiếu thư mục nvm/npm (biến
+%NVM_SYMLINK% chưa mở rộng, PATH đổi sau khi đăng nhập) hoặc xếp thư mục npm cũ TRƯỚC thư mục nvm mới.
+Khi đó `shutil.which("codex")` không thấy gì hoặc lấy nhầm bản cũ (bản cũ không chạy được model mới).
+
+Cách làm: quét PATH + các thư mục npm/nvm quen thuộc, trả về mọi bản tìm được; muốn chọn bản mới nhất
+thì xếp theo `--version`.
+"""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+from pathlib import Path
+
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+DUOI = (".cmd", ".exe", ".bat", "")
+
+
+def thu_muc_ung_vien() -> list[str]:
+    """PATH của tiến trình + những chỗ npm/nvm/installer hay đặt lệnh (không trùng, giữ thứ tự)."""
+    ds = [d.strip().strip('"') for d in os.environ.get("PATH", "").split(os.pathsep) if d.strip()]
+    home = Path.home()
+    them = [
+        os.environ.get("NVM_SYMLINK", ""),                       # nvm-windows: thư mục node đang chọn
+        r"C:\nvm4w\nodejs",
+        str(home / "AppData" / "Roaming" / "npm"),               # npm prefix mặc định (bản cũ hay nằm đây)
+        str(home / ".local" / "bin"),                            # claude bản native installer
+        str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "nodejs"),
+        str(home / "AppData" / "Local" / "Programs" / "claude"),
+    ]
+    nvm_home = os.environ.get("NVM_HOME") or str(home / "AppData" / "Local" / "nvm")
+    try:                                                         # các bản node khác của nvm, mới nhất trước
+        them += [str(p) for p in sorted(Path(nvm_home).glob("v*"), reverse=True) if p.is_dir()]
+    except OSError:
+        pass
+    thay = {d.lower() for d in ds}
+    for t in them:
+        if t and t.lower() not in thay:
+            ds.append(t)
+            thay.add(t.lower())
+    return ds
+
+
+def tim_lenh(ten: str) -> list[str]:
+    """Mọi file thực thi `ten` tìm được (theo thứ tự thư mục), mỗi file một lần (đã resolve symlink)."""
+    kq, thay = [], set()
+    for d in thu_muc_ung_vien():
+        for duoi in DUOI:
+            p = Path(d) / (ten + duoi)
+            try:
+                if not p.is_file():
+                    continue
+                key = str(p.resolve()).lower()
+            except OSError:
+                continue
+            if key not in thay:
+                thay.add(key)
+                kq.append(str(p))
+            break
+    return kq
+
+
+def phien_ban(exe: str) -> tuple:
+    """(2, 1, 233) từ `<exe> --version`; không đọc được -> (0,)."""
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW,
+                             encoding="utf-8", errors="replace").stdout.strip()
+        so = re.findall(r"\d+", out.splitlines()[-1] if out else "")
+        return tuple(int(x) for x in so[:3]) or (0,)
+    except Exception:
+        return (0,)
+
+
+_CACHE: dict = {}
+
+
+def tim_lenh_moi_nhat(ten: str) -> list[tuple[str, tuple]]:
+    """[(exe, phiên bản)] bản mới nhất trước; nhớ theo PATH (chạy --version mỗi bản một lần)."""
+    ky = (ten, os.environ.get("PATH", ""))
+    if _CACHE.get(ky) is not None:
+        return _CACHE[ky]
+    ds = [(p, phien_ban(p)) for p in tim_lenh(ten)]
+    ds.sort(key=lambda t: t[1], reverse=True)
+    _CACHE[ky] = ds
+    return ds
+
+
+def chuoi_phien_ban(v: tuple) -> str:
+    return ".".join(map(str, v)) if v and v != (0,) else ""
+
+
+if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8")
+    for ten in sys.argv[1:] or ("claude", "codex", "gemini"):
+        print(ten, tim_lenh_moi_nhat(ten))

@@ -1,277 +1,114 @@
 # -*- coding: utf-8 -*-
-"""Cửa sổ trạng thái desktop (pywebview) cho server "Ghép video Flow".
+"""Cửa sổ desktop "Ghép video Flow": một cửa sổ pywebview nạp thẳng giao diện web của app.py
+(menu tab dọc bên trái: Ghép video · Chỉnh sửa · Kết nối AI · Nhật ký · Cài đặt).
 
-Chạy:  pythonw app_gui.py   (hoặc bấm đúp mo_gui.bat)  -> KHÔNG có cửa sổ console.
-  - Server của app.py chạy ngay trong tiến trình này (thread nền); giao diện đầy đủ mở ở trình
-    duyệt (bỏ --khong-mo nếu không muốn tự mở).
-  - Cửa sổ nhỏ 440x600 hiện: đèn "SERVER ĐANG CHẠY" + giờ, URL/cổng + nút Sao chép, hàng đợi
-    (chờ/đang làm/xong/lỗi), tập đang làm + bước, thư mục Gốc, 40 dòng nhật ký cuối.
-    Nút: Mở giao diện (trình duyệt), Dừng server & thoát (bấm 2 lần).
-  - Đóng cửa sổ (X) cũng dừng server và tiến trình ghép đang chạy.
+Chạy:  pythonw app_gui.py   (hoặc bấm đúp mo_gui.bat / shortcut "Ghép video Flow" trên Desktop)
+  - Server của app.py chạy trong tiến trình này (thread nền) ở http://127.0.0.1:8766; cửa sổ nạp URL đó.
+    Vẫn mở được cùng giao diện bằng trình duyệt (nút "Mở trong trình duyệt" ở tab Cài đặt).
+  - Mở lần hai khi server đang chạy: chỉ mở thêm cửa sổ nạp server có sẵn, không chạy server thứ hai.
+  - Đóng cửa sổ (X) = dừng server + tiến trình ghép đang chạy (chỉ khi cửa sổ này là nơi chạy server).
+  - Icon cửa sổ/thanh tác vụ: ghep_video.ico cạnh file (đặt qua WM_SETICON vì pywebview trên Windows
+    không có tham số icon).
 
-Bẫy pywebview: lớp Api chỉ được có phương thức public cho JS gọi; KHÔNG gán Window hay object
-lạ vào thuộc tính public của nó (pywebview sẽ cố "phơi" thuộc tính đó ra JS và lỗi).
-
-Kiểm thử không cần nhìn màn hình:  python app_gui.py --khong-mo --chup anh.png
-  -> mở cửa sổ, chờ 3s, chụp vùng cửa sổ ra anh.png rồi tự thoát.
+Kiểm thử không cần nhìn:  python app_gui.py --chup anh.png   (mở, chờ 6s, chụp cửa sổ, thoát).
 """
 import argparse
+import ctypes
 import os
 import sys
 import threading
 import time
-import webbrowser
 from pathlib import Path
 
 import webview
 
 import app                      # server + State dùng chung
 
-W, H = 440, 600
-TIEU_DE = "Ghép video Flow — server"
+APP_DIR = Path(__file__).resolve().parent
+ICO = APP_DIR / "ghep_video.ico"
+W, H = 1180, 760
+TIEU_DE = "Ghép video Flow"
 
-_WINDOW = None                  # giữ ở module, không để trong Api (xem bẫy ở docstring)
-
-
-class Api:
-    """Các hàm JS gọi qua pywebview.api.<tên>(). Chỉ phương thức public, không thuộc tính public."""
-
-    def __init__(self):
-        self._httpd = None
-        self._thread = None
-        self._url = ""
-        self._t0 = time.time()
-        self._dung_roi = False
-
-    # ---- vòng đời server
-    def khoi_dong(self, mo_trinh_duyet: bool):
-        self._httpd, self._url = app.make_server()
-        self._t0 = time.time()
-        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True, name="http")
-        self._thread.start()
-        app.S.log(f"✓ Server sẵn sàng tại {self._url} — cửa sổ trạng thái desktop đang theo dõi.")
-        if mo_trinh_duyet:
-            threading.Timer(0.6, lambda: webbrowser.open(self._url)).start()
-        return self._url
-
-    def dung_server(self):
-        if self._dung_roi:
-            return
-        self._dung_roi = True
-        app.dung_tat_ca()                           # dừng worker + ffmpeg/whisper đang chạy
-        if self._httpd:
-            threading.Thread(target=self._httpd.shutdown, daemon=True).start()
-
-    # ---- JS gọi
-    def trang_thai(self):
-        S = app.S
-        with S.lock:
-            items = list(S.items)
-            dem = {st: sum(1 for it in items if it.get("status") == st)
-                   for st in (app.CHO, app.DANG, app.XONG, app.LOI)}
-            logs = [t for _, t in S.logs[-40:]]
-            worker = S.running
-            cur = S.find(S.current) if S.current is not None else None
-            dang_lam = (f"{cur.get('ten') or cur.get('link')} · {cur.get('buoc') or ''}") if cur else ""
-            goc_dir = S.goc_dir
-        song = bool(self._thread and self._thread.is_alive()) and not self._dung_roi
-        giay = int(time.time() - self._t0)
-        return {
-            "server": song,
-            "url": self._url,
-            "port": self._url.rsplit(":", 1)[-1].strip("/") if self._url else "",
-            "uptime": f"{giay // 3600:02d}:{giay % 3600 // 60:02d}:{giay % 60:02d}",
-            "gio": time.strftime("%H:%M:%S"),
-            "tong": len(items),
-            "cho": dem[app.CHO], "dang": dem[app.DANG],
-            "xong": dem[app.XONG], "loi": dem[app.LOI],
-            "worker": worker,
-            "dang_lam": dang_lam,
-            "goc": (f"{Path(goc_dir).name} ({len(app.kho_clip(goc_dir))} clip)" if goc_dir else ""),
-            "logs": logs,
-        }
-
-    def mo_giao_dien(self):
-        if self._url:
-            webbrowser.open(self._url)
-        return True
-
-    def sao_chep(self):
-        try:
-            import tkinter as tk
-            r = tk.Tk(); r.withdraw()
-            r.clipboard_clear(); r.clipboard_append(self._url); r.update(); r.destroy()
-            return True
-        except Exception:
-            return False
-
-    def dung(self):
-        """Nút 'Dừng server & thoát'."""
-        self.dung_server()
-        if _WINDOW is not None:
-            threading.Timer(0.2, _WINDOW.destroy).start()
-        return True
+_WINDOW = None
+_HTTPD = None
 
 
-HTML = r"""<!doctype html>
-<html lang="vi"><head><meta charset="utf-8">
-<title>Ghép video Flow — server</title>
-<style>
-  :root{--bg:#111827;--card:#1f2937;--line:#263142;--fg:#e5e7eb;--dim:#9ca3af;
-        --green:#16a34a;--red:#dc2626;--blue:#2563eb;--amber:#d97706}
-  *{box-sizing:border-box} html,body{height:100%;margin:0}
-  body{background:var(--bg);color:var(--fg);font:13px/1.45 "Segoe UI",system-ui,sans-serif;
-       display:flex;flex-direction:column;padding:14px;gap:10px;user-select:none}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-  .row{display:flex;align-items:center;gap:10px}
-  .grow{flex:1;min-width:0}
-  .dot{width:14px;height:14px;border-radius:50%;background:var(--red);flex:none;
-       box-shadow:0 0 0 0 rgba(22,163,74,.6)}
-  .dot.on{background:var(--green);animation:pulse 1.6s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.55)}70%{box-shadow:0 0 0 9px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
-  .title{font-weight:700;letter-spacing:.08em;font-size:14px}
-  .title.off{color:#fca5a5}
-  .mono{font-family:Consolas,"Cascadia Mono",monospace}
-  .dim{color:var(--dim)} .small{font-size:11.5px}
-  .url{font-size:13.5px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
-  .btn{border:1px solid #374151;background:#111827;color:var(--fg);border-radius:8px;padding:6px 12px;
-       cursor:pointer;font:inherit;white-space:nowrap}
-  .btn:hover{background:#0b1220} .btn.sm{padding:4px 9px;font-size:12px}
-  .btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-  .btn.blue:hover{background:#1d4ed8}
-  .btn.red{background:#7f1d1d;border-color:#991b1b;color:#fee2e2;font-weight:600}
-  .btn.red:hover{background:#991b1b}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
-  .k{color:var(--dim)} .v{font-weight:600}
-  .chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
-  .chip.ok{background:#14532d;color:#bbf7d0} .chip.bad{background:#7f1d1d;color:#fecaca}
-  .chip.wait{background:#374151;color:#e5e7eb}
-  .full{grid-column:1/-1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .log{flex:1;display:flex;flex-direction:column;min-height:0}
-  .log h3{margin:0 0 6px;font-size:11.5px;letter-spacing:.1em;color:var(--dim);font-weight:600}
-  pre{flex:1;margin:0;overflow:auto;background:#0b1220;border:1px solid var(--line);border-radius:8px;
-      padding:8px 10px;font:12px/1.5 Consolas,"Cascadia Mono",monospace;color:#d1d5db;white-space:pre-wrap;
-      word-break:break-word;user-select:text}
-  .foot{display:flex;gap:8px;justify-content:space-between}
-  .q b{font-weight:700} .q .ok{color:#86efac} .q .err{color:#fca5a5}
-  #dl{color:#fcd34d}
-</style></head><body>
-  <div class="card">
-    <div class="row">
-      <div id="dot" class="dot"></div>
-      <div id="tt" class="title grow">ĐANG KHỞI ĐỘNG...</div>
-      <div id="gio" class="mono dim">--:--:--</div>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <div id="url" class="url grow mono">…</div>
-      <button id="copy" class="btn sm">Sao chép</button>
-    </div>
-    <div class="small dim" style="margin-top:4px">Đã chạy <span id="up" class="mono">00:00:00</span> · cổng <span id="port" class="mono">—</span></div>
-  </div>
-
-  <div class="card grid">
-    <div><span class="k">Hàng đợi:</span> <span id="q" class="v q">0 tập</span></div>
-    <div><span class="k">Worker:</span> <span id="worker" class="chip wait">dừng</span></div>
-    <div><span class="k">Đang làm:</span> <span id="dang" class="v">0</span> · <span class="k">chờ:</span> <span id="cho" class="v">0</span></div>
-    <div><span class="k">Clip gốc:</span> <span id="goc" class="v">—</span></div>
-    <div class="full"><span class="k">Hiện tại:</span> <span id="dl">—</span></div>
-  </div>
-
-  <div class="card log">
-    <h3>NHẬT KÝ</h3>
-    <pre id="log">(chưa có)</pre>
-  </div>
-
-  <div class="foot">
-    <button id="open" class="btn blue">Mở giao diện</button>
-    <button id="stop" class="btn red">Dừng server &amp; thoát</button>
-  </div>
-
-<script>
-  const $ = id => document.getElementById(id);
-  let armed = 0, lastLog = "";
-  function render(s){
-    $('dot').className = 'dot' + (s.server ? ' on' : '');
-    $('tt').textContent = s.server ? 'SERVER ĐANG CHẠY' : 'SERVER ĐÃ DỪNG';
-    $('tt').className = 'title grow' + (s.server ? '' : ' off');
-    $('gio').textContent = s.gio; $('url').textContent = s.url || '—';
-    $('up').textContent = s.uptime; $('port').textContent = s.port || '—';
-    const q = `${s.tong} tập` + (s.tong ? ` (<b class="ok">${s.xong} xong</b>, <b class="err">${s.loi} lỗi</b>)` : '');
-    $('q').innerHTML = q; $('dang').textContent = s.dang; $('cho').textContent = s.cho;
-    $('worker').textContent = s.worker ? 'đang chạy ▶' : 'dừng';
-    $('worker').className = 'chip ' + (s.worker ? 'ok' : 'wait');
-    $('goc').textContent = s.goc || 'chưa chọn';
-    $('dl').textContent = s.dang_lam || '—'; $('dl').title = s.dang_lam || '';
-    const txt = (s.logs && s.logs.length) ? s.logs.join('\n') : '(chưa có)';
-    if (txt !== lastLog){
-      const pre = $('log'), atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
-      pre.textContent = txt; lastLog = txt;
-      if (atBottom) pre.scrollTop = pre.scrollHeight;
-    }
-  }
-  async function tick(){ try { render(await pywebview.api.trang_thai()); } catch(e){} }
-  function batDau(){ tick(); setInterval(tick, 1000); }
-  if (window.pywebview && window.pywebview.api) batDau();
-  else window.addEventListener('pywebviewready', batDau);
-  $('open').onclick = () => pywebview.api.mo_giao_dien();
-  $('copy').onclick = async () => { const ok = await pywebview.api.sao_chep();
-    $('copy').textContent = ok ? 'Đã sao chép ✔' : 'Lỗi'; setTimeout(() => $('copy').textContent = 'Sao chép', 1500); };
-  $('stop').onclick = () => {
-    if (!armed){ armed = 1; $('stop').textContent = 'Bấm lần nữa để dừng'; setTimeout(() => { armed = 0; $('stop').textContent = 'Dừng server & thoát'; }, 3000); return; }
-    $('stop').textContent = 'Đang dừng...'; pywebview.api.dung();
-  };
-</script></body></html>"""
+def _dat_icon(tieu_de: str, ico: Path, cho: float = 20.0):
+    """Gắn icon cho cửa sổ (tìm theo tiêu đề) — chạy ở thread nền sau khi cửa sổ hiện."""
+    if not ico.exists():
+        return
+    u32 = ctypes.windll.user32
+    het = time.time() + cho
+    hwnd = 0
+    while time.time() < het and not hwnd:
+        hwnd = u32.FindWindowW(None, tieu_de)
+        if not hwnd:
+            time.sleep(0.3)
+    if not hwnd:
+        return
+    LR_LOADFROMFILE, IMAGE_ICON, WM_SETICON = 0x10, 1, 0x80
+    for kich, loai in ((16, 0), (32, 1)):            # ICON_SMALL = 0 (thanh tiêu đề), ICON_BIG = 1 (Alt-Tab)
+        h = u32.LoadImageW(None, str(ico), IMAGE_ICON, kich, kich, LR_LOADFROMFILE)
+        if h:
+            u32.SendMessageW(hwnd, WM_SETICON, loai, h)
 
 
-def _chup_man_hinh(win, duong_dan: str, cho: float = 3.0):
-    """Chụp vùng cửa sổ ra file (để kiểm thử tự động), rồi đóng cửa sổ."""
+def _chup_man_hinh(win, duong_dan: str, cho: float = 6.0):
     time.sleep(cho)
     try:
-        import ctypes
         from ctypes import wintypes
         from PIL import ImageGrab
-        # tọa độ thật của cửa sổ (pixel vật lý, đúng cả khi màn hình scale DPI) qua Win32
         hwnd = ctypes.windll.user32.FindWindowW(None, TIEU_DE)
         if hwnd:
             r = wintypes.RECT()
             ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(r))
             bbox = (r.left, r.top, r.right, r.bottom)
         else:
-            x, y = win.x, win.y
-            bbox = (x, y, x + win.width + 16, y + win.height + 40)
+            bbox = (win.x, win.y, win.x + win.width + 16, win.y + win.height + 40)
         ImageGrab.grab(bbox=bbox, all_screens=True).save(duong_dan)
     except Exception as e:                       # noqa: BLE001
         print("Chụp lỗi:", e)
     win.destroy()
 
 
+def _dung():
+    global _HTTPD
+    if _HTTPD is not None:
+        app.dung_tat_ca()
+        h, _HTTPD = _HTTPD, None
+        threading.Thread(target=h.shutdown, daemon=True).start()
+
+
 def main():
-    global _WINDOW
-    ap = argparse.ArgumentParser(description="Cửa sổ trạng thái cho server ghép video")
-    ap.add_argument("--khong-mo", action="store_true", help="không tự mở giao diện web ở trình duyệt")
-    ap.add_argument("--chup", help="(kiểm thử) chụp cửa sổ ra file PNG sau 3s rồi thoát")
+    global _WINDOW, _HTTPD
+    ap = argparse.ArgumentParser(description="Cửa sổ Ghép video Flow")
+    ap.add_argument("--chup", help="(kiểm thử) chụp cửa sổ ra file PNG sau 6s rồi thoát")
+    ap.add_argument("--tab", help="mở sẵn tab: ghep | chinh-sua | ai | nhat-ky | cai-dat")
     args = ap.parse_args()
 
-    cu = app.dang_chay_san()                    # bấm mở lần hai -> không chạy server thứ hai
-    if cu:
-        webbrowser.open(cu)
-        return
+    url = app.dang_chay_san()
+    if not url:                                   # chưa có server -> chạy trong tiến trình này
+        _HTTPD, url = app.make_server()
+        threading.Thread(target=_HTTPD.serve_forever, daemon=True, name="http").start()
+        app.S.log(f"✓ Server sẵn sàng tại {url} — cửa sổ desktop đang mở giao diện.")
+    if args.tab:
+        url += f"#{args.tab}"
 
-    api = Api()
     sw, sh = (webview.screens[0].width, webview.screens[0].height) if webview.screens else (1920, 1080)
+    w, h = min(W, sw - 40), min(H, sh - 60)
     _WINDOW = webview.create_window(
-        TIEU_DE, html=HTML, js_api=api, width=W, height=H,
-        x=max(0, (sw - W) // 2), y=max(0, (sh - H) // 2),       # canh giữa màn hình
-        resizable=True, min_size=(380, 480), background_color="#111827")
-    _WINDOW.events.closed += api.dung_server                     # bấm X cũng dừng server
+        TIEU_DE, url=url, width=w, height=h,
+        x=max(0, (sw - w) // 2), y=max(0, (sh - h) // 2),       # canh giữa màn hình
+        resizable=True, min_size=(900, 600), background_color="#f3f4f6")
+    _WINDOW.events.closed += _dung
 
     def sau_khi_mo():
-        api.khoi_dong(mo_trinh_duyet=not args.khong_mo)
+        threading.Thread(target=_dat_icon, args=(TIEU_DE, ICO), daemon=True).start()
         if args.chup:
             threading.Thread(target=_chup_man_hinh, args=(_WINDOW, args.chup), daemon=True).start()
 
     webview.start(sau_khi_mo, private_mode=False)
-    api.dung_server()
+    _dung()
     sys.stdout.flush()
     os._exit(0)                 # thread server/worker daemon -> thoát thẳng cho gọn
 

@@ -6,6 +6,7 @@
 <title>Ghép video Flow</title>
 <style>
 :root{
+  --sidebar:#111827; --sidebar-2:#1f2937; --sidebar-fg:#e5e7eb; --sidebar-dim:#9ca3af;
   --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --fg:#111827; --dim:#6b7280;
   --primary:#dc2626; --primary-h:#b91c1c; --blue:#2563eb; --blue-h:#1d4ed8;
   --green:#16a34a; --green-bg:#dcfce7; --red:#dc2626; --red-bg:#fee2e2;
@@ -13,149 +14,349 @@
   --radius:12px; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
 }
 *{box-sizing:border-box}
-html{height:100%}
-body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);
-  font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+html,body{height:100%}
+body{margin:0;display:flex;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
 
-.topbar{position:sticky;top:0;z-index:20;background:#111827;color:#f9fafb;
-  display:flex;align-items:center;gap:10px;padding:10px 22px;flex-wrap:wrap}
-.topbar h1{margin:0 12px 0 0;font-size:15px;letter-spacing:.12em}
-.topbar .sub{font-size:12px;color:#9ca3af}
+/* ---------------- sidebar ---------------- */
+.sidebar{width:212px;min-width:212px;background:var(--sidebar);color:var(--sidebar-fg);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.brand{padding:20px 18px 14px;border-bottom:1px solid #263142;display:flex;gap:10px;align-items:center}
+.brand .logo{width:34px;height:34px;border-radius:9px;background:#1f2937;display:grid;place-items:center;flex:none;border:1px solid #374151}
+.brand .logo svg{width:22px;height:22px}
+.brand h1{margin:0;font-size:13.5px;letter-spacing:.12em;color:#f9fafb;line-height:1.2}
+.brand p{margin:2px 0 0;font-size:11px;color:var(--sidebar-dim)}
+.nav{padding:12px 10px;display:flex;flex-direction:column;gap:4px}
+.nav button{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border:0;border-radius:9px;background:transparent;
+  color:var(--sidebar-fg);font:inherit;font-size:13.5px;cursor:pointer;text-align:left;transition:background .12s}
+.nav button:hover{background:var(--sidebar-2)}
+.nav button.active{background:var(--sidebar-2);box-shadow:inset 3px 0 0 var(--primary)}
+.nav .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;font-size:13px;font-weight:700}
+.ic-ghep{background:#dc2626;color:#fff} .ic-cs{background:#2563eb;color:#fff} .ic-ai{background:#0f172a;color:#fff;border:1px solid #334155}
+.ic-log{background:#374151;color:#fff} .ic-cd{background:#4b5563;color:#fff}
+.nav .cnt{margin-left:auto;font-size:11px;color:var(--sidebar-dim)} .nav .cnt b{color:#fbbf24;font-weight:600}
+.side-foot{margin-top:auto;padding:12px 16px;font-size:11px;color:#6b7280;border-top:1px solid #263142;line-height:1.6}
+.side-foot .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;margin-right:6px;vertical-align:middle}
+.side-foot .dot.on{background:#16a34a}
+
+/* ---------------- main ---------------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh}
+.topbar{background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:10px 22px;flex-wrap:wrap}
+.topbar h2{margin:0 10px 0 0;font-size:17px}
+.topbar .sub{color:var(--dim);font-size:12.5px}
 .spacer{flex:1}
-.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
-  font-size:12px;background:var(--gray-bg);color:var(--dim);border:1px solid var(--border);white-space:nowrap}
+.content{flex:1;overflow:auto;padding:18px 22px 30px}
+.tab{display:none;max-width:1180px;margin:0 auto} .tab.active{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px}
+.card>h3{margin:0;padding:12px 16px 8px;font-size:13.5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card>h3 small{font-weight:400;color:var(--dim)}
+.card .body{padding:0 16px 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:1000px){.grid2,.grid3{grid-template-columns:1fr}}
+.hint{font-size:12px;color:var(--dim);margin:8px 0 0} .hint b{color:var(--fg);font-weight:600}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .grow{flex:1;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;font-size:12px;background:var(--gray-bg);color:var(--dim);border:1px solid var(--border);white-space:nowrap}
 .chip b{color:var(--fg);font-weight:600}
 .chip.ok{background:var(--green-bg);color:#166534;border-color:#bbf7d0}
 .chip.bad{background:var(--red-bg);color:#991b1b;border-color:#fecaca}
 .chip.run{background:var(--blue-bg);color:#1e40af;border-color:#bfdbfe}
 .chip.warn{background:var(--amber-bg);color:var(--amber);border-color:#fde68a}
-.spin{width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:var(--blue);
-  border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+.spin{width:12px;height:12px;border:2px solid #bfdbfe;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.content{padding:18px 22px 30px;max-width:1180px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:var(--shadow);margin-bottom:14px}
-.card>h3{margin:0;padding:12px 16px 8px;font-size:13.5px;display:flex;align-items:center;gap:10px}
-.card>h3 small{font-weight:400;color:var(--dim)}
-.card .body{padding:0 16px 14px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media (max-width:980px){.grid2{grid-template-columns:1fr}}
-.hint{font-size:12px;color:var(--dim);margin:8px 0 0}
-.hint b{color:var(--fg);font-weight:600}
-.row{display:flex;gap:8px;align-items:center}
-.grow{flex:1;min-width:0}
+label{font-size:12.5px;color:var(--dim);display:block;margin-bottom:3px}
+input[type=text],input[type=number],textarea,select{width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font:inherit;background:#fff;color:var(--fg)}
+input[type=number]{width:96px} textarea{font:12.5px/1.5 Consolas,"Cascadia Mono",monospace;resize:vertical;min-height:100px}
+input:focus,textarea:focus,select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
+.fld{display:flex;flex-direction:column;gap:2px} .fld .u{font-size:11.5px;color:var(--dim)}
+.opts{display:flex;gap:14px;flex-wrap:wrap;align-items:center} .opts label{display:inline-flex;gap:6px;align-items:center;margin:0;color:var(--fg);font-size:13px;cursor:pointer}
+.sw{display:inline-flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;color:var(--fg)}
 
-input[type=text],textarea{width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;
-  font:inherit;background:#fff;color:var(--fg)}
-textarea{font:12.5px/1.5 Consolas,"Cascadia Mono",monospace;resize:vertical;min-height:112px}
-input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
-
-.btn{border:1px solid #d1d5db;background:#fff;color:var(--fg);border-radius:8px;padding:7px 13px;
-  font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
-.btn:hover{background:#f9fafb}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
-.btn.primary:hover{background:var(--primary-h)}
-.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.btn.blue:hover{background:var(--blue-h)}
-.btn.sm{padding:3px 9px;font-size:12px}
-.btn.link{border:0;background:none;color:var(--blue);padding:2px 4px}
-.btn.link:hover{text-decoration:underline}
+.btn{border:1px solid #d1d5db;background:#fff;color:var(--fg);border-radius:8px;padding:7px 13px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f9fafb} .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600} .btn.primary:hover{background:var(--primary-h)}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600} .btn.blue:hover{background:var(--blue-h)}
+.btn.sm{padding:3px 9px;font-size:12px} .btn.link{border:0;background:none;color:var(--blue);padding:2px 4px} .btn.link:hover{text-decoration:underline}
 .btn.danger{color:var(--red)}
 
 .goc-list{margin:8px 0 0;font-size:12.5px}
-.goc-list .f{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border-radius:6px;background:var(--gray-bg);
-  border:1px solid var(--border)}
-.goc-list .f.next{background:var(--blue-bg);border-color:#bfdbfe;color:#1e40af;font-weight:600}
-details{font-size:12px;color:var(--dim);margin-top:6px}
-
+.goc-list .f{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border-radius:6px;background:var(--gray-bg);border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;font-weight:600;font-size:12px;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--border);
-  background:#fafafa;position:sticky;top:0}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--border);background:#fafafa;position:sticky;top:0}
 td{padding:8px;border-bottom:1px solid #f1f2f4;vertical-align:top}
 tr.dang td{background:#f5f9ff}
 td.num{width:34px;color:var(--dim);font-variant-numeric:tabular-nums}
-.ten{font-weight:600}
-.ten.cho-ten{font-weight:400;color:var(--dim);font-style:italic}
-.lnk{font-size:11.5px;color:var(--dim);word-break:break-all}
-.lnk a{color:var(--dim)}
-.warn-t{font-size:12px;color:var(--amber);margin-top:2px}
-.err-t{font-size:12px;color:var(--red);margin-top:3px;max-width:340px;word-break:break-word}
-.goc-c{font-size:12.5px;white-space:nowrap}
-.st{white-space:nowrap}
-.muted{color:var(--dim);font-size:12px}
-.empty{padding:22px;text-align:center;color:var(--dim)}
-.tbl-wrap{max-height:460px;overflow:auto;border-top:1px solid var(--border)}
+.ten{font-weight:600} .ten.cho-ten{font-weight:400;color:var(--dim);font-style:italic}
+.lnk{font-size:11.5px;color:var(--dim);word-break:break-all} .lnk a{color:var(--dim);cursor:pointer;text-decoration:underline}
+.warn-t{font-size:12px;color:var(--amber);margin-top:2px} .err-t{font-size:12px;color:var(--red);margin-top:3px;max-width:340px;word-break:break-word}
+.goc-c{font-size:12.5px} .st{white-space:nowrap} .muted{color:var(--dim);font-size:12px}
+.empty{padding:22px;text-align:center;color:var(--dim)} .tbl-wrap{max-height:440px;overflow:auto;border-top:1px solid var(--border)}
 
-pre#log{margin:0;height:260px;overflow:auto;background:#0b1220;color:#d1d5db;border-radius:0 0 var(--radius) var(--radius);
-  padding:10px 12px;font:12px/1.5 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word}
+pre.log{margin:0;overflow:auto;background:#0b1220;color:#d1d5db;border-radius:0 0 var(--radius) var(--radius);padding:10px 12px;
+  font:12px/1.5 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word}
+#logMini{height:170px} #logFull{height:calc(100vh - 190px);min-height:300px}
 
-#toast{position:fixed;right:20px;bottom:20px;max-width:460px;background:#111827;color:#fff;padding:10px 14px;
-  border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);
-  transition:all .2s;pointer-events:none;z-index:50}
-#toast.show{opacity:1;transform:none}
-#toast.err{background:#7f1d1d}
+/* xem trước */
+.xt{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.xt img{border:1px solid var(--border);border-radius:8px;background:#0b1220;cursor:zoom-in}
+.xt .prev{height:420px} .xt .mau{max-width:100%;max-height:420px}
+
+/* Kết nối AI */
+.nha{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)} .nha:last-child{border-bottom:0}
+.dot{width:13px;height:13px;border-radius:50%;background:#9ca3af;flex:none}
+.dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(22,163,74,.2)} .dot.off{background:var(--red)} .dot.wait{background:#f59e0b}
+.nha .tenai{font-weight:700;font-size:14.5px;width:76px;flex:none} .nha .tt{font-size:13px} .nha .tt .ok{color:#166534} .nha .tt .bad{color:#991b1b}
+.chips{display:flex;gap:6px} .chips .c{padding:4px 11px;border-radius:999px;border:1px solid #d1d5db;cursor:pointer;font-size:12px;background:#fff}
+.chips .c.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8px;min-height:120px;max-height:360px;overflow:auto;padding:10px 12px;
+  font:13.5px/1.55 "Segoe UI",system-ui,sans-serif;white-space:pre-wrap;word-break:break-word;color:var(--fg)}
+
+.kv{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;font-size:13px} .kv .k{color:var(--dim)} .kv .v{word-break:break-all}
+#toast{position:fixed;right:20px;bottom:20px;max-width:480px;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:all .2s;pointer-events:none;z-index:50}
+#toast.show{opacity:1;transform:none} #toast.err{background:#7f1d1d}
 </style>
 </head>
 <body>
-<div class="topbar">
-  <h1>GHÉP VIDEO FLOW</h1>
-  <span class="sub">Hook + tiêu đề + minh họa + video gốc + giọng đọc + phụ đề</span>
-  <span class="spacer"></span>
-  <span id="chipRun" class="chip">Đang dừng</span>
-  <span id="chipQ" class="chip">0 tập</span>
-  <button class="btn sm" onclick="api('/api/mo',{loai:'downloads'})">Mở Downloads</button>
-</div>
+<aside class="sidebar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.2" stroke="#e5e7eb" stroke-width="1.6"/><path d="M11 7.2v4.6l3.6-2.3z" fill="#dc2626"/><rect x="9" y="14" width="6" height="2.6" rx=".8" fill="#2563eb"/></svg></div>
+    <div><h1>GHÉP VIDEO<br>FLOW</h1><p>hook · tiêu đề · clip · giọng đọc</p></div>
+  </div>
+  <nav class="nav">
+    <button data-tab="ghep" class="active"><span class="ic ic-ghep">▶</span>Ghép video<span class="cnt" id="cntGhep"></span></button>
+    <button data-tab="chinh-sua"><span class="ic ic-cs">✂</span>Chỉnh sửa<span class="cnt" id="cntCs"></span></button>
+    <button data-tab="ai"><span class="ic ic-ai">◉</span>Kết nối AI<span class="cnt" id="cntAi"></span></button>
+    <button data-tab="nhat-ky"><span class="ic ic-log">☰</span>Nhật ký</button>
+    <button data-tab="cai-dat"><span class="ic ic-cd">⚙</span>Cài đặt</button>
+  </nav>
+  <div class="side-foot"><span id="sDot" class="dot"></span><span id="sTxt">đang nối server…</span><br><span id="sVer"></span></div>
+</aside>
 
-<div class="content">
-  <div class="grid2">
+<div class="main">
+  <div class="topbar">
+    <h2 id="tbTitle">Ghép video</h2><span class="sub" id="tbSub">Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề</span>
+    <span class="spacer"></span>
+    <span id="chipRun" class="chip">Đang dừng</span>
+    <button class="btn sm" onclick="api('/api/mo',{loai:'thu_muc_ra'})">Mở thư mục kết quả</button>
+  </div>
+  <div class="content">
+
+  <!-- ===================== GHÉP VIDEO ===================== -->
+  <section class="tab active" id="tab-ghep">
+    <div class="grid2">
+      <div class="card">
+        <h3>1. Thư mục clip gốc <small>các clip ngắn quay bác sĩ, tắt tiếng, lồng giọng đọc</small></h3>
+        <div class="body">
+          <div class="row">
+            <input id="gocDir" type="text" class="grow" placeholder="…\GoogleFlowGhepVideo\video gốc" spellcheck="false">
+            <button class="btn" onclick="chonThuMuc()">Chọn…</button>
+            <button class="btn" onclick="luuGoc()">Lưu</button>
+          </div>
+          <div id="gocInfo" class="goc-list"></div>
+          <p class="hint">Mỗi tập <b>xáo ngẫu nhiên</b> các clip rồi nối tới khi đủ giọng đọc; clip cuối dài hơn thì <b>cắt</b> (chừa ít nhất 1,5s). Seed cố định đặt ở tab Chỉnh sửa.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h3>2. Thêm link thư mục Drive <small>mỗi dòng một link</small></h3>
+        <div class="body">
+          <textarea id="links" placeholder="https://drive.google.com/drive/folders/…&#10;https://drive.google.com/drive/folders/…" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:8px">
+            <span class="muted grow">Mỗi thư mục là một tập có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet không dùng được.</span>
+            <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
-      <h3>1. Thư mục clip gốc <small>các clip ngắn quay bác sĩ, tắt tiếng, lồng giọng đọc</small></h3>
+      <h3>3. Hàng đợi <small id="qSum"></small>
+        <span class="spacer"></span>
+        <button id="btnStart" class="btn blue sm" onclick="api('/api/start')">▶ Chạy</button>
+        <button id="btnStop" class="btn sm" onclick="api('/api/stop')">■ Dừng</button>
+        <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
+        <button class="btn sm" onclick="api('/api/clear_done')">Bỏ mục đã xong</button>
+      </h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Tập</th><th>Clip phần sau</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Nhật ký gần đây <span class="spacer"></span><button class="btn link sm" onclick="moTab('nhat-ky')">Xem đầy đủ →</button></h3>
+      <pre class="log" id="logMini"></pre>
+    </div>
+  </section>
+
+  <!-- ===================== CHỈNH SỬA ===================== -->
+  <section class="tab" id="tab-chinh-sua">
+    <div class="card">
+      <h3>Tùy chọn chỉnh sửa <small>áp dụng chung cho mọi tập chạy từ giờ</small>
+        <span class="spacer"></span>
+        <span id="tcTrangThai" class="muted"></span>
+        <button class="btn sm" onclick="tcMacDinh()">Mặc định</button>
+        <button class="btn blue sm" id="btnLuuTc" onclick="tcLuu()">Lưu tùy chọn</button>
+      </h3>
+      <div class="body">
+        <div class="grid3" style="margin-top:6px">
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px">Bố cục 10 giây đầu</h4>
+            <div class="row">
+              <div class="fld"><label>Rộng tiêu đề</label><div class="row"><input type="number" id="tc_ti_le" min="30" max="100" step="1"><span class="u">% bề rộng video</span></div></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="fld"><label>Cách cằm → tiêu đề</label><div class="row"><input type="number" id="tc_khoang_cach" min="-0.5" max="1.5" step="0.05"><span class="u">× chiều cao mặt</span></div></div>
+            </div>
+            <p class="hint">Tiêu đề căn giữa theo mặt; ảnh minh họa bắt đầu từ giữa tiêu đề phủ tới đáy.</p>
+            <h4 style="margin:14px 0 8px;font-size:13px">Màu</h4>
+            <label class="sw"><input type="checkbox" id="tc_chinh_mau"> Chỉnh màu tự động từng clip (kiểu CapCut Auto)</label>
+          </div>
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px">Âm thanh</h4>
+            <label class="sw"><input type="checkbox" id="tc_chuan_am"> Chuẩn hóa âm lượng (hook về mức chuẩn, giọng đọc khớp theo hook)</label>
+            <div class="row" style="margin-top:8px">
+              <div class="fld"><label>Mức chuẩn</label><div class="row"><input type="number" id="tc_lufs" min="-30" max="-6" step="0.5"><span class="u">LUFS</span></div></div>
+              <div class="fld"><label>Đo N giây đầu giọng đọc</label><div class="row"><input type="number" id="tc_cua_so_khop" min="0" max="600" step="1" placeholder="= hook"><span class="u">s (0 = cả file)</span></div></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="fld"><label>Giọng đọc lệch so với hook</label><div class="row"><input type="number" id="tc_lech_giong" min="-12" max="12" step="0.5"><span class="u">dB (âm = nhỏ hơn)</span></div></div>
+            </div>
+            <h4 style="margin:14px 0 8px;font-size:13px">Phụ đề <small class="muted">(chỉ phần sau, chữ lấy theo kịch bản)</small></h4>
+            <label class="sw"><input type="checkbox" id="tc_sub"> Đốt phụ đề vào video</label>
+            <div class="row" style="margin-top:8px">
+              <div class="fld"><label>Font</label><input type="text" id="tc_sub_font" style="width:130px"></div>
+              <div class="fld"><label>Cỡ chữ</label><input type="number" id="tc_sub_co" min="4" max="40" step="0.5"></div>
+              <div class="fld"><label>Lề dưới</label><input type="number" id="tc_sub_le_duoi" min="0" max="200" step="1"></div>
+            </div>
+            <div class="row" style="margin-top:8px"><div class="fld grow"><label>Model lấy mốc thời gian</label><input type="text" id="tc_model_sub" placeholder="mặc định large-v3-turbo"></div></div>
+          </div>
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px">Phần sau (clip gốc)</h4>
+            <div class="fld"><label>Seed xáo clip</label><div class="row"><input type="number" id="tc_seed" min="0" step="1" placeholder="ngẫu nhiên"><span class="u">trống = ngẫu nhiên mỗi lần</span></div></div>
+            <h4 style="margin:14px 0 8px;font-size:13px">Render</h4>
+            <div class="fld"><label>Chế độ máy</label>
+              <div class="opts">
+                <label><input type="radio" name="tc_che_do" value="auto"> Tự dò (NVENC)</label>
+                <label><input type="radio" name="tc_che_do" value="nhe"> Máy yếu</label>
+                <label><input type="radio" name="tc_che_do" value="manh"> Đầy đủ</label>
+                <label><input type="radio" name="tc_che_do" value="cpu"> Ép CPU</label>
+              </div></div>
+            <div class="fld" style="margin-top:8px"><label>Độ phân giải</label>
+              <div class="opts">
+                <label><input type="radio" name="tc_do_phan_giai" value="0"> Giữ hook (1080×1920)</label>
+                <label><input type="radio" name="tc_do_phan_giai" value="720"> 720×1280</label>
+              </div></div>
+            <p class="hint">Máy yếu: scale bicubic, bỏ làm nét, mã hóa QSV/AMF/x264 veryfast. Model phụ đề không đổi.</p>
+          </div>
+        </div>
+        <h4 style="margin:16px 0 8px;font-size:13px">Minh họa theo từ khóa <small class="muted">(AI đọc kịch bản, chọn câu + từ khóa trong kho; tool chèn clip đúng giây câu đó)</small></h4>
+        <label class="sw"><input type="checkbox" id="tc_minh_hoa"> Chèn cảnh minh họa vào phần sau</label>
+        <div class="row" style="margin-top:8px">
+          <div class="fld grow"><label>Kho minh họa (link Google Sheet tab "Kho minh họa", hoặc file CSV trên máy)</label>
+            <div class="row"><input type="text" id="tc_minh_hoa_sheet" class="grow" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/…">
+              <button class="btn sm" onclick="api('/api/mo',{loai:'url',url:$('tc_minh_hoa_sheet').value})">Mở Sheet</button></div></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="fld"><label>AI chọn từ khóa</label>
+            <select id="tc_minh_hoa_ai" style="width:auto"><option value="gpt">GPT (Codex)</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
+          <div class="fld"><label>Model (trống = mặc định)</label><input type="text" id="tc_minh_hoa_model" style="width:170px" placeholder="vd gpt-6-astra"></div>
+          <div class="fld"><label>Mỗi cảnh tối đa</label><div class="row"><input type="number" id="tc_minh_hoa_giay" min="2.5" max="20" step="0.5"><span class="u">giây</span></div></div>
+          <div class="fld"><label>Tổng minh họa tối đa</label><div class="row"><input type="number" id="tc_minh_hoa_ti_le" min="5" max="90" step="5"><span class="u">% phần sau</span></div></div>
+        </div>
+        <p class="hint">Kho: mỗi dòng một clip/ảnh, cột <b>Từ khóa</b> (nhiều từ, cách nhau dấu phẩy) và <b>Link Drive</b>. AI chỉ chọn từ khóa có trong kho; câu nên minh họa mà kho thiếu được ghi vào Nhật ký và file <code>video minh họa\thieu_minh_hoa.jsonl</code>. Không minh họa câu đầu/câu cuối, hai cảnh cách nhau ít nhất một câu.</p>
+        <div class="muted" style="margin-top:10px">Dòng lệnh tương ứng: <code id="tcCmd" style="font-size:12px"></code></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Xem trước <small>chạy nhanh 1 tập: nhận diện mặt + bố cục + màu, không render video</small>
+        <span class="spacer"></span>
+        <select id="xtChon" style="width:auto;max-width:420px"></select>
+        <button class="btn blue sm" id="btnXt" onclick="xemTruoc()">👁 Xem trước</button>
+      </h3>
+      <div class="body">
+        <div id="xtTrangThai" class="muted" style="margin:6px 0 10px"></div>
+        <div class="xt" id="xtAnh"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== KẾT NỐI AI ===================== -->
+  <section class="tab" id="tab-ai">
+    <div class="card">
+      <h3>Tài khoản AI <small>đăng nhập bằng tài khoản đang có (trên trang đăng nhập chọn <b>Tiếp tục bằng Google</b>) — không cần API key</small>
+        <span class="spacer"></span><span class="muted">dò lại lúc <span id="aiLuc">—</span></span>
+        <button class="btn sm" onclick="api('/api/ai_lam_moi')">Làm mới</button></h3>
+      <div class="body" id="aiDs">(đang dò…)</div>
+    </div>
+    <div class="card">
+      <h3>Hỏi thử
+        <div class="chips" id="aiChips"></div>
+        <span class="muted">Model</span>
+        <select id="aiModel" style="width:auto;max-width:260px" onchange="aiDoiModel()"></select>
+        <input id="aiModelKhac" type="text" placeholder="gõ id model…" style="width:200px;display:none" oninput="aiModelChon[aiChon]=this.value.trim();aiLuuModel()">
+        <span class="spacer"></span>
+        <button class="btn sm" onclick="aiMoi()">Hội thoại mới</button>
+      </h3>
+      <div class="body">
+        <textarea id="aiCau" style="min-height:70px;font:inherit" placeholder="Gõ câu hỏi rồi bấm Gửi (Ctrl+Enter)…"></textarea>
+        <div class="row" style="margin:8px 0">
+          <span id="aiTl" class="muted grow"></span>
+          <button class="btn sm" onclick="saoChep($('aiDap').textContent)">⧉ Sao chép trả lời</button>
+          <button class="btn blue" id="aiGui" onclick="aiGui()">Gửi</button>
+        </div>
+        <pre class="dap" id="aiDap" style="user-select:text">(câu trả lời hiện ở đây)</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== NHẬT KÝ ===================== -->
+  <section class="tab" id="tab-nhat-ky">
+    <div class="card">
+      <h3>Nhật ký <small>tải Drive · log ghep_tieude.py · xem trước · AI</small>
+        <span class="spacer"></span>
+        <button class="btn sm" onclick="saoChepLog()">Sao chép</button>
+        <button class="btn sm" onclick="logLines=[];veLog()">Xóa màn hình</button></h3>
+      <pre class="log" id="logFull"></pre>
+    </div>
+  </section>
+
+  <!-- ===================== CÀI ĐẶT ===================== -->
+  <section class="tab" id="tab-cai-dat">
+    <div class="card">
+      <h3>Thư mục kết quả <small>video _full_, phụ đề .srt, thư mục Drive tải về</small></h3>
       <div class="body">
         <div class="row">
-          <input id="gocDir" type="text" class="grow" placeholder="D:\Python\GetLinktoText\GoogleFlowGhepVideo\video gốc" spellcheck="false">
-          <button class="btn" onclick="chonThuMuc()">Chọn…</button>
-          <button class="btn" onclick="luuGoc()">Lưu</button>
+          <input id="cdThuMucRa" type="text" class="grow" placeholder="trống = Downloads" spellcheck="false">
+          <button class="btn" onclick="api('/api/chon_thu_muc_ra')">Chọn…</button>
+          <button class="btn" onclick="cdLuu()">Lưu</button>
+          <button class="btn" onclick="$('cdThuMucRa').value='';cdLuu()">Về Downloads</button>
         </div>
-        <div id="gocInfo" class="goc-list"></div>
-        <p class="hint">Mỗi tập <b>xáo ngẫu nhiên</b> các clip rồi nối lần lượt tới khi đủ giọng đọc; clip cuối dài hơn thì <b>cắt</b>
-          (chừa ít nhất 1,5s). Kho ngắn hơn giọng đọc thì xáo lại dùng tiếp. Mặc định là thư mục <b>video gốc</b> trong dự án.</p>
+        <p class="hint">Đang dùng: <b id="cdThuMucRaThuc"></b> · <button class="btn link sm" onclick="api('/api/mo',{loai:'thu_muc_ra'})">mở</button></p>
       </div>
     </div>
-
     <div class="card">
-      <h3>2. Thêm link thư mục Drive <small>mỗi dòng một link</small></h3>
+      <h3>Server &amp; giao diện</h3>
       <div class="body">
-        <textarea id="links" placeholder="https://drive.google.com/drive/folders/14UIsTKTCXNaWSJCmG5jEgIkOCn-R4whq&#10;https://drive.google.com/drive/folders/..." spellcheck="false"></textarea>
-        <div class="row" style="margin-top:8px">
-          <span class="muted grow">Mỗi thư mục là một tập, có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet không dùng được.</span>
-          <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
+        <div class="kv">
+          <div class="k">Địa chỉ</div><div class="v"><span id="cdUrl"></span> <button class="btn link sm" onclick="api('/api/mo',{loai:'url',url:state.cai_dat.url})">mở trong trình duyệt</button> <button class="btn link sm" onclick="saoChep(state.cai_dat.url)">sao chép</button></div>
+          <div class="k">Phiên bản giao diện</div><div class="v" id="cdVer"></div>
+          <div class="k">File trạng thái</div><div class="v" id="cdFile"></div>
+          <div class="k">Thư mục clip gốc mặc định</div><div class="v" id="cdGocMd"></div>
+          <div class="k">Ảnh xem trước (tạm)</div><div class="v" id="cdXt"></div>
         </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" onclick="api('/api/mo',{loai:'goc'})">Mở thư mục clip gốc</button>
+          <button class="btn" onclick="moTab('chinh-sua')">Tùy chọn chỉnh sửa</button>
+          <button class="btn" onclick="moTab('ai')">Kết nối AI</button>
+        </div>
+        <p class="hint">Mở app lần hai khi server đang chạy thì chỉ mở thêm cửa sổ, không chạy server thứ hai. Đóng cửa sổ desktop = dừng server và việc ghép đang chạy.</p>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="card">
-    <h3>3. Hàng đợi <small id="qSum"></small>
-      <span class="spacer"></span>
-      <button id="btnStart" class="btn blue sm" onclick="api('/api/start')">▶ Chạy</button>
-      <button id="btnStop" class="btn sm" onclick="api('/api/stop')">■ Dừng</button>
-      <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
-      <button class="btn sm" onclick="api('/api/clear_done')">Bỏ mục đã xong</button>
-    </h3>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Tập</th><th>Clip phần sau</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
-        <tbody id="tbody"><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Nhật ký <small>tải Drive + log của ghep_tieude.py</small><span class="spacer"></span>
-      <button class="btn sm" onclick="logLines=[];$('log').textContent=''">Xóa màn hình</button></h3>
-    <pre id="log"></pre>
   </div>
 </div>
 <div id="toast"></div>
@@ -163,71 +364,75 @@ pre#log{margin:0;height:260px;overflow:auto;background:#0b1220;color:#d1d5db;bor
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let seq = 0, logLines = [], lastKey = '', state = null, gocDirDirty = false, toastT = 0;
+const fmt = s => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+let seq = 0, logLines = [], state = null, toastT = 0, busy = false;
+let lastItemsKey = '', gocDirDirty = false, tcDirty = false, tcLoaded = false, cdDirty = false, lastAiKey = '', lastXtKey = '';
+let aiChon = 'claude', aiBusy = false;
+const TAB_INFO = {
+  'ghep': ['Ghép video', 'Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề'],
+  'chinh-sua': ['Chỉnh sửa', 'Bố cục · màu · âm thanh · phụ đề · phần sau · render — áp cho mọi tập'],
+  'ai': ['Kết nối AI', 'Claude · GPT · Gemini qua tài khoản đang đăng nhập'],
+  'nhat-ky': ['Nhật ký', 'Toàn bộ log của phiên này'],
+  'cai-dat': ['Cài đặt', 'Thư mục kết quả, địa chỉ server'],
+};
 
-function toast(msg, err){
-  if (!msg) return;
-  const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
-  clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 4200);
-}
+function toast(msg, err){ if (!msg) return; const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 4500); }
 async function api(path, body){
   try{
     const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {})});
-    const j = await r.json();
-    if (j.msg) toast(j.msg, !j.ok);
-    tick();
-    return j;
+    const j = await r.json(); if (j.msg) toast(j.msg, !j.ok); tick(); return j;
   }catch(e){ toast('Mất kết nối server: ' + e, true); return {ok:false}; }
 }
+function saoChep(t){ try{ navigator.clipboard.writeText(t); toast('Đã sao chép.'); } catch(e){ toast('Không sao chép được: ' + e, true); } }
+
+/* ---------- tab ---------- */
+function moTab(name){
+  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  const [t, sub] = TAB_INFO[name] || ['', '']; $('tbTitle').textContent = t; $('tbSub').textContent = sub;
+  if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  if (name === 'nhat-ky') { const p = $('logFull'); p.scrollTop = p.scrollHeight; }
+}
+document.querySelectorAll('.nav button').forEach(b => b.onclick = () => moTab(b.dataset.tab));
+const tabTuHash = () => moTab(TAB_INFO[location.hash.slice(1)] ? location.hash.slice(1) : 'ghep');
+window.addEventListener('hashchange', tabTuHash);   // app_gui.py --tab x mở thẳng tab; đổi #hash cũng đổi tab
+tabTuHash();
+
+/* ---------- tab Ghép video ---------- */
 async function chonThuMuc(){ toast('Đang mở hộp thoại chọn thư mục…'); gocDirDirty = false; await api('/api/chon_thu_muc'); }
 async function luuGoc(){ const j = await api('/api/set_goc_dir', {dir: $('gocDir').value}); if (j.ok) gocDirDirty = false; }
 $('gocDir').addEventListener('input', () => gocDirDirty = true);
 $('gocDir').addEventListener('keydown', e => { if (e.key === 'Enter') luuGoc(); });
 async function themLink(){
-  const text = $('links').value.trim();
-  if (!text) return toast('Dán link thư mục Drive vào ô trước.', true);
-  const j = await api('/api/add_links', {text});
-  if (j.ok) $('links').value = (j.sai || []).join('\n');
+  const text = $('links').value.trim(); if (!text) return toast('Dán link thư mục Drive vào ô trước.', true);
+  const j = await api('/api/add_links', {text}); if (j.ok) $('links').value = (j.sai || []).join('\n');
 }
-
-const fmt = s => { s = Math.max(0, Math.round(s)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-
 function renderGoc(g){
   if (!gocDirDirty && document.activeElement !== $('gocDir')) $('gocDir').value = g.dir || '';
   let h = '';
   if (!g.dir) h = '<span class="chip warn">Chưa chọn thư mục clip gốc</span>';
   else if (!g.ton_tai) h = '<span class="chip bad">Không thấy thư mục này nữa</span>';
   else if (!g.clips.length) h = '<span class="chip bad">Thư mục không có clip video</span>';
-  else {
-    h = `<div class="muted">${g.clips.length} clip, tổng ${fmt(g.tong_giay)}${g.mac_dinh ? ' · <span class="chip ok">thư mục mặc định của dự án</span>' : ''}</div>`;
-    h += g.clips.map(c => `<span class="f">${esc(c.ten)} <span class="muted">${c.giay.toFixed(1)}s</span></span>`).join('');
-  }
+  else { h = `<div class="muted">${g.clips.length} clip, tổng ${fmt(g.tong_giay)}${g.mac_dinh ? ' · <span class="chip ok">thư mục mặc định của dự án</span>' : ''}</div>`;
+    h += g.clips.map(c => `<span class="f">${esc(c.ten)} <span class="muted">${c.giay.toFixed(1)}s</span></span>`).join(''); }
   $('gocInfo').innerHTML = h;
 }
-function clipCell(it){
-  if (it.phan_sau) return `<div class="muted" style="white-space:normal;max-width:300px">${esc(it.phan_sau)}</div>` +
-    (it.seed ? `<div class="muted">seed ${it.seed}</div>` : '');
-  return `<span class="muted">${it.status === 'cho' ? 'xáo ngẫu nhiên khi chạy' : it.status === 'dang' ? 'đang xáo…' : '—'}</span>`;
-}
-
 function stCell(it, now){
-  if (it.status === 'dang'){
-    const t = it.bat_dau ? fmt(now - it.bat_dau) : '';
-    return `<span class="chip run"><span class="spin"></span> ${esc(it.buoc || 'Đang chạy')}</span> <span class="muted" data-bd="${it.bat_dau||''}">${t}</span>`;
-  }
-  if (it.status === 'xong'){
-    const tl = it.thoi_luong ? ` · video ${fmt(it.thoi_luong)}` : '';
-    return `<span class="chip ok">✓ Xong</span><div class="muted">làm ${fmt(it.giay_chay||0)}${tl}</div>`;
-  }
+  if (it.status === 'dang') return `<span class="chip run"><span class="spin"></span> ${esc(it.buoc || 'Đang chạy')}</span> <span class="muted" data-bd="${it.bat_dau||''}">${it.bat_dau ? fmt(now - it.bat_dau) : ''}</span>`;
+  if (it.status === 'xong') return `<span class="chip ok">✓ Xong</span><div class="muted">làm ${fmt(it.giay_chay||0)}${it.thoi_luong ? ` · video ${fmt(it.thoi_luong)}` : ''}</div>`;
   if (it.status === 'loi') return `<span class="chip bad">✗ Lỗi</span><div class="err-t">${esc(it.loi)}</div>`;
   return `<span class="chip">Chờ</span>` + (it.loi ? `<div class="muted">${esc(it.loi)}</div>` : '');
 }
+function clipCell(it){
+  if (it.phan_sau) return `<div class="muted" style="white-space:normal;max-width:300px">${esc(it.phan_sau)}</div>` + (it.seed ? `<div class="muted">seed ${it.seed}</div>` : '')
+    + (it.minh_hoa ? `<div class="muted" style="white-space:normal;max-width:300px;margin-top:3px"><b>Minh họa:</b> ${esc(it.minh_hoa)}</div>` : '');
+  return `<span class="muted">${it.status === 'cho' ? 'xáo ngẫu nhiên khi chạy' : it.status === 'dang' ? 'đang xáo…' : '—'}</span>`;
+}
 function kqCell(it){
   const b = [];
-  if (it.out && it.status === 'xong'){
-    b.push(`<button class="btn sm blue" onclick="api('/api/mo',{id:${it.id},loai:'video'})">▶ Xem</button>`);
-    b.push(`<button class="btn sm" title="Mở thư mục, chọn sẵn file video" onclick="api('/api/mo',{id:${it.id},loai:'thu_muc_video'})">📁</button>`);
-  }
+  if (it.out && it.status === 'xong'){ b.push(`<button class="btn sm blue" onclick="api('/api/mo',{id:${it.id},loai:'video'})">▶ Xem</button>`);
+    b.push(`<button class="btn sm" title="Mở thư mục, chọn sẵn file video" onclick="api('/api/mo',{id:${it.id},loai:'thu_muc_video'})">📁</button>`); }
   if (it.preview) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'preview'})">ảnh bố cục</button>`);
   if (it.thu_muc) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'tai'})">file Drive</button>`);
   return b.join(' ');
@@ -240,53 +445,171 @@ function actCell(it){
   return b.join(' ');
 }
 function renderItems(s){
-  const items = s.items;
-  const key = JSON.stringify([items, s.running, s.stopping]);
-  if (key !== lastKey){
-    lastKey = key;
+  const items = s.items, key = JSON.stringify([items, s.running, s.stopping]);
+  if (key !== lastItemsKey){
+    lastItemsKey = key;
     $('tbody').innerHTML = items.length ? items.map((it, i) => `
       <tr class="${it.status}">
         <td class="num">${i + 1}</td>
         <td><div class="ten${it.ten ? '' : ' cho-ten'}">${esc(it.ten || 'đang lấy tên thư mục…')}</div>
-            <div class="lnk"><a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.link)}</a></div>
+            <div class="lnk"><a onclick="api('/api/mo',{loai:'url',url:'${esc(it.link)}'})">${esc(it.link)}</a></div>
             ${it.canh_bao ? `<div class="warn-t">⚠ ${esc(it.canh_bao)}</div>` : ''}</td>
         <td class="goc-c">${clipCell(it)}</td>
         <td class="st">${stCell(it, s.now)}</td>
         <td>${kqCell(it)}</td>
         <td style="white-space:nowrap;text-align:right">${actCell(it)}</td>
       </tr>`).join('') : '<tr><td colspan="6" class="empty">Chưa có link nào — dán link thư mục Drive ở ô số 2.</td></tr>';
-  } else {
-    document.querySelectorAll('[data-bd]').forEach(el => { const bd = +el.dataset.bd; if (bd) el.textContent = fmt(s.now - bd); });
-  }
+    // danh sách tập cho Xem trước
+    const sel = $('xtChon'), cu = sel.value;
+    sel.innerHTML = items.length ? items.map((it, i) => `<option value="${it.id}">${i + 1}. ${esc((it.ten || it.link).slice(0, 70))}</option>`).join('') : '<option value="">(hàng đợi trống)</option>';
+    if ([...sel.options].some(o => o.value === cu)) sel.value = cu;
+  } else document.querySelectorAll('[data-bd]').forEach(el => { const bd = +el.dataset.bd; if (bd) el.textContent = fmt(s.now - bd); });
   const c = st => items.filter(x => x.status === st).length;
   $('qSum').textContent = items.length ? `${items.length} tập · ${c('cho')} chờ · ${c('dang')} đang làm · ${c('xong')} xong · ${c('loi')} lỗi` : '';
-  $('chipQ').innerHTML = `<b>${items.length}</b> tập`;
+  $('cntGhep').innerHTML = items.length ? `<b>${c('cho') + c('dang')}</b>/${items.length}` : '';
   const run = $('chipRun');
   if (s.stopping){ run.className = 'chip warn'; run.textContent = 'Đang dừng…'; }
-  else if (s.running){ const cur = items.find(x => x.id === s.current); run.className = 'chip run';
-    run.innerHTML = `<span class="spin"></span> Đang chạy${cur ? ': ' + esc(cur.buoc || '') : ''}`; }
+  else if (s.running){ const cur = items.find(x => x.id === s.current); run.className = 'chip run'; run.innerHTML = `<span class="spin"></span> Đang chạy${cur ? ': ' + esc(cur.buoc || '') : ''}`; }
   else { run.className = 'chip'; run.textContent = 'Đang dừng'; }
-  $('btnStart').disabled = s.running || !c('cho');
-  $('btnStop').disabled = !s.running || s.stopping;
+  $('btnStart').disabled = s.running || !c('cho'); $('btnStop').disabled = !s.running || s.stopping;
 }
-function renderLog(lines){
-  if (!lines.length) return;
-  const pre = $('log'), atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
-  logLines = logLines.concat(lines).slice(-1500);
-  pre.textContent = logLines.join('\n');
-  if (atBottom) pre.scrollTop = pre.scrollHeight;
+
+/* ---------- tab Chỉnh sửa ---------- */
+const TC_IDS = ['tc_ti_le','tc_khoang_cach','tc_chinh_mau','tc_chuan_am','tc_lufs','tc_cua_so_khop','tc_lech_giong','tc_sub','tc_sub_font','tc_sub_co','tc_sub_le_duoi','tc_model_sub','tc_seed',
+  'tc_minh_hoa','tc_minh_hoa_sheet','tc_minh_hoa_ai','tc_minh_hoa_model','tc_minh_hoa_giay','tc_minh_hoa_ti_le'];
+function tcFill(tc){
+  $('tc_ti_le').value = Math.round(tc.ti_le_tieude * 100); $('tc_khoang_cach').value = tc.khoang_cach;
+  $('tc_chinh_mau').checked = tc.chinh_mau; $('tc_chuan_am').checked = tc.chuan_am;
+  $('tc_lufs').value = tc.lufs; $('tc_cua_so_khop').value = tc.cua_so_khop ?? ''; $('tc_lech_giong').value = tc.lech_giong;
+  $('tc_sub').checked = tc.sub; $('tc_sub_font').value = tc.sub_font; $('tc_sub_co').value = tc.sub_co; $('tc_sub_le_duoi').value = tc.sub_le_duoi; $('tc_model_sub').value = tc.model_sub || '';
+  $('tc_seed').value = tc.seed ?? '';
+  $('tc_minh_hoa').checked = !!tc.minh_hoa; $('tc_minh_hoa_sheet').value = tc.minh_hoa_sheet || ''; $('tc_minh_hoa_ai').value = tc.minh_hoa_ai || 'gpt';
+  $('tc_minh_hoa_model').value = tc.minh_hoa_model || ''; $('tc_minh_hoa_giay').value = tc.minh_hoa_giay; $('tc_minh_hoa_ti_le').value = Math.round((tc.minh_hoa_ti_le || 0.45) * 100);
+  document.querySelectorAll('input[name=tc_che_do]').forEach(r => r.checked = r.value === tc.che_do);
+  document.querySelectorAll('input[name=tc_do_phan_giai]').forEach(r => r.checked = +r.value === +tc.do_phan_giai);
+  tcCmd();
 }
-let busy = false;
+function tcLay(){
+  const v = id => $(id).value, rad = n => (document.querySelector(`input[name=${n}]:checked`) || {}).value;
+  return { ti_le_tieude: (+v('tc_ti_le') || 90) / 100, khoang_cach: +v('tc_khoang_cach'), chinh_mau: $('tc_chinh_mau').checked,
+    chuan_am: $('tc_chuan_am').checked, lufs: +v('tc_lufs'), cua_so_khop: v('tc_cua_so_khop') === '' ? null : +v('tc_cua_so_khop'), lech_giong: +v('tc_lech_giong'),
+    sub: $('tc_sub').checked, sub_font: v('tc_sub_font'), sub_co: +v('tc_sub_co'), sub_le_duoi: +v('tc_sub_le_duoi'), model_sub: v('tc_model_sub'),
+    seed: v('tc_seed') === '' ? null : +v('tc_seed'), che_do: rad('tc_che_do') || 'auto', do_phan_giai: +(rad('tc_do_phan_giai') || 0),
+    minh_hoa: $('tc_minh_hoa').checked, minh_hoa_sheet: v('tc_minh_hoa_sheet').trim(), minh_hoa_ai: v('tc_minh_hoa_ai'), minh_hoa_model: v('tc_minh_hoa_model').trim(),
+    minh_hoa_giay: +v('tc_minh_hoa_giay') || 6, minh_hoa_ti_le: (+v('tc_minh_hoa_ti_le') || 45) / 100 };
+}
+function tcCmd(){
+  const t = tcLay(), a = [`--ti-le-tieude ${t.ti_le_tieude}`, `--khoang-cach ${t.khoang_cach}`];
+  if (!t.chinh_mau) a.push('--khong-chinh-mau');
+  if (!t.chuan_am) a.push('--khong-chuan-am'); else { a.push(`--lufs ${t.lufs}`, `--lech-giong ${t.lech_giong}`); if (t.cua_so_khop !== null) a.push(`--cua-so-khop ${t.cua_so_khop}`); }
+  if (!t.sub) a.push('--khong-sub'); else { a.push(`--sub-font "${t.sub_font}"`, `--sub-co ${t.sub_co}`, `--sub-le-duoi ${t.sub_le_duoi}`); if (t.model_sub) a.push(`--model-sub ${t.model_sub}`); }
+  if (t.che_do !== 'auto') a.push('--' + t.che_do); if (t.do_phan_giai) a.push(`--do-phan-giai ${t.do_phan_giai}`); if (t.seed !== null) a.push(`--seed ${t.seed}`);
+  if (t.minh_hoa && t.minh_hoa_sheet){ a.push(`--minh-hoa "${t.minh_hoa_sheet.length > 60 ? t.minh_hoa_sheet.slice(0, 57) + '…' : t.minh_hoa_sheet}"`, `--minh-hoa-ai ${t.minh_hoa_ai}`, `--minh-hoa-giay ${t.minh_hoa_giay}`, `--minh-hoa-ti-le ${t.minh_hoa_ti_le}`); if (t.minh_hoa_model) a.push(`--minh-hoa-model ${t.minh_hoa_model}`); }
+  $('tcCmd').textContent = a.join(' ');
+  $('tcTrangThai').textContent = tcDirty ? 'có thay đổi chưa lưu' : (tcLoaded ? 'đã lưu' : '');
+  $('cntCs').innerHTML = tcDirty ? '<b>●</b>' : '';
+}
+TC_IDS.forEach(id => $(id).addEventListener('input', () => { tcDirty = true; tcCmd(); }));
+document.querySelectorAll('input[name=tc_che_do],input[name=tc_do_phan_giai]').forEach(r => r.addEventListener('change', () => { tcDirty = true; tcCmd(); }));
+async function tcLuu(){ const j = await api('/api/save_tuy_chon', {tuy_chon: tcLay()}); if (j.ok){ tcDirty = false; tcFill(j.tuy_chon); } }
+async function tcMacDinh(){ if (!confirm('Đưa mọi tùy chọn chỉnh sửa về mặc định?')) return; const j = await api('/api/mac_dinh_tuy_chon'); if (j.ok){ tcDirty = false; tcFill(j.tuy_chon); } }
+async function xemTruoc(){ const id = $('xtChon').value; if (!id) return toast('Hàng đợi trống — thêm link trước.', true);
+  if (tcDirty && !confirm('Tùy chọn chưa lưu — xem trước dùng bản ĐÃ LƯU. Tiếp tục?')) return; await api('/api/xem_truoc', {id: +id}); }
+function renderXemTruoc(x){
+  const key = JSON.stringify(x); if (key === lastXtKey) return; lastXtKey = key;
+  $('btnXt').disabled = x.status === 'dang';
+  let tt = '';
+  if (x.status === 'dang') tt = `<span class="chip run"><span class="spin"></span> ${esc(x.buoc || 'Đang chạy')}</span> ${esc(x.ten)}`;
+  else if (x.status === 'xong') tt = `<span class="chip ok">✓ Xong lúc ${esc(x.luc)}</span> ${esc(x.ten)}` + (x.phan_sau ? `<div class="muted" style="margin-top:4px">Phần sau: ${esc(x.phan_sau)}</div>` : '');
+  else if (x.status === 'loi') tt = `<span class="chip bad">✗ Lỗi</span> <span class="err-t" style="display:inline">${esc(x.loi)}</span>`;
+  else tt = 'Chọn một tập rồi bấm Xem trước: ảnh bố cục 10 giây đầu (tiêu đề + minh họa) và ảnh màu trước/sau của hook + các clip phần sau.';
+  $('xtTrangThai').innerHTML = tt;
+  const img = (p, cls, nhan) => p ? `<div><div class="muted" style="margin-bottom:4px">${nhan}</div><img class="${cls}" src="/anh?p=${encodeURIComponent(p)}&t=${encodeURIComponent(x.luc || '')}" title="Bấm để mở to" onclick="api('/api/mo',{loai:'duong_dan',path:${JSON.stringify(p)}})"></div>` : '';
+  $('xtAnh').innerHTML = img(x.preview, 'prev', 'Bố cục 10 giây đầu') + img(x.mau, 'mau', 'Màu: hàng trên gốc, hàng dưới đã chỉnh');
+}
+
+/* ---------- tab Kết nối AI ---------- */
+function aiHang(n){
+  let dot = 'no', tt = '', nut = '';
+  if (n.cai === null){ dot = 'wait'; tt = `<span class="muted">Đang dò…</span>`; }
+  else if (!n.cai){ tt = `<span class="muted">Chưa cài ${esc(n.cli)}</span> <span class="muted">· ${esc(n.ghi_chu)}</span>`; nut = `<button class="btn sm" onclick="api('/api/ai_cai_dat',{ma:'${n.ma}'})">Cài đặt</button>`; }
+  else if (n.ket_noi && n.loi_xac_thuc){ dot = 'wait'; tt = `<span style="color:var(--amber)">▲ Đã đăng nhập nhưng hỏi bị từ chối</span> — <b>${esc(n.email)}</b><div class="muted">${esc(n.loi_xac_thuc)}</div>`;
+    nut = `<button class="btn sm blue" onclick="api('/api/ai_ket_noi',{ma:'${n.ma}'})">Đăng nhập lại</button> <button class="btn sm danger" onclick="aiNgat('${n.ma}')">Ngắt</button>`; }
+  else if (n.ket_noi){ dot = 'on'; tt = `<span class="ok">● Đã kết nối</span> — <b>${esc(n.email || '(không rõ tài khoản)')}</b>${n.ghi_chu ? ` <span class="muted">· ${esc(n.ghi_chu)}</span>` : ''}`;
+    nut = `<button class="btn sm" onclick="api('/api/ai_ket_noi',{ma:'${n.ma}'})">Đăng nhập lại</button> <button class="btn sm danger" onclick="aiNgat('${n.ma}')">Ngắt</button>`; }
+  else { dot = 'off'; tt = `<span class="bad">○ Chưa kết nối</span>${n.ghi_chu ? ` <span class="muted">· ${esc(n.ghi_chu)}</span>` : ''}`; nut = `<button class="btn sm blue" onclick="api('/api/ai_ket_noi',{ma:'${n.ma}'})">Kết nối</button>`; }
+  const ver = n.phien_ban ? `<div class="muted" style="font-family:Consolas,monospace" title="${esc(n.duong_dan || '')}">${esc(n.cli)} ${esc(n.phien_ban)}${n.duong_dan ? ' · ' + esc(n.duong_dan) : ''}</div>` : '';
+  return `<div class="nha"><div class="dot ${dot}"></div><div class="tenai">${esc(n.ten)}</div><div class="grow tt">${tt}${ver}</div><div>${nut}</div></div>`;
+}
+let aiModelChon = {};                       // hãng -> id model đã chọn ('' = mặc định CLI), nhớ trong localStorage
+try{ aiModelChon = JSON.parse(localStorage.getItem('aiModelChon') || '{}') || {}; } catch(e){ aiModelChon = {}; }
+function aiLuuModel(){ try{ localStorage.setItem('aiModelChon', JSON.stringify(aiModelChon)); } catch(e){} }
+function aiVeModel(nha){
+  const n = nha.find(x => x.ma === aiChon), ds = (n && n.models) || [], chon = aiModelChon[aiChon] || '';
+  const coTrongDs = !chon || ds.some(m => m.id === chon);
+  const sel = $('aiModel');
+  sel.innerHTML = `<option value="">Mặc định của CLI</option>` + ds.map(m => `<option value="${esc(m.id)}">${esc(m.ten)}</option>`).join('') + `<option value="__khac">Khác (gõ id)…</option>`;
+  sel.value = coTrongDs ? chon : '__khac';
+  $('aiModelKhac').style.display = coTrongDs ? 'none' : ''; if (!coTrongDs) $('aiModelKhac').value = chon;
+}
+function aiDoiModel(){
+  const v = $('aiModel').value;
+  if (v === '__khac'){ $('aiModelKhac').style.display = ''; $('aiModelKhac').focus(); return; }
+  $('aiModelKhac').style.display = 'none'; aiModelChon[aiChon] = v; aiLuuModel();
+  toast(v ? `${aiChon}: dùng model ${v} (hội thoại mới khi đổi model)` : `${aiChon}: dùng model mặc định của CLI`);
+}
+function renderAi(a){
+  const key = JSON.stringify(a.nha) + aiChon;
+  if (key !== lastAiKey){ lastAiKey = key; $('aiDs').innerHTML = a.nha.map(aiHang).join('');
+    $('aiChips').innerHTML = a.nha.map(n => `<span class="c${n.ma === aiChon ? ' on' : ''}" onclick="aiChon='${n.ma}';tick()">${esc(n.ten)}${n.ket_noi ? '' : ' ○'}</span>`).join('');
+    const ok = a.nha.filter(n => n.ket_noi).length; $('cntAi').innerHTML = `<b>${ok}</b>/${a.nha.length}`;
+    if (document.activeElement !== $('aiModel') && document.activeElement !== $('aiModelKhac')) aiVeModel(a.nha); }
+  $('aiLuc').textContent = a.luc_do || '—';
+}
+async function aiNgat(ma){ if (!confirm('Ngắt kết nối ' + ma + '? (đăng xuất CLI đó)')) return; await api('/api/ai_ngat', {ma}); }
+async function aiGui(){
+  if (aiBusy) return; const cau = $('aiCau').value.trim(); if (!cau) return toast('Chưa gõ câu hỏi.', true);
+  const model = aiModelChon[aiChon] || '';
+  aiBusy = true; $('aiGui').disabled = true; $('aiTl').textContent = `Đang hỏi ${aiChon}${model ? ' (' + model + ')' : ''}…`; $('aiDap').textContent = '…';
+  try{ const r = await fetch('/api/ai_hoi', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ma: aiChon, cau_hoi: cau, model})}).then(r => r.json());
+    if (r.ok){ $('aiDap').textContent = r.text; $('aiTl').textContent = `${aiChon} trả lời sau ${r.giay}s` + (r.model ? ` · ${r.model}` : ''); }
+    else { $('aiDap').textContent = 'LỖI: ' + r.msg; $('aiTl').textContent = ''; }
+  } catch(e){ $('aiDap').textContent = 'Lỗi gọi: ' + e; }
+  aiBusy = false; $('aiGui').disabled = false;
+}
+$('aiCau').addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') aiGui(); });
+async function aiMoi(){ await api('/api/ai_hoi_thoai_moi', {ma: aiChon}); $('aiDap').textContent = '(hội thoại mới)'; }
+
+/* ---------- nhật ký ---------- */
+function veLog(){
+  for (const id of ['logMini', 'logFull']){ const pre = $(id), atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
+    pre.textContent = (id === 'logMini' ? logLines.slice(-12) : logLines).join('\n'); if (atBottom) pre.scrollTop = pre.scrollHeight; }
+}
+function renderLog(lines){ if (!lines.length) return; logLines = logLines.concat(lines).slice(-2500); veLog(); }
+function saoChepLog(){ saoChep(logLines.join('\n')); }
+
+/* ---------- cài đặt ---------- */
+$('cdThuMucRa').addEventListener('input', () => cdDirty = true);
+async function cdLuu(){ const j = await api('/api/save_cai_dat', {thu_muc_ra: $('cdThuMucRa').value}); if (j.ok) cdDirty = false; }
+function renderCaiDat(c){
+  if (!cdDirty && document.activeElement !== $('cdThuMucRa')) $('cdThuMucRa').value = c.thu_muc_ra || '';
+  $('cdThuMucRaThuc').textContent = c.thu_muc_ra_thuc; $('cdUrl').textContent = c.url; $('cdVer').textContent = c.phien_ban;
+  $('cdFile').textContent = c.file_trang_thai; $('cdGocMd').textContent = c.goc_mac_dinh; $('cdXt').textContent = c.thu_muc_xem_truoc;
+  $('sTxt').textContent = 'server ' + c.url.replace('http://', '').replace(/\/$/, ''); $('sVer').textContent = 'bản ' + c.phien_ban;
+}
+
+/* ---------- vòng lặp ---------- */
 async function tick(){
   if (busy) return; busy = true;
   try{
     const s = await (await fetch('/api/state?after=' + seq)).json();
-    if (s.log_seq < seq){ seq = 0; logLines = []; }       // server khởi động lại
+    if (s.log_seq < seq){ seq = 0; logLines = []; }
     seq = s.log_seq; state = s;
-    renderGoc(s.goc); renderItems(s); renderLog(s.logs);
-  }catch(e){
-    $('chipRun').className = 'chip bad'; $('chipRun').textContent = 'Mất kết nối server';
-  }finally{ busy = false; }
+    $('sDot').className = 'dot on';
+    renderGoc(s.goc); renderItems(s); renderLog(s.logs); renderXemTruoc(s.xem_truoc); renderAi(s.ai); renderCaiDat(s.cai_dat);
+    if (!tcDirty && !TC_IDS.some(id => document.activeElement === $(id))){ tcFill(s.tuy_chon); tcLoaded = true; }
+  }catch(e){ $('sDot').className = 'dot'; $('sTxt').textContent = 'mất kết nối server'; $('chipRun').className = 'chip bad'; $('chipRun').textContent = 'Mất kết nối server'; }
+  finally{ busy = false; }
 }
 tick(); setInterval(tick, 1000);
 </script>

@@ -23,11 +23,15 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cli_chung   # noqa: E402  (tìm CLI kể cả khi PATH của Explorer thiếu thư mục npm/nvm)
 
 TEN = "GPT"
 CLI = "codex"
@@ -55,11 +59,18 @@ class TraLoi:
         return self.text
 
 
+def cac_ban_codex() -> list[tuple[str, tuple]]:
+    """Mọi bản codex tìm được (PATH + thư mục npm/nvm quen thuộc) kèm phiên bản, bản MỚI NHẤT trước.
+    Máy có thể còn bản cũ ở %APPDATA%\\npm đứng trước bản mới (nvm) trong PATH của Explorer -> shutil.which
+    lấy nhầm bản cũ, bản cũ lại không chạy được model mới của tài khoản ("requires a newer version of Codex")."""
+    return cli_chung.tim_lenh_moi_nhat(CLI)
+
+
 def _exe() -> str:
-    exe = shutil.which(CLI)
-    if not exe:
+    ds = cac_ban_codex()
+    if not ds:
         raise GptLoi(f"Không tìm thấy lệnh `{CLI}` trên PATH. Cài bằng: {LENH_CAI}")
-    return exe
+    return ds[0][0]
 
 
 def _chay(args: list[str], stdin: str, thoi_gian: float) -> subprocess.CompletedProcess:
@@ -113,6 +124,23 @@ def hoi(cau_hoi: str, *, he_thong: str | None = None, model: str | None = None, 
                   raw={"events": events, "usage": usage})
 
 
+def danh_sach_model() -> list[dict]:
+    """[{"id","ten"}] model tài khoản ChatGPT dùng được — đọc ~/.codex/models_cache.json (Codex tự tải lại
+    mỗi lần chạy nên luôn mới); model mặc định trong config.toml đứng đầu."""
+    kq = []
+    try:
+        d = json.loads((Path.home() / ".codex" / "models_cache.json").read_text(encoding="utf-8"))
+        ms = [m for m in d.get("models", []) if m.get("slug") and m.get("visibility", "list") == "list"]
+        ms.sort(key=lambda m: m.get("priority", 99))
+        kq = [{"id": m["slug"], "ten": m.get("display_name") or m["slug"]} for m in ms]
+    except Exception:
+        pass
+    md = _model_mac_dinh()
+    if md:
+        kq = [{"id": md, "ten": f"{md} (mặc định config)"}] + [m for m in kq if m["id"] != md]
+    return kq
+
+
 def _model_mac_dinh() -> str:
     try:
         for line in (Path.home() / ".codex" / "config.toml").read_text(encoding="utf-8").splitlines():
@@ -157,15 +185,18 @@ def _email_tu_auth_json() -> tuple[str, str]:
 
 def trang_thai() -> dict:
     """{"ten","cli","cai","phien_ban","ket_noi","email","ghi_chu"} — không mở mạng, chỉ hỏi CLI tại chỗ."""
-    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="")
-    exe = shutil.which(CLI)
-    if not exe:
+    kq = dict(ten=TEN, cli=CLI, cai=False, phien_ban="", ket_noi=False, email="", ghi_chu="", duong_dan="")
+    ds = cac_ban_codex()
+    if not ds:
         kq["ghi_chu"] = f"chưa cài Codex CLI ({LENH_CAI})"
         return kq
+    exe, ver = ds[0]
     kq["cai"] = True
+    kq["duong_dan"] = exe
+    kq["phien_ban"] = cli_chung.chuoi_phien_ban(ver)
+    if len(ds) > 1:
+        kq["ghi_chu_them"] = "bỏ qua bản cũ: " + ", ".join(f"{Path(p).parent} ({cli_chung.chuoi_phien_ban(v)})" for p, v in ds[1:])
     try:
-        v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=20, creationflags=NO_WINDOW).stdout
-        kq["phien_ban"] = v.strip().split()[-1] if v.strip() else ""
         st = subprocess.run([exe, "login", "status"], capture_output=True, text=True, timeout=20,
                             creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
         dong = (st.stdout + st.stderr).strip().splitlines()
@@ -179,6 +210,8 @@ def trang_thai() -> dict:
         kq["email"] = email
         if goi:
             kq["ghi_chu"] = f"ChatGPT gói {goi}"
+    if kq.pop("ghi_chu_them", ""):
+        kq["ghi_chu"] = (kq["ghi_chu"] + " · " if kq["ghi_chu"] else "") + f"dùng bản {kq['phien_ban']} ở {Path(exe).parent}"
     return kq
 
 
