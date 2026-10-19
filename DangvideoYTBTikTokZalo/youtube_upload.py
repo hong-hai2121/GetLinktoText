@@ -615,41 +615,191 @@ def upload_video(page, video_path, title, description, playlist=None, tags=None,
     done_btn.click()
     log("✓ Đã bấm Lưu/Xuất bản.")
 
-    # Hộp thoại sau khi lưu: 'Đã lên lịch cho video' (có link, nút Đóng) / 'video đang xử lý' /
-    # 'chia sẻ video' -> lấy link nếu có rồi đóng
-    page.wait_for_timeout(3000)
-    try:
-        kq = page.locator('tp-yt-paper-dialog').filter(visible=True).filter(
-            has_text=re.compile(r"Đã lên lịch|đã lên lịch|đã xuất bản|Đã xuất bản|Video published|scheduled", re.I)).first
-        if kq.count():
-            txt = " ".join(kq.inner_text(timeout=3000).split())
-            m = re.search(r"https://(?:youtu\.be|www\.youtube\.com|youtube\.com)/\S+", txt)
-            if m:
-                video_link = m.group(0)
-            log(f"  Studio: {txt[:140]}")
-    except Exception:
-        pass
-    for sel in ['ytcp-uploads-still-processing-dialog #close-button',
-                'ytcp-uploads-still-processing-dialog ytcp-button',
-                'ytcp-uploads-share-dialog #close-icon-button',
-                'tp-yt-paper-dialog #close-button']:
-        try:
-            btn = page.locator(sel).first
-            if btn.is_visible(timeout=2000):
-                btn.click(timeout=3000)
-                break
-        except Exception:
-            pass
-    else:
-        try:
-            dong = page.locator('tp-yt-paper-dialog ytcp-button, tp-yt-paper-dialog button').filter(
-                has_text=re.compile(r"^\s*(Đóng|Close)\s*$")).filter(visible=True).first
-            if dong.count():
-                dong.click(timeout=3000)
-        except Exception:
-            pass
+    video_link = _sau_khi_luu(page, done_btn, video_link, log)
 
     log("🎉 HOÀN TẤT! Video đã được đăng" +
         (f" — {video_link}" if video_link else "") +
         ". (YouTube sẽ tự xử lý độ phân giải trong nền.)")
     return video_link
+
+
+# ----- sau nút Lưu/Lên lịch cuối cùng -----
+# hộp KẾT QUẢ (hiện sau khi hộp tải lên đã đóng): 'Đã lên lịch cho video' (có link, nút Đóng — ảnh
+# dom_dump/youtube/xong_1_sau_bam.png) / 'Video đã xuất bản' / 'Video vẫn đang xử lý'
+RE_HOP_KET_QUA = re.compile(r"Đã lên lịch cho video|đã lên lịch|đã xuất bản|Video published|Video scheduled|"
+                            r"vẫn đang xử lý|still processing", re.I)
+# nút ĐỒNG Ý trong popup xác nhận (Studio hỏi thêm sau khi bấm Lưu, vd. quá trình kiểm tra chưa xong,
+# nhắc về đường liên kết / nội dung...). Không bao giờ bấm nút huỷ / quay lại.
+RE_NUT_DONG_Y = re.compile(r"^\s*(Xác nhận|Đồng ý|Tiếp tục|Vẫn \S.*|Lên lịch|Xuất bản|Lưu|Đã hiểu|Được|Có|OK|Đóng|"
+                           r"Confirm|Continue|Schedule.*|Publish.*|Save|Got it|Yes|Okay|Proceed|Close)\s*$", re.I)
+RE_NUT_TU_CHOI = re.compile(r"hủy|huỷ|quay lại|bỏ|không|cancel|back|dismiss|later|để sau", re.I)
+POPUP_SHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "popup_youtube_gan_nhat.png")
+
+
+def _hop_tai_len_dang_mo(done_btn):
+    """Hộp thoại tải lên (ytcp-uploads-dialog) còn mở không = nút Lưu/Lên lịch còn nhìn thấy."""
+    try:
+        return done_btn.is_visible(timeout=1500)
+    except Exception:
+        return False
+
+
+def _hop_ket_qua(page):
+    """Hộp kết quả đang hiện -> (locator, chữ); không -> (None, '')."""
+    try:
+        kq = page.locator('tp-yt-paper-dialog').filter(visible=True).filter(has_text=RE_HOP_KET_QUA)
+        for i in range(kq.count()):
+            d = kq.nth(i)
+            if d.locator('#done-button').count():       # chính hộp tải lên -> không phải
+                continue
+            return d, " ".join(d.inner_text(timeout=3000).split())
+    except Exception:
+        pass
+    return None, ""
+
+
+def _dong_hop_ket_qua(page, hop, log):
+    for sel in ['ytcp-uploads-still-processing-dialog #close-button',
+                'ytcp-uploads-still-processing-dialog ytcp-button',
+                'ytcp-uploads-share-dialog #close-icon-button',
+                '#close-button', '#close-icon-button']:
+        try:
+            btn = (hop if sel.startswith('#') else page).locator(sel).first
+            if btn.is_visible(timeout=1500):
+                btn.click(timeout=3000)
+                return True
+        except Exception:
+            pass
+    try:
+        dong = hop.locator('ytcp-button, button').filter(has_text=re.compile(r"^\s*(Đóng|Close)\s*$")).filter(visible=True).first
+        if dong.count():
+            dong.click(timeout=3000)
+            return True
+    except Exception:
+        pass
+    log("  ⚠ Không thấy nút Đóng của hộp kết quả — bỏ qua (video đã lưu).")
+    return False
+
+
+def _nut_dong_y_trong(hop):
+    """Nút đồng ý trong một hộp thoại: ưu tiên #confirm-button, rồi nút có chữ khớp RE_NUT_DONG_Y
+    (không phải chữ huỷ/quay lại). Trả về (locator, tên) hoặc (None, '')."""
+    try:
+        b = hop.locator('#confirm-button').filter(visible=True).first
+        if b.count():
+            return b, b.inner_text(timeout=1000).strip() or "confirm"
+    except Exception:
+        pass
+    for sel in ('ytcp-button', 'tp-yt-paper-button', 'button'):
+        try:
+            bs = hop.locator(sel).filter(visible=True)
+            n = bs.count()
+        except Exception:
+            continue
+        ung = []
+        for k in range(n):
+            b = bs.nth(k)
+            try:
+                t = " ".join(b.inner_text(timeout=1000).split())
+            except Exception:
+                continue
+            if t and RE_NUT_DONG_Y.match(t) and not RE_NUT_TU_CHOI.search(t):
+                ung.append((k, b, t))
+        if ung:
+            k, b, t = ung[-1]            # nút chính của Studio đứng cuối (bên phải)
+            return b, t
+    return None, ""
+
+
+def _bam_popup_xac_nhan(page, log):
+    """Popup xác nhận hiện SAU khi bấm Lưu trong lúc hộp tải lên còn mở (không phải hộp tải lên chính):
+    chụp ảnh, ghi chữ ra nhật ký, bấm nút đồng ý. Trả về chữ popup đã bấm, hoặc '' nếu không có popup."""
+    try:
+        dlgs = page.locator('tp-yt-paper-dialog, ytcp-confirmation-dialog, [role="dialog"], [role="alertdialog"]').filter(visible=True)
+        n = dlgs.count()
+    except Exception:
+        return ""
+    for i in range(n):
+        d = dlgs.nth(i)
+        try:
+            if d.locator('#done-button').count() or d.locator('#next-button').count():
+                continue                                   # hộp tải lên chính
+            txt = " ".join(d.inner_text(timeout=2000).split())
+        except Exception:
+            continue
+        if not txt or len(txt) > 1500:
+            continue
+        nut, ten = _nut_dong_y_trong(d)
+        if nut is None:
+            log(f"  Studio hiện hộp thoại nhưng không thấy nút đồng ý: {txt[:160]!r}")
+            continue
+        try:
+            page.screenshot(path=POPUP_SHOT)
+        except Exception:
+            pass
+        log(f"  Studio hỏi thêm sau khi Lưu: {txt[:200]!r} -> bấm '{ten}' (ảnh: {POPUP_SHOT})")
+        nut.click(timeout=5000)
+        page.wait_for_timeout(1500)
+        return txt
+    return ""
+
+
+def _sau_khi_luu(page, done_btn, video_link, log, timeout_sec=120):
+    """Sau nút Lưu/Lên lịch, Studio có thể: (a) hiện POPUP cần xác nhận (user gặp 17-19/10/2026: không
+    bấm thì video nằm nháp, chưa lên lịch) -> bấm đồng ý rồi chờ tiếp; (b) đóng hộp tải lên rồi hiện hộp
+    'Đã lên lịch cho video' / 'đang xử lý' -> lấy link, bấm Đóng. CHỈ coi là xong khi hộp tải lên đã
+    đóng; quá giờ mà vẫn mở -> raise (kèm ảnh chụp) chứ không báo HOÀN TẤT khống như trước."""
+    t0 = time.time()
+    da_bam = 0
+    bam_lai = False
+    def _xu_ly_hop_ket_qua(hop, txt):
+        nonlocal video_link
+        m = re.search(r"https://(?:youtu\.be|www\.youtube\.com|youtube\.com)/[\w\-?=&./]+", txt)
+        if m:
+            video_link = m.group(0)
+        log(f"  Studio: {txt[:160]}")
+        _dong_hop_ket_qua(page, hop, log)
+        page.wait_for_timeout(1000)
+
+    while time.time() - t0 < timeout_sec:
+        page.wait_for_timeout(1500)
+        # Hộp kết quả 'Đã lên lịch cho video' hiện ngay khi hộp tải lên còn nằm trong DOM 1-3 s nữa
+        # (đo thật 19/10/2026) -> xét nó TRƯỚC, lấy link từ đó rồi Đóng
+        hop, txt = _hop_ket_qua(page)
+        if hop is not None:
+            _xu_ly_hop_ket_qua(hop, txt)
+            for _ in range(6):
+                if not _hop_tai_len_dang_mo(done_btn):
+                    break
+                page.wait_for_timeout(1000)
+            log("  Hộp thoại tải lên đã đóng." if not _hop_tai_len_dang_mo(done_btn)
+                else "  (hộp tải lên vẫn còn trong DOM sau hộp kết quả — Studio đã lưu, coi như xong)")
+            return video_link
+        if not _hop_tai_len_dang_mo(done_btn):
+            log("  Hộp thoại tải lên đã đóng.")
+            for _ in range(4):                         # hộp kết quả có thể hiện trễ 1-5 s
+                hop, txt = _hop_ket_qua(page)
+                if hop is not None:
+                    _xu_ly_hop_ket_qua(hop, txt)
+                    break
+                page.wait_for_timeout(1500)
+            return video_link
+        if da_bam < 3 and _bam_popup_xac_nhan(page, log):
+            da_bam += 1
+            continue
+        # còn mở, không popup: có thể cú bấm đầu chưa ăn (Studio đang bận) -> bấm Lưu lại đúng 1 lần sau 10 s
+        if not bam_lai and time.time() - t0 > 10:
+            bam_lai = True
+            try:
+                if done_btn.is_enabled(timeout=1000):
+                    done_btn.click(timeout=3000)
+                    log("  (hộp tải lên vẫn mở sau 10 s -> bấm Lưu/Lên lịch lần nữa)")
+            except Exception:
+                pass
+    shot = os.path.join(os.path.dirname(os.path.abspath(__file__)), "loi_sau_luu_youtube.png")
+    try:
+        page.screenshot(path=shot)
+    except Exception:
+        pass
+    raise RuntimeError(f"Đã bấm Lưu/Lên lịch nhưng hộp thoại tải lên vẫn mở sau {timeout_sec}s — có popup Studio chưa "
+                       f"xác nhận được? Hãy xem tab Chrome và ảnh {shot}; bấm xác nhận bằng tay rồi 'Đăng lại lỗi' nếu cần.")

@@ -209,6 +209,11 @@ def connect_playwright(cfg, log=print):
     return pw, browser, page
 
 
+def relay_connected():
+    """Extension còn nối với relay không (để worker AI biết phải nối lại hay dùng tiếp)."""
+    return _relay is not None and _relay.connected
+
+
 def cdp_send(method, params=None, timeout=30.0):
     """Gửi lệnh CDP thẳng tới tab đang điều khiển (xem ExtensionRelay.send_cdp)."""
     if _relay is None or not _relay.connected:

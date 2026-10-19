@@ -271,6 +271,7 @@ def gui_mot_tin(page, noi_dung, log, timeout_sec=600):
 
 CHO_MOI_CAU_S = 300        # giây chờ tối đa mỗi câu trả lời trước khi coi là "suy nghĩ quá lâu"
 SO_LAN_THU = 2             # quá lâu / không lấy được kết quả -> mở chat MỚI làm lại 1 lần, vẫn hỏng thì bỏ
+VIDEO_TOI_DA_MOI_CHAT = 20 # một cuộc trò chuyện dùng cho nhiều video; quá số này mới mở chat mới (trang Gemini quá nặng)
 
 
 def _chat_moi(page, log):
@@ -294,36 +295,74 @@ def _chat_moi(page, log):
     page.locator(SEL_INPUT).first.wait_for(state="visible", timeout=30000)
 
 
-def _mot_luot(page, ban_boc_bang, log):
-    log("Gửi prompt hệ thống (1 lần)...")
-    tl1 = gui_mot_tin(page, PROMPT_HE_THONG, log, timeout_sec=CHO_MOI_CAU_S)
-    log(f"  Gemini đáp: {tl1[:80]!r}")
-    log("Gửi bản bóc băng...")
-    tl2 = gui_mot_tin(page, "Bản bóc băng (Speech-to-Text thô, có mốc [mm:ss] đầu mỗi đoạn):\n\n" + ban_boc_bang,
-                      log, timeout_sec=CHO_MOI_CAU_S)
-    kq = tach_ket_qua(tl2)
-    if not kq["tieu_de"] or len(kq["mo_ta"]) < 300 or not kq["tags"]:
-        raise RuntimeError(f"Câu trả lời không đủ phần (tiêu đề {bool(kq['tieu_de'])}, mô tả {len(kq['mo_ta'])} ký tự, "
-                           f"tags {len(kq['tags'])} ký tự)")
-    return kq
+class PhienGemini:
+    """MỘT cuộc trò chuyện Gemini dùng chung cho cả loạt video (yêu cầu user 19/10/2026): prompt hệ
+    thống gửi đúng 1 lần ở đầu chat, mỗi video sau chỉ gửi bản bóc băng — không đóng/mở lại, không
+    điền lại prompt. Chỉ mở chat mới khi: chưa có chat, Gemini trả lời hỏng (suy nghĩ quá lâu /
+    lệch định dạng), hoặc chat đã làm quá VIDEO_TOI_DA_MOI_CHAT video.
+
+    Dùng:  phien = PhienGemini(page, log);  kq = phien.tao_noi_dung(ban_boc_bang)  (gọi lặp cho từng video)."""
+
+    def __init__(self, page, log=print):
+        self.page = page
+        self.log = log
+        self.san_sang = False       # đã có chat + đã gửi prompt hệ thống
+        self.so_video = 0           # số video đã làm trong chat hiện tại
+        self.tong_chat = 0          # số chat đã mở trong phiên (để báo nhật ký)
+
+    def _bat_dau_chat(self):
+        self.san_sang = False
+        self.tong_chat += 1
+        self.log("Mở Gemini, tạo cuộc trò chuyện mới" + (f" (chat thứ {self.tong_chat})" if self.tong_chat > 1 else "") + "...")
+        _chat_moi(self.page, self.log)
+        self.log("Gửi prompt hệ thống (1 lần cho cả cuộc trò chuyện)...")
+        tl1 = gui_mot_tin(self.page, PROMPT_HE_THONG, self.log, timeout_sec=CHO_MOI_CAU_S)
+        self.log(f"  Gemini đáp: {tl1[:80]!r}")
+        self.san_sang = True
+        self.so_video = 0
+
+    def _gui_boc_bang(self, ban_boc_bang):
+        # video thứ 2 trở đi: nhắc Gemini vẫn theo đúng quy tắc, chỉ xuất 2 phần, không nhắc video trước
+        dau = "" if self.so_video == 0 else (
+            "VIDEO TIẾP THEO — vẫn áp dụng đúng NHIỆM VỤ và QUY TẮC ĐẦU RA ở trên "
+            "(chỉ xuất PHẦN 2 và PHẦN 3 cho bản bóc băng dưới đây, không nhắc lại video trước).\n\n")
+        self.log(f"Gửi bản bóc băng (video thứ {self.so_video + 1} trong chat này)...")
+        tl2 = gui_mot_tin(self.page, dau + "Bản bóc băng (Speech-to-Text thô, có mốc [mm:ss] đầu mỗi đoạn):\n\n" + ban_boc_bang,
+                          self.log, timeout_sec=CHO_MOI_CAU_S)
+        kq = tach_ket_qua(tl2)
+        if not kq["tieu_de"] or len(kq["mo_ta"]) < 300 or not kq["tags"]:
+            raise RuntimeError(f"Câu trả lời không đủ phần (tiêu đề {bool(kq['tieu_de'])}, mô tả {len(kq['mo_ta'])} ký tự, "
+                               f"tags {len(kq['tags'])} ký tự)")
+        return kq
+
+    def tao_noi_dung(self, ban_boc_bang):
+        """Bản bóc băng -> dict kết quả (xem tach_ket_qua), dùng lại chat đang có. Gemini suy nghĩ
+        quá lâu hoặc trả lời thiếu phần thì mở chat mới (gửi lại prompt) làm lại đúng 1 lần; vẫn
+        hỏng thì raise (bỏ qua video này; video kế sẽ bắt đầu bằng chat mới)."""
+        loi_cuoi = None
+        for lan in range(1, SO_LAN_THU + 1):
+            try:
+                if self.san_sang and self.so_video >= VIDEO_TOI_DA_MOI_CHAT:
+                    self.log(f"Chat hiện tại đã làm {self.so_video} video -> mở chat mới cho nhẹ trang.")
+                    self.san_sang = False
+                if not self.san_sang:
+                    self._bat_dau_chat()
+                kq = self._gui_boc_bang(ban_boc_bang)
+                self.so_video += 1
+                self.log(f"✓ Nhận kết quả: tiêu đề {kq['tieu_de']!r}, tags {len(kq['tags'])} ký tự, mô tả {len(kq['mo_ta'])} ký tự, "
+                         f"{len(kq['hashtags'])} hashtag")
+                return kq
+            except Exception as e:              # noqa: BLE001
+                loi_cuoi = e
+                self.san_sang = False           # lần sau (video này hoặc video kế) mở chat mới
+                if lan < SO_LAN_THU:
+                    self.log(f"⚠ Lần {lan} hỏng ({str(e)[:120]}) -> bỏ cuộc trò chuyện này, mở chat mới làm lại.")
+                else:
+                    self.log(f"✗ Lần {lan} vẫn hỏng ({str(e)[:120]}) -> bỏ qua video này.")
+        raise RuntimeError(f"Gemini không cho kết quả sau {SO_LAN_THU} lần: {loi_cuoi}")
 
 
 def tao_noi_dung(page, ban_boc_bang, log=print):
-    """Chat mới -> prompt hệ thống -> bản bóc băng -> dict kết quả. Gemini suy nghĩ quá lâu hoặc
-    trả lời thiếu phần thì mở chat mới làm lại đúng 1 lần; vẫn hỏng thì raise (bỏ qua video này)."""
-    loi_cuoi = None
-    for lan in range(1, SO_LAN_THU + 1):
-        try:
-            log(f"Mở Gemini, tạo cuộc trò chuyện mới{' (lần ' + str(lan) + ')' if lan > 1 else ''}...")
-            _chat_moi(page, log)
-            kq = _mot_luot(page, ban_boc_bang, log)
-            log(f"✓ Nhận kết quả: tiêu đề {kq['tieu_de']!r}, tags {len(kq['tags'])} ký tự, mô tả {len(kq['mo_ta'])} ký tự, "
-                f"{len(kq['hashtags'])} hashtag")
-            return kq
-        except Exception as e:              # noqa: BLE001
-            loi_cuoi = e
-            if lan < SO_LAN_THU:
-                log(f"⚠ Lần {lan} hỏng ({str(e)[:120]}) -> bỏ cuộc trò chuyện này, mở chat mới làm lại.")
-            else:
-                log(f"✗ Lần {lan} vẫn hỏng ({str(e)[:120]}) -> bỏ qua video này.")
-    raise RuntimeError(f"Gemini không cho kết quả sau {SO_LAN_THU} lần: {loi_cuoi}")
+    """Một video, chat mới -> prompt hệ thống -> bản bóc băng (giữ cho script cũ trong dom_dump/noi_dung).
+    App dùng PhienGemini để nhiều video chung một cuộc trò chuyện."""
+    return PhienGemini(page, log).tao_noi_dung(ban_boc_bang)

@@ -79,9 +79,12 @@ class State:
         self.current = ""         # nền tảng/việc đang chạy, hiện trên thanh trên cùng
         self.stop_flag = threading.Event()
         self.ext_ok = {name: self._ext_installed(name) for name in pq.PLATFORMS}
-        # việc "tạo nội dung bằng AI" (bóc băng + Gemini): chạy nền, 1 việc một lúc
-        self.seo = {"status": "idle", "job": 0, "buoc": "", "nguon": "", "ket_qua": None, "loi": ""}
-        self.seo_running = False
+        # việc "tạo nội dung bằng AI" (bóc băng + Gemini): danh sách job, worker nền chạy lần lượt 1 job một lúc
+        self.seo_jobs = []          # [{id, nguon, ten, status chờ/đang chạy/xong/lỗi/bỏ, buoc, loi, ket_qua, da_them, tu_dong, platforms}]
+        self.seo_seq = 0
+        self.seo_running = False    # worker AI đang chạy
+        self.seo_current = ""       # id job đang chạy
+        self.seo_stop = threading.Event()
         self.qua_dai = _doc_qua_dai()      # video dài hơn 3 phút đã bỏ qua (lưu link lại)
 
     def _ext_installed(self, name):
@@ -204,7 +207,9 @@ def state_payload(after=0):
             "hashtags": " ".join(effective_hashtags()),
             "default_platforms": pq.normalize_platforms(S.cfg.get("default_platforms") or pq.PLATFORMS),
             "platforms": _platform_info(),
-            "seo": dict(S.seo),
+            "seo_running": S.seo_running,
+            "seo_current": S.seo_current,
+            "seo_jobs": [dict(j) for j in S.seo_jobs],
             "qua_dai": list(S.qua_dai[:20]),
             "items": items,
             "logs": [t for seq, t in S.logs if seq > after],
@@ -236,104 +241,288 @@ def api_list_downloads(_data):
     return {"ok": True, "files": files[:60], "folder": str(folder)}
 
 
-def _seo_set(**kw):
+def _job_set(job, **kw):
     with S.lock:
-        S.seo.update(kw)
+        job.update(kw)
 
 
-def _seo_job(nguon):
-    """Nền: (tải Drive) -> bóc băng large-v3-turbo -> Gemini (profile 'gemini' hoặc Zalo) -> kết quả."""
+def _ten_nguon(nguon):
+    return nguon if pq.is_drive(nguon) else Path(nguon).name
+
+
+# ----- phiên Gemini dùng chung cho cả loạt video (nối 1 lần, 1 cuộc trò chuyện; xem gemini_seo.PhienGemini) -----
+def _phien_moi():
+    return {"pw": None, "page": None, "gemini": None, "loi_gemini": False}
+
+
+def _gemini_ngat(phien, dong_tab=True):
+    """Ngắt Playwright + relay của phiên Gemini; dong_tab=True thì đóng cả tab Gemini."""
+    pw, page = phien.get("pw"), phien.get("page")
+    if pw is not None:
+        try:
+            chrome_cdp.disconnect(pw, page=page if dong_tab else None)
+        except Exception:
+            pass
+    phien.update(pw=None, page=None, gemini=None)
+
+
+def _gemini_san_sang(phien):
+    """Trả về PhienGemini đang dùng; chưa nối, tab bị đóng hay extension rớt thì (nối lại) MỘT lần.
+    Không ngắt sau mỗi video nữa — cả loạt dùng chung một kết nối và một cuộc trò chuyện."""
     import gemini_seo
+    page = phien.get("page")
+    con_song = False
+    if page is not None:
+        try:
+            con_song = chrome_cdp.relay_connected() and not page.is_closed()
+            if con_song:
+                page.evaluate("1")               # hỏi thật: tab còn trả lời qua extension không
+        except Exception:
+            con_song = False
+    if con_song:
+        return phien["gemini"]
+    if page is not None:
+        S.log("[AI] ⚠ Mất kết nối Gemini (tab bị đóng / extension ngắt) -> nối lại.")
+        _gemini_ngat(phien, dong_tab=False)
+    pcfg = chrome_cdp.platform_config(S.cfg, "gemini")
+    chrome_cdp.launch_chrome(pcfg, S.log)
+    pw, _b, page = chrome_cdp.connect_playwright(pcfg, S.log)
+    phien.update(pw=pw, page=page, gemini=gemini_seo.PhienGemini(page, log=S.log))
+    return phien["gemini"]
+
+
+def _giu_ket_noi_gemini(phien, dung, moi_giay=15):
+    """Thread nền trong lúc bóc băng (vài phút không đụng trình duyệt): gửi một lệnh CDP nhẹ qua relay
+    mỗi `moi_giay` giây để Chrome không cho extension ngủ -> không phải nối lại. Đi thẳng qua relay
+    (an toàn giữa các thread), KHÔNG đụng đối tượng Playwright."""
+    while not dung.wait(moi_giay):
+        if phien.get("page") is None or not chrome_cdp.relay_connected():
+            continue
+        try:
+            chrome_cdp.cdp_send("Runtime.evaluate", {"expression": "1", "returnByValue": True}, timeout=10)
+        except Exception:
+            pass
+
+
+def _seo_job(job, phien):
+    """Nền, cho MỘT job: (tải Drive) -> bóc băng large-v3-turbo -> Gemini (phiên dùng chung `phien`,
+    profile 'gemini' hoặc Zalo) -> ket_qua. Không nối/ngắt Gemini ở đây — worker giữ phiên cho cả loạt."""
     import nhan_dien_giong
-    pw = page = None
+    nguon = job["nguon"]
     try:
         path = nguon
         if pq.is_drive(nguon):
-            _seo_set(buoc="Đang tải video từ Google Drive...")
+            _job_set(job, buoc="Đang tải video từ Google Drive...")
             path = download_drive(nguon, log=S.log)
         if not Path(path).exists():
             raise FileNotFoundError(f"Không thấy file video: {path}")
-        _seo_set(buoc="Đang bóc băng giọng nói (large-v3-turbo)...")
+        _job_set(job, ten=Path(path).name, buoc="Đang bóc băng giọng nói (large-v3-turbo)...")
         S.log(f"[AI] Bóc băng: {Path(path).name}")
+        dung = threading.Event()
+        threading.Thread(target=_giu_ket_noi_gemini, args=(phien, dung), daemon=True).start()
         try:
             _, doan = nhan_dien_giong.nhan_dien(path, log=S.log)
         except nhan_dien_giong.VideoQuaDai as e:
             muc = _ghi_qua_dai(nguon, e.path, e.giay, e.gioi_han)
-            _seo_set(status="error", buoc="Bỏ qua: video dài hơn 3 phút",
-                     loi=f"Video dài hơn 3 phút ({muc['thoi_luong']}) — đã dừng và lưu link vào danh sách 'Video quá 3 phút'.")
+            _job_set(job, status="lỗi", buoc="Bỏ qua: video dài hơn 3 phút",
+                     loi=f"Video dài hơn 3 phút ({muc['thoi_luong']}) — bỏ qua, link đã lưu vào danh sách 'Video quá 3 phút'.")
             S.log(f"[AI] ⏹ {e} — đã lưu link: {nguon}")
             return
+        finally:
+            dung.set()
         van_ban = nhan_dien_giong.van_ban_co_moc(doan)
         if len(van_ban) < 50:
             raise RuntimeError("Bản bóc băng quá ngắn — video không có tiếng?")
-        _seo_set(buoc="Đang nối Gemini (trình duyệt profile Zalo)...")
-        pcfg = chrome_cdp.platform_config(S.cfg, "gemini")
-        chrome_cdp.launch_chrome(pcfg, S.log)
-        pw, _b, page = chrome_cdp.connect_playwright(pcfg, S.log)
-        _seo_set(buoc="Gemini đang viết nội dung (3-6 phút)...")
-        kq = gemini_seo.tao_noi_dung(page, van_ban, log=S.log)
+        if phien.get("page") is None:
+            _job_set(job, buoc="Đang nối Gemini (trình duyệt profile Zalo, 1 lần cho cả loạt)...")
+        gemini = _gemini_san_sang(phien)
+        _job_set(job, buoc=f"Gemini đang viết nội dung (3-6 phút, chat dùng chung — video thứ {gemini.so_video + 1})...")
+        try:
+            kq = gemini.tao_noi_dung(van_ban)
+        except Exception:
+            phien["loi_gemini"] = True
+            raise
         kq = {k: v for k, v in kq.items() if k != "tho"}
         kq["file"] = str(path)
         kq["boc_bang"] = van_ban
-        _seo_set(status="done", buoc="Xong", ket_qua=kq, loi="")
+        _job_set(job, status="xong", buoc="Xong", ket_qua=kq, loi="")
         S.log(f"[AI] ✓ Xong: {kq.get('tieu_de') or '(không có tiêu đề)'}")
     except Exception as e:                  # noqa: BLE001
-        _seo_set(status="error", buoc="Lỗi", loi=str(e)[:400])
-        S.log(f"[AI] ✗ {e}")
+        _job_set(job, status="lỗi", buoc="Lỗi", loi=str(e)[:400])
+        S.log(f"[AI] ✗ {_ten_nguon(nguon)}: {e}")
+
+
+def _tu_them_hang_doi(job):
+    """Chế độ 'tự thêm': job xong thì đưa thẳng vào hàng đợi với nội dung AI, không chờ duyệt."""
+    k = job.get("ket_qua") or {}
+    ok, msg = _them_muc_ai(k.get("file"), k.get("tieu_de"), k.get("mo_ta_youtube") or k.get("mo_ta"),
+                           k.get("tags"), " ".join(k.get("hashtags") or []), job.get("platforms"))
+    _job_set(job, da_them=ok, loi="" if ok else f"Chưa thêm vào hàng đợi: {msg}")
+    if not ok:
+        S.log(f"[AI] ⚠ {msg}")
+
+
+def _seo_worker():
+    """Chạy lần lượt các job 'chờ' trong S.seo_jobs. Gemini nối MỘT lần cho cả loạt và dùng chung
+    một cuộc trò chuyện (prompt gửi 1 lần); hết loạt mới ngắt. Dừng = bỏ các job chưa chạy."""
+    xong = loi = 0
+    phien = _phien_moi()
+    try:
+        while not S.seo_stop.is_set():
+            with S.lock:
+                job = next((j for j in S.seo_jobs if j["status"] == "chờ"), None)
+                if job is None:
+                    break
+                job.update(status="đang chạy", buoc="Bắt đầu...")
+                S.seo_current = job["id"]
+            _seo_job(job, phien)
+            if job["status"] == "xong":
+                xong += 1
+                if job.get("tu_dong"):
+                    _tu_them_hang_doi(job)
+            else:
+                loi += 1
+        with S.lock:
+            bo = [j for j in S.seo_jobs if j["status"] == "chờ"]
+            for j in bo:
+                j.update(status="bỏ", loi="Đã dừng trước khi chạy")
+        if S.seo_stop.is_set():
+            S.log(f"[AI] ⏹ Đã dừng theo yêu cầu: {xong} xong, {loi} lỗi, bỏ {len(bo)} video chưa chạy.")
+        elif xong + loi > 1:
+            S.log(f"[AI] 🏁 Hết danh sách: {xong} xong, {loi} lỗi.")
     finally:
-        if pw is not None:
-            try:
-                chrome_cdp.disconnect(pw, page=page)     # đóng tab Gemini, không để mở chồng chất
-            except Exception:
-                pass
+        # hết loạt: ngắt Gemini. Có lỗi phía Gemini thì để tab mở cho bạn xem cuộc trò chuyện; không thì đóng tab
+        if phien.get("pw") is not None:
+            S.log("[AI] Ngắt Gemini" + (" — tab để mở vì có lỗi, bạn xem lại cuộc trò chuyện." if phien["loi_gemini"] else " (đóng tab)."))
+        _gemini_ngat(phien, dong_tab=not phien["loi_gemini"])
         with S.lock:
             S.seo_running = False
+            S.seo_current = ""
+            S.seo_stop.clear()
 
 
 def api_tao_noi_dung(data):
-    nguon = (data.get("source") or "").strip().strip('"')
-    if not nguon:
-        return {"ok": False, "msg": "Chọn video trong Downloads hoặc dán link Drive."}
+    """Xếp một hoặc nhiều video (đường dẫn file / link Drive) vào danh sách AI; worker nền chạy lần lượt."""
+    raw = data.get("sources")
+    if raw is None:
+        raw = [data.get("source") or ""]
+    nguon_list = []
+    for s in raw:
+        s = (s or "").strip().strip('"')
+        if s and s not in nguon_list:
+            nguon_list.append(s)
+    if not nguon_list:
+        return {"ok": False, "msg": "Tick video trong Downloads hoặc dán link Drive."}
+    if len(nguon_list) > 50:
+        return {"ok": False, "msg": "Tối đa 50 video một lần."}
+    tu_dong = bool(data.get("auto_add"))
+    platforms = data.get("platforms")
+    if tu_dong:                              # tự thêm vào hàng đợi khi xong -> cần nền tảng + lịch sẵn
+        if platforms is not None and not platforms:
+            return {"ok": False, "msg": "Tự thêm vào hàng đợi: tick ít nhất một nền tảng."}
+        if data.get("times") is not None:
+            err = _apply_schedule(data.get("times"), data.get("start"))
+            if err:
+                return {"ok": False, "msg": err}
+        if not S.cfg.get("schedule_times"):
+            return {"ok": False, "msg": "Chưa có khung giờ công bố — nhập ở mục Lịch (ví dụ 08:00, 19:00)."}
+    xoa_cu = bool(data.get("clear_queue", tu_dong))   # tự thêm: dọn sạch hàng đợi + kết quả AI cũ, chỉ còn loạt mới
     with S.lock:
         if S.running:
             return {"ok": False, "msg": "Đang đăng video — chờ xong rồi tạo nội dung (dùng chung trình duyệt)."}
-        if S.seo_running:
-            return {"ok": False, "msg": "Đang tạo nội dung cho một video khác, chờ xong đã."}
-        S.seo_running = True
-        S.seo = {"status": "running", "job": S.seo["job"] + 1, "buoc": "Bắt đầu...", "nguon": nguon,
-                 "ket_qua": None, "loi": ""}
-    threading.Thread(target=_seo_job, args=(nguon,), daemon=True).start()
-    return {"ok": True, "msg": "Bắt đầu: bóc băng rồi gửi Gemini — theo dõi ở Nhật ký."}
+        if xoa_cu:
+            cu = [it for it in S.items if not pq.is_running(it)]
+            if cu:
+                S.items = [it for it in S.items if pq.is_running(it)]
+                pq.save_queue(S.items)
+                S.log(f"🧹 Tự thêm vào hàng đợi: đã xoá {len(cu)} mục cũ trong hàng đợi để nhận loạt mới.")
+            S.seo_jobs = [j for j in S.seo_jobs if j["status"] in ("chờ", "đang chạy")]
+        them = bo_qua = 0
+        for nguon in nguon_list:
+            cu = next((j for j in S.seo_jobs if j["nguon"] == nguon), None)
+            if cu and cu["status"] in ("chờ", "đang chạy"):
+                bo_qua += 1
+                continue
+            if cu:
+                S.seo_jobs.remove(cu)        # làm lại video đã xong/lỗi/bỏ trước đó
+            S.seo_seq += 1
+            S.seo_jobs.append({"id": f"ai{S.seo_seq}", "nguon": nguon, "ten": _ten_nguon(nguon),
+                               "status": "chờ", "buoc": "", "loi": "", "ket_qua": None,
+                               "da_them": False, "tu_dong": tu_dong,
+                               "platforms": pq.normalize_platforms(platforms) if platforms else None})
+            them += 1
+        bat_dau = bool(them) and not S.seo_running
+        if bat_dau:
+            S.seo_running = True
+            S.seo_stop.clear()
+    if bat_dau:
+        threading.Thread(target=_seo_worker, daemon=True).start()
+    if not them:
+        return {"ok": False, "msg": "Các video này đang trong danh sách chờ rồi."}
+    msg = f"Đã xếp {them} video: bóc băng rồi gửi Gemini lần lượt (một cuộc trò chuyện chung)"
+    if bo_qua:
+        msg += f" (bỏ qua {bo_qua} đang chờ sẵn)"
+    return {"ok": True, "msg": msg + (" — xong tự thêm vào hàng đợi (đã dọn hàng đợi cũ)." if tu_dong else " — theo dõi ở bước 2.")}
 
 
-def api_add_seo_item(data):
-    """Thêm 1 video vào hàng đợi kèm tiêu đề/mô tả/thẻ/hashtag RIÊNG (ưu tiên hơn mặc định của tab)."""
-    link = (data.get("link") or "").strip()
-    title = " ".join((data.get("title") or "").split())
+def api_seo_stop(_data):
+    with S.lock:
+        if not S.seo_running:
+            return {"ok": False, "msg": "Không có việc tạo nội dung nào đang chạy."}
+        S.seo_stop.set()
+    return {"ok": True, "msg": "Sẽ dừng sau video đang làm; các video chưa chạy bị bỏ."}
+
+
+def api_seo_clear(data):
+    """Dọn danh sách AI: bỏ các job không còn chạy (hoặc chỉ các id gửi lên)."""
+    ids = set(data.get("ids") or [])
+    with S.lock:
+        truoc = len(S.seo_jobs)
+        S.seo_jobs = [j for j in S.seo_jobs if j["status"] == "đang chạy" or (ids and j["id"] not in ids)]
+        n = truoc - len(S.seo_jobs)
+    return {"ok": True, "msg": f"Đã bỏ {n} mục khỏi danh sách AI."}
+
+
+def _them_muc_ai(link, title, desc, tags, hashtags, platforms):
+    """Lõi thêm 1 mục hàng đợi kèm nội dung AI riêng. Trả (ok, msg)."""
+    link = (link or "").strip()
+    title = " ".join((title or "").split())
     if not link or not title:
-        return {"ok": False, "msg": "Thiếu video hoặc tiêu đề."}
-    sel = data.get("platforms")
-    if sel is not None and not sel:
-        return {"ok": False, "msg": "Chọn ít nhất một nền tảng."}
-    platforms = pq.normalize_platforms(sel or S.cfg.get("default_platforms") or pq.PLATFORMS)
-    if data.get("times") is not None:        # web gửi kèm khung giờ của tab; gọi API tay thì dùng lịch đã lưu
-        err = _apply_schedule(data.get("times"), data.get("start"))
-        if err:
-            return {"ok": False, "msg": err}
+        return False, "Thiếu video hoặc tiêu đề."
+    if platforms is not None and not platforms:
+        return False, "Chọn ít nhất một nền tảng."
+    platforms = pq.normalize_platforms(platforms or S.cfg.get("default_platforms") or pq.PLATFORMS)
     if not S.cfg.get("schedule_times"):
-        return {"ok": False, "msg": "Chưa có khung giờ công bố — nhập ở mục Lịch (ví dụ 08:00, 19:00)."}
+        return False, "Chưa có khung giờ công bố — nhập ở mục Lịch (ví dụ 08:00, 19:00)."
     with S.lock:
         if any(it["link"] == link for it in S.items):
-            return {"ok": False, "msg": "Video này đã có trong hàng đợi."}
+            return False, "Video này đã có trong hàng đợi."
         it = pq.new_item(link, title, platforms)
-        it["desc"] = (data.get("desc") or "").strip()
-        it["tags"] = (data.get("tags") or "").strip()
-        it["hashtags"] = " ".join((data.get("hashtags") or "").split())
+        it["desc"] = (desc or "").strip()
+        it["tags"] = (tags or "").strip()
+        it["hashtags"] = " ".join((hashtags or "").split())
         S.items.append(it)
         pq.assign_schedule(S.items, S.cfg["schedule_times"], pq.parse_start(S.cfg["schedule_start"]))
         pq.save_queue(S.items)
     S.log(f"✓ Thêm vào hàng đợi (nội dung AI): {title}")
-    return {"ok": True, "msg": f"Đã thêm: {title}"}
+    return True, f"Đã thêm: {title}"
+
+
+def api_add_seo_item(data):
+    """Thêm 1 video vào hàng đợi kèm tiêu đề/mô tả/thẻ/hashtag RIÊNG (ưu tiên hơn mặc định của tab).
+    Có job_id thì đánh dấu job AI đó 'đã thêm'."""
+    if data.get("times") is not None:        # web gửi kèm khung giờ của tab; gọi API tay thì dùng lịch đã lưu
+        err = _apply_schedule(data.get("times"), data.get("start"))
+        if err:
+            return {"ok": False, "msg": err}
+    ok, msg = _them_muc_ai(data.get("link"), data.get("title"), data.get("desc"), data.get("tags"),
+                           data.get("hashtags"), data.get("platforms"))
+    if ok and data.get("job_id"):
+        with S.lock:
+            for j in S.seo_jobs:
+                if j["id"] == data["job_id"]:
+                    j["da_them"] = True
+    return {"ok": ok, "msg": msg}
 
 
 # ------------------------------------------------------------------ lưu config
@@ -482,6 +671,8 @@ def api_check_connection(data):
     with S.lock:
         if S.running:
             return {"ok": False, "msg": "Đang chạy việc khác — chờ xong đã."}
+        if S.seo_running:
+            return {"ok": False, "msg": "Đang tạo nội dung bằng AI (đang nối Gemini) — chờ xong rồi kiểm tra kết nối."}
         if "token" in data:
             _set_token(name, data.get("token"))
             chrome_cdp.save_config(S.cfg)
@@ -746,6 +937,8 @@ ROUTES = {
     "/api/add_links": api_add_links,
     "/api/list_downloads": api_list_downloads,
     "/api/tao_noi_dung": api_tao_noi_dung,
+    "/api/seo_stop": api_seo_stop,
+    "/api/seo_clear": api_seo_clear,
     "/api/add_seo_item": api_add_seo_item,
     "/api/set_title": api_set_title,
     "/api/reassign": api_reassign,
@@ -805,8 +998,14 @@ class Handler(BaseHTTPRequestHandler):
 def make_server():
     """Mở server trên PORT; cổng bận (app đang chạy sẵn?) thì lấy cổng trống bất kỳ.
     Trả về (httpd, url). Dùng chung cho main() và cửa sổ trạng thái app_gui.py."""
+    import socket
+    port = PORT
+    with socket.socket() as s:               # Windows cho bind trùng cổng đang nghe (SO_REUSEADDR) -> phải dò trước
+        s.settimeout(0.3)
+        if s.connect_ex((HOST, PORT)) == 0:
+            port = 0
     try:
-        httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+        httpd = ThreadingHTTPServer((HOST, port), Handler)
     except OSError:
         httpd = ThreadingHTTPServer((HOST, 0), Handler)
     return httpd, f"http://{HOST}:{httpd.server_address[1]}/"
