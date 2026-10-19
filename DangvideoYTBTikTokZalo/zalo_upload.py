@@ -165,3 +165,29 @@ def upload_video(page, video_path, content, hashtags=(), schedule_at=None, log=p
         log("✓ Zalo đã báo thành công (danh sách có thể cập nhật chậm).")
         return page.url
     raise RuntimeError("Bấm Đăng video nhưng Zalo không báo thành công trong 90s — kiểm tra tab Zalo.")
+
+
+# ----- đọc lịch đã đặt (app xếp giờ video mới SAU video gần nhất đang lên lịch, user 19/10/2026) -----
+# cột "Giờ hẹn đăng" của danh sách hẹn giờ: nhận "19-10-2026 18:00", "19/10/2026 18:00" hoặc "18:00 19/10/2026"
+RE_NGAY_GIO_ZALO = re.compile(r"(\d{1,2})[-/](\d{1,2})[-/](\d{4})\s+(\d{1,2}):(\d{2})|(\d{1,2}):(\d{2})\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})")
+
+
+def lich_da_dat(page, log=print):
+    """Danh sách datetime các bài Zalo đang hẹn giờ (mọi mốc giờ ở TƯƠNG LAI trên trang danh sách hẹn giờ)."""
+    from datetime import datetime
+    page.goto(SCHEDULED_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(6000)
+    _check_logged_in(page)
+    body = page.locator("body").inner_text(timeout=15000)
+    now = datetime.now()
+    out = set()
+    for m in RE_NGAY_GIO_ZALO.finditer(body):
+        g = m.groups()
+        d, mo, y, h, mi = (g[0], g[1], g[2], g[3], g[4]) if g[0] else (g[7], g[8], g[9], g[5], g[6])
+        try:
+            dt = datetime(int(y), int(mo), int(d), int(h), int(mi))
+        except ValueError:
+            continue
+        if dt > now:
+            out.add(dt)
+    return sorted(out)

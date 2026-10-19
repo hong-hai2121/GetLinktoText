@@ -9,7 +9,7 @@ Các selector dùng id ổn định của Studio, chữ hiển thị bắt cả 
 import os
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 UPLOAD_URL = "https://www.youtube.com/upload"
 STUDIO_URL = "https://studio.youtube.com/"
@@ -803,3 +803,107 @@ def _sau_khi_luu(page, done_btn, video_link, log, timeout_sec=120):
         pass
     raise RuntimeError(f"Đã bấm Lưu/Lên lịch nhưng hộp thoại tải lên vẫn mở sau {timeout_sec}s — có popup Studio chưa "
                        f"xác nhận được? Hãy xem tab Chrome và ảnh {shot}; bấm xác nhận bằng tay rồi 'Đăng lại lỗi' nếu cần.")
+
+
+# ----- đọc lịch đã đặt (app xếp giờ video mới SAU video gần nhất đang lên lịch, user 19/10/2026) -----
+RE_NGAY_VI = re.compile(r"(\d{1,2}) thg (\d{1,2}), (\d{4})")
+RE_GIO_24 = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+
+
+RE_GIO_12 = re.compile(r"(\d{1,2}):(\d{2})\s*(SA|CH|AM|PM)", re.I)
+RE_NGAY_EN = re.compile(r"\b(" + "|".join(MONTHS_EN) + r")\w*\s+(\d{1,2}),\s+(\d{4})")
+
+
+def _gio_len_lich_trang_sua(page, vid, log):
+    """Trang sửa video chỉ hiện 'Chế độ hiển thị: Đã lên lịch'; bấm vào ô đó mở hộp thoại
+    ytcp-video-visibility-select có ngày ở #datepicker-trigger ('21 thg 10, 2026') và giờ ở
+    #time-of-day-container input ('08:00') (dò thật 19/10/2026). Đọc xong bấm Escape, không đổi gì.
+    Không phải video lên lịch / không đọc được -> None."""
+    page.goto(f"https://studio.youtube.com/video/{vid}/edit", wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(4000)
+    box = page.locator("ytcp-video-metadata-visibility").first
+    box.wait_for(state="visible", timeout=20000)
+    if not re.search(r"lên lịch|scheduled", box.inner_text(timeout=3000), re.I):
+        return None
+    box.scroll_into_view_if_needed()
+    box.click()
+    ngay_txt = gio_txt = ""
+    try:
+        picker = page.locator("ytcp-datetime-picker").first
+        picker.wait_for(state="visible", timeout=10000)
+        page.wait_for_timeout(800)
+        ngay_txt = " ".join(picker.locator("#datepicker-trigger").first.inner_text(timeout=5000).split())
+        gio_txt = (picker.locator("#time-of-day-container input").first.input_value(timeout=5000) or "").strip()
+    finally:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(600)
+    mn = RE_NGAY_VI.search(ngay_txt)
+    if mn:
+        y, mo, d = int(mn.group(3)), int(mn.group(2)), int(mn.group(1))
+    else:
+        me = RE_NGAY_EN.search(ngay_txt)
+        if not me:
+            log(f"  (YouTube {vid}: không hiểu ngày {ngay_txt!r})")
+            return None
+        y, mo, d = int(me.group(3)), MONTHS_EN.index(me.group(1)) + 1, int(me.group(2))
+    m12 = RE_GIO_12.search(gio_txt)
+    if m12:
+        h = int(m12.group(1)) % 12 + (12 if m12.group(3).upper() in ("CH", "PM") else 0)
+        mi = int(m12.group(2))
+    else:
+        mg = RE_GIO_24.search(gio_txt)
+        if not mg:
+            log(f"  (YouTube {vid}: không hiểu giờ {gio_txt!r})")
+            return None
+        h, mi = int(mg.group(1)), int(mg.group(2))
+    return datetime(y, mo, d, h, mi)
+
+
+def lich_da_dat(page, log=_log_default):
+    """Datetime các video đang 'Đã lên lịch' ở CẢ tab Shorts lẫn tab Video của Studio: ngày lấy ở
+    bảng, giờ lấy ở trang sửa từng video (không đọc được giờ thì lấy 23:59 ngày đó cho chắc chắn xếp
+    sau). Trả về list đã sắp xếp."""
+    page.goto(STUDIO_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(3000)
+    _check_logged_in(page, log)
+    m = re.search(r"/channel/(UC[\w-]+)", page.url)
+    if not m:
+        raise RuntimeError("không lấy được id kênh từ địa chỉ Studio")
+    cid = m.group(1)
+    tim = []
+    for tab in ("short", "upload"):
+        page.goto(f"https://studio.youtube.com/channel/{cid}/videos/{tab}", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(6000)
+        rows = page.locator("ytcp-video-row")
+        for i in range(min(rows.count(), 40)):
+            r = rows.nth(i)
+            try:
+                t = " ".join(r.inner_text(timeout=3000).split())
+            except Exception:
+                continue
+            if not re.search(r"Đã lên lịch|Scheduled", t):
+                continue
+            vid = ""
+            try:
+                href = r.locator("a#video-title, a[href*='/video/']").first.get_attribute("href", timeout=2000) or ""
+                mv = re.search(r"/video/([\w-]+)/", href)
+                vid = mv.group(1) if mv else ""
+            except Exception:
+                pass
+            mn = RE_NGAY_VI.search(t)
+            ngay = date(int(mn.group(3)), int(mn.group(2)), int(mn.group(1))) if mn else None
+            tim.append((tab, vid, ngay, t[:50]))
+    out = set()
+    for tab, vid, ngay, ten in tim:
+        dt = None
+        if vid:
+            try:
+                dt = _gio_len_lich_trang_sua(page, vid, log)
+            except Exception:
+                dt = None
+        if dt is None and ngay is not None:
+            dt = datetime.combine(ngay, datetime.min.time()).replace(hour=23, minute=59)
+            log(f"  (YouTube: không đọc được giờ của '{ten}' -> coi là {dt:%d/%m %H:%M})")
+        if dt is not None:
+            out.add(dt)
+    return sorted(out)

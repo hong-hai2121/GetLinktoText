@@ -22,6 +22,8 @@ Chuẩn bị 1 LẦN cho profile (ví dụ "Profile 9"):
 import json
 import os
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 from pw_extension_relay import EXTENSION_ID, EXTENSION_STORE_URL, ExtensionRelay
@@ -51,13 +53,24 @@ DEFAULT_CONFIG = {
     # --- TikTok / Zalo: nội dung = 1 dòng tiêu đề + hashtag ---
     "default_hashtags": "",                # "#a #b"; trống = lấy dòng cuối của mô tả (nếu toàn hashtag)
     "default_platforms": ["youtube", "tiktok", "zalo"],   # ô tick mặc định khi thêm video
+    "gio_da_dung": [],                     # giờ công bố của mục đã đăng nhưng đã bị bỏ khỏi hàng đợi (không cấp trùng)
     # --- trình duyệt + token Playwright Extension riêng từng nền tảng (xem platform_config) ---
     # {"tiktok": {"browser_path", "user_data_dir", "profile_dir", "extension_token", "client_name",
     #             "account" (kết quả Kiểm tra kết nối)}, "zalo": {...}}
     "platforms": {},
 }
 
-_relay = None  # ExtensionRelay đang dùng (giữ giữa launch_chrome và connect_playwright)
+# --- phiên kết nối THEO PROFILE, giữ suốt đời tiến trình (user 19/10/2026: "nối Playwright 1 lần cho toàn
+# bộ, không ngắt tới khi tắt server" — mỗi lần mở tab connect là Chrome nhảy lên làm phiền việc khác).
+# Mỗi profile (Chrome Profile 9 / Profile 85 / Cốc Cốc Profile 12) một relay + một Playwright + một tab;
+# Gemini dùng chung phiên của Zalo. Thread keepalive gửi lệnh CDP nhẹ mỗi 15 s để extension MV3 không ngủ.
+_sessions = {}            # (user_data_dir, profile_dir) -> {"relay", "pw", "browser", "page", "cfg"}
+_current_key = None       # phiên của launch_chrome/connect_playwright gần nhất (cdp_send nhắm vào đây)
+GIU_KET_NOI = False       # app.py đặt True: disconnect() không ngắt gì; chỉ disconnect_all() lúc tắt server
+KEEPALIVE_GIAY = 15
+_keepalive = None
+_pw = None                # MỘT Playwright chung cho mọi phiên (mỗi thread chỉ được một sync_playwright; một
+                          # Playwright nối được nhiều trình duyệt qua connect_over_cdp)
 
 
 def load_config():
@@ -145,16 +158,89 @@ def open_extension_settings(cfg, log=print):
     _spawn_chrome(cfg, f"chrome://extensions/?id={EXTENSION_ID}")
 
 
+def _key(cfg):
+    return (str(cfg.get("user_data_dir") or ""), str(cfg.get("profile_dir") or ""))
+
+
+def _page_song(page):
+    try:
+        return page is not None and not page.is_closed()
+    except Exception:
+        return False
+
+
+def _bo_phien(key, dong_tab=False):
+    """Gỡ một phiên: (đóng tab) + dừng Playwright + tắt relay. Gọi được từ thread khác (đóng tab qua
+    relay nếu Playwright không dùng được ngoài thread tạo nó)."""
+    s = _sessions.pop(key, None)
+    if not s:
+        return
+    if dong_tab and not close_tab(s.get("page")):
+        try:
+            s["relay"].close_first_tab()
+        except Exception:
+            pass
+    try:
+        s["relay"].stop()           # relay tắt -> Playwright tự coi trình duyệt này đã ngắt
+    except Exception:
+        pass
+
+
+def _tat_playwright():
+    global _pw
+    if _pw is not None:
+        try:
+            _pw.stop()
+        except Exception:
+            pass
+        _pw = None
+
+
+def session_alive(cfg):
+    """Profile này đang có phiên sống (extension còn nối, tab điều khiển chưa bị đóng)?"""
+    s = _sessions.get(_key(cfg))
+    return bool(s and s["relay"].connected and (s.get("page") is None or _page_song(s["page"])))
+
+
+def sessions_info():
+    """[(profile_dir, còn nối?)] để hiện trạng thái."""
+    return [(s["cfg"].get("profile_dir"), s["relay"].connected and _page_song(s.get("page"))) for s in _sessions.values()]
+
+
+def _keepalive_loop():
+    while True:
+        time.sleep(KEEPALIVE_GIAY)
+        for s in list(_sessions.values()):
+            r = s["relay"]
+            if not r.connected:
+                continue
+            try:
+                r.send_cdp("Runtime.evaluate", {"expression": "1", "returnByValue": True}, timeout=10)
+            except Exception:
+                pass
+
+
+def _bat_keepalive():
+    global _keepalive
+    if _keepalive is not None and _keepalive.is_alive():
+        return
+    _keepalive = threading.Thread(target=_keepalive_loop, name="cdp-keepalive", daemon=True)
+    _keepalive.start()
+
+
 def launch_chrome(cfg, log=print):
     """Giữ tên cũ cho app.py / run_cli.py. Thực chất: bật relay, mở trang connect của extension
-    trong đúng profile và chờ extension nối vào. Chrome đang mở thì chỉ thêm 1 tab."""
-    global _relay
-    if _relay is not None and _relay.connected:
-        log("✓ Extension đang nối sẵn — dùng lại.")
-        return _relay
-    if _relay is not None:
-        _relay.stop()
-        _relay = None
+    trong đúng profile và chờ extension nối vào. Phiên của profile này còn sống thì DÙNG LẠI, không
+    mở tab mới (mỗi profile chỉ nối một lần cho tới khi tắt server)."""
+    global _current_key
+    key = _key(cfg)
+    s = _sessions.get(key)
+    if s is not None:
+        if s["relay"].connected and (s.get("page") is None or _page_song(s["page"])):
+            _current_key = key
+            return s["relay"]
+        log(f"Kết nối profile '{cfg['profile_dir']}' đã rớt (tab bị đóng / extension ngắt) -> nối lại.")
+        _bo_phien(key)
 
     chrome = find_chrome(cfg)
     if not extension_installed(cfg):
@@ -184,41 +270,53 @@ def launch_chrome(cfg, log=print):
         relay.stop()
         raise
     log("✓ Extension đã nối — đang điều khiển Chrome thật của bạn (cookie/đăng nhập giữ nguyên).")
-    _relay = relay
+    _sessions[key] = {"relay": relay, "pw": None, "browser": None, "page": None, "cfg": dict(cfg)}
+    _current_key = key
+    _bat_keepalive()
     return relay
 
 
 def connect_playwright(cfg, log=print):
-    """Nối Playwright vào relay. Trả về (playwright, browser, page); page là tab connect vừa mở."""
-    if _relay is None or not _relay.connected:
+    """Nối Playwright vào relay của profile này. Trả về (playwright, browser, page); page là tab connect.
+    Đã nối rồi thì trả lại đúng bộ cũ. KHÔNG bring_to_front (không cướp cửa sổ của người dùng).
+    Lưu ý: đối tượng Playwright sync chỉ dùng được trong thread đã tạo nó -> app chạy mọi việc
+    trình duyệt trên MỘT thread tự động hoá."""
+    global _current_key, _pw
+    key = _key(cfg)
+    s = _sessions.get(key)
+    if s is None or not s["relay"].connected:
         raise RuntimeError("Chưa kết nối extension — gọi launch_chrome() trước.")
-    from playwright.sync_api import sync_playwright
-    pw = sync_playwright().start()
-    try:
-        browser = pw.chromium.connect_over_cdp(_relay.cdp_endpoint, timeout=30000)
-    except Exception:
-        pw.stop()
-        raise
+    _current_key = key
+    if s.get("browser") is not None and _page_song(s.get("page")):
+        return _pw, s["browser"], s["page"]
+    if _pw is None:
+        from playwright.sync_api import sync_playwright
+        _pw = sync_playwright().start()
+    browser = _pw.chromium.connect_over_cdp(s["relay"].cdp_endpoint, timeout=30000)
     ctx = browser.contexts[0] if browser.contexts else browser.new_context()
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
-    try:
-        page.bring_to_front()
-    except Exception:
-        pass
+    s.update(pw=_pw, browser=browser, page=page)
     log("✓ Playwright đã nối vào Chrome (qua extension).")
-    return pw, browser, page
+    return _pw, browser, page
+
+
+def _relay_hien_tai():
+    s = _sessions.get(_current_key) if _current_key is not None else None
+    return s["relay"] if s else None
 
 
 def relay_connected():
-    """Extension còn nối với relay không (để worker AI biết phải nối lại hay dùng tiếp)."""
-    return _relay is not None and _relay.connected
+    """Extension của phiên hiện tại còn nối với relay không."""
+    r = _relay_hien_tai()
+    return r is not None and r.connected
 
 
 def cdp_send(method, params=None, timeout=30.0):
-    """Gửi lệnh CDP thẳng tới tab đang điều khiển (xem ExtensionRelay.send_cdp)."""
-    if _relay is None or not _relay.connected:
+    """Gửi lệnh CDP thẳng tới tab đang điều khiển của phiên hiện tại (xem ExtensionRelay.send_cdp)."""
+    r = _relay_hien_tai()
+    if r is None or not r.connected:
         raise RuntimeError("Chưa kết nối extension — gọi launch_chrome() trước.")
-    return _relay.send_cdp(method, params, timeout=timeout)
+    return r.send_cdp(method, params, timeout=timeout)
 
 
 def close_tab(page, log=None):
@@ -235,19 +333,28 @@ def close_tab(page, log=None):
 
 
 def disconnect(pw, page=None):
-    """Ngắt Playwright và tắt relay. Truyền `page` để ĐÓNG tab điều khiển trước khi ngắt (mặc định
-    không: Chrome và tab vẫn mở, extension chỉ gỡ debugger khỏi tab)."""
-    global _relay
-    if page is not None:
+    """Script dòng lệnh (GIU_KET_NOI=False): ngắt Playwright + tắt relay của phiên hiện tại; truyền
+    `page` để ĐÓNG tab điều khiển. App (GIU_KET_NOI=True): KHÔNG làm gì — phiên giữ tới khi tắt
+    server (disconnect_all)."""
+    if GIU_KET_NOI:
+        return
+    key = _current_key
+    if key in _sessions:
+        _bo_phien(key, dong_tab=page is not None)
+    elif page is not None:
         close_tab(page)
-    try:
-        if pw is not None:
-            pw.stop()
-    except Exception:
-        pass
-    if _relay is not None:
-        _relay.stop()
-        _relay = None
+    if not _sessions:
+        _tat_playwright()
+
+
+def disconnect_all(dong_tab=True, log=None):
+    """Tắt server: đóng tab điều khiển của từng profile, tắt relay, dừng Playwright. Gọi được từ
+    thread bất kỳ (tab đóng qua relay nếu cần)."""
+    for key in list(_sessions):
+        _bo_phien(key, dong_tab=dong_tab)
+    _tat_playwright()
+    if log:
+        log("✓ Đã ngắt mọi kết nối trình duyệt.")
 
 
 # ------------------------------------------------------------------ nhiều nền tảng

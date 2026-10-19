@@ -287,3 +287,27 @@ def _nut_xac_nhan_popup(page):
             uu_tien.sort(key=lambda x: (x[0], x[1]))
             return uu_tien[0][2]
     return None
+
+
+# ----- đọc lịch đã đặt (app xếp giờ video mới SAU video gần nhất đang lên lịch, user 19/10/2026) -----
+# trang Bài đăng hiện "16 tháng 10, 6:00 CH" / "17 tháng 10 2023, 12:00 CH" cho mỗi bài
+RE_NGAY_GIO_TT = re.compile(r"(\d{1,2}) tháng (\d{1,2})(?:,? (\d{4}))?,? (\d{1,2}):(\d{2}) (SA|CH)", re.I)
+
+
+def lich_da_dat(page, log=print):
+    """Danh sách datetime các bài TikTok đang lên lịch (mọi mốc giờ ở TƯƠNG LAI trên trang Bài đăng)."""
+    page.goto(CONTENT_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(6000)
+    _check_logged_in(page)
+    body = page.locator("body").inner_text(timeout=15000)
+    now = datetime.now()
+    out = set()
+    for d, m, y, h, mi, buoi in RE_NGAY_GIO_TT.findall(body):
+        gio = int(h) % 12 + (12 if buoi.upper() == "CH" else 0)
+        try:
+            dt = datetime(int(y) if y else now.year, int(m), int(d), gio, int(mi))
+        except ValueError:
+            continue
+        if dt > now:
+            out.add(dt)
+    return sorted(out)

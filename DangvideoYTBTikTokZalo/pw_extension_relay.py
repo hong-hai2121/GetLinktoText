@@ -419,6 +419,23 @@ class ExtensionRelay:
 
         return asyncio.run_coroutine_threadsafe(_run(), loop).result(timeout)
 
+    def close_first_tab(self, timeout=5.0):
+        """Đóng tab điều khiển đầu tiên qua extension (chrome.tabs.remove) — gọi được từ thread bất kỳ;
+        dùng lúc tắt server, khi đối tượng Playwright không dùng được ngoài thread đã tạo nó."""
+        loop = self._loop
+        if loop is None or not self.connected:
+            return False
+
+        async def _run():
+            sid = self._model.first_session_id()
+            info = self._model.get_target_info(sid) if sid else None
+            if not info:
+                return False
+            r = await self._model.close_target(info.get("targetId"))
+            return bool(r and r.get("success"))
+
+        return asyncio.run_coroutine_threadsafe(_run(), loop).result(timeout)
+
     # ----- asyncio (chạy trong thread nền) -----
     def _thread_main(self):
         try:

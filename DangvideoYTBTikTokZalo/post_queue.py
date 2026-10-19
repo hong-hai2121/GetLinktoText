@@ -64,8 +64,24 @@ def normalize_item(it):
     it["pf"] = pf
     it.setdefault("title", "")
     it.setdefault("file", "")
+    it.setdefault("giay", None)
     update_status(it)
     return it
+
+
+NGUONG_SHORT_GIAY = 180      # YouTube: video <= 3 phút vào tab Shorts, dài hơn vào tab Video (app đăng như nhau)
+
+
+def loai_video(it):
+    """'short' (<= 3 phút) / 'video' (> 3 phút) / '' (chưa đo thời lượng)."""
+    g = it.get("giay")
+    if not g:
+        return ""
+    return "video" if g > NGUONG_SHORT_GIAY else "short"
+
+
+def fmt_giay(g):
+    return f"{int(g // 60)}:{int(g % 60):02d}" if g else ""
 
 
 def load_queue():
@@ -117,7 +133,7 @@ def parse_entries(text):
 def new_item(link, title="", platforms=None):
     platforms = normalize_platforms(platforms or PLATFORMS)
     it = {"id": uuid.uuid4().hex[:8], "link": link, "title": title or "", "scheduled_at": None,
-          "status": STATUS_WAIT, "result": "", "error": "", "file": "",
+          "status": STATUS_WAIT, "result": "", "error": "", "file": "", "giay": None,
           "added_at": datetime.now().isoformat(timespec="seconds"),
           "platforms": platforms, "pf": {p: _pf_entry() for p in platforms}}
     return it
@@ -233,15 +249,17 @@ def reschedulable(it):
     return not any_done(it) and not is_running(it) and it["status"] != STATUS_DONE
 
 
-def assign_schedule(items, times, start_date=None, now=None, reassign=False):
+def assign_schedule(items, times, start_date=None, now=None, reassign=False, extra_taken=None):
     """Gán giờ công bố cho các mục đang chờ chưa có giờ (reassign=True: xếp lại tất cả mục chờ).
-    Giờ của mục đã xếp/đang đăng/đã xong được giữ, không cấp trùng."""
+    Giờ của mục đã xếp/đang đăng/đã xong được giữ, không cấp trùng. extra_taken: thêm các giờ
+    (ISO 'YYYY-MM-DDTHH:MM') đã dùng bởi mục không còn trong hàng đợi (app: config gio_da_dung)."""
     if not times:
         raise ValueError("Chưa có khung giờ nào (ví dụ: 08:00, 19:00)")
     now = now or datetime.now()
     start_date = start_date or now.date()
     targets = [it for it in items if reschedulable(it) and (reassign or not it.get("scheduled_at"))]
     taken = {it["scheduled_at"] for it in items if it.get("scheduled_at") and it not in targets}
+    taken |= {g for g in (extra_taken or []) if isinstance(g, str)}
     slots = iter_slots(times, start_date, now)
     for it in targets:
         for dt in slots:

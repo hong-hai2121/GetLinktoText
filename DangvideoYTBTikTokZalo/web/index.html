@@ -223,6 +223,13 @@ details.card .body{padding:14px 16px}
 
 /* ---------------- bảng hàng đợi ---------------- */
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 10px}
+.qtabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:0 16px 10px}
+.qtabs button{font:inherit;font-size:12.5px;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--dim);cursor:pointer}
+.qtabs button:hover{background:var(--gray-bg)}
+.qtabs button.on{background:var(--fg);border-color:var(--fg);color:#fff;font-weight:600}
+.qtabs button span{opacity:.8;margin-left:3px}
+.vid .dur{display:inline-block;font-size:11px;color:var(--dim);margin-left:6px;font-weight:400}
+.vid .dur.video{color:#b45309}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{position:sticky;top:0;background:#f9fafb;color:var(--dim);font-weight:600;font-size:11.5px;
   text-transform:uppercase;letter-spacing:.04em;z-index:1}
@@ -326,7 +333,7 @@ td.kq .er{color:#b91c1c}
               <label class="check"><input type="checkbox" class="pfsel" value="tiktok" checked>TikTok</label>
               <label class="check"><input type="checkbox" class="pfsel" value="zalo" checked>Zalo</label>
             </div>
-            <label class="check auto"><input type="checkbox" id="seoAuto">Tự thêm vào hàng đợi khi xong (không cần duyệt từng video — xoá hết hàng đợi cũ trước)</label>
+            <label class="check auto"><input type="checkbox" id="seoAuto" checked>Tự thêm vào hàng đợi khi xong rồi tự ▶ Bắt đầu đăng (không cần duyệt từng video — xoá hết hàng đợi cũ trước)</label>
             <button class="ai-run" id="btnSeoRun">✨ Tạo nội dung</button>
             <ol class="pipe" id="seoPipe">
               <li data-k="tai">Video</li><li data-k="boc">Bóc băng</li><li data-k="gem">Gemini</li><li data-k="xong">Xong</li>
@@ -337,10 +344,6 @@ td.kq .er{color:#b91c1c}
                 <button class="btn mini" id="btnSeoStop">⏹ Dừng sau video này</button>
                 <button class="btn mini" id="btnSeoClear" title="Bỏ các mục xong / lỗi / bỏ khỏi danh sách (thẻ kết quả bước 3 cũng mất)">Dọn danh sách</button></div>
               <ul id="seoJobs"></ul>
-            </div>
-            <div class="qd" id="seoQuaDai" style="display:none">
-              Video dài hơn 3 phút đã bỏ qua (chưa bóc băng), link lưu lại:
-              <ul id="seoQuaDaiList"></ul>
             </div>
           </section>
         </div>
@@ -363,6 +366,12 @@ td.kq .er{color:#b91c1c}
         <button class="btn" id="btnClear">Dọn mục xong/lỗi</button>
         <label class="check" style="margin-left:auto">
           <input type="checkbox" id="dryRun">Chỉ chạy thử 1 video mỗi nền tảng (làm hết các bước, không bấm nút cuối)</label>
+      </div>
+      <div class="qtabs" id="qTabs">
+        <button class="on" data-loai="">Tất cả <span id="qc-"></span></button>
+        <button data-loai="short">Shorts ≤ 3 phút <span id="qc-short"></span></button>
+        <button data-loai="video">Video &gt; 3 phút <span id="qc-video"></span></button>
+        <span class="hint" style="margin:0 0 0 auto">Đăng như nhau; YouTube tự xếp ≤ 3 phút vào tab Shorts, dài hơn vào tab Video</span>
       </div>
       <div class="tbl-wrap">
         <table>
@@ -409,8 +418,9 @@ td.kq .er{color:#b91c1c}
           <div class="row" style="margin-top:10px">
             <button class="btn" id="btnSaveSchedule">Lưu lịch</button>
             <button class="btn" id="btnReassign">Xếp lại giờ cho hàng đợi</button>
+            <button class="btn" id="btnDocLich" title="Đọc các video đang lên lịch THẬT trên YouTube (tab Video + Shorts), TikTok, Zalo rồi xếp giờ tiếp SAU video gần nhất">📅 Đọc lịch thật</button>
           </div>
-          <p class="hint">TikTok chỉ nhận lịch trong 10 ngày tới (sớm nhất 15 phút); YouTube làm tròn 15 phút, TikTok 5 phút.</p>
+          <p class="hint">Trước mỗi lần đăng app tự đọc lịch thật trên 3 nền tảng và xếp video mới <b>sau video gần nhất đang lên lịch</b>. TikTok chỉ nhận lịch trong 10 ngày tới (sớm nhất 15 phút); YouTube làm tròn 15 phút, TikTok 5 phút.</p>
         </div>
       </div>
 
@@ -582,16 +592,28 @@ function vidCell(it) {
   const t = it.title
     ? `<span class="ttl" data-id="${it.id}" data-title="${esc(it.title)}" title="Bấm để sửa tiêu đề">${esc(it.title)}</span>`
     : `<span class="ttl none" data-id="${it.id}" data-title="" title="Bấm để đặt tiêu đề">(tiêu đề = tên file — bấm để đặt)</span>`;
-  return `<td class="vid" title="${esc(it.link)}"><b>${esc(it.short)}</b>${t}</td>`;
+  const dur = it.thoi_luong ? `<span class="dur ${it.loai}">⏱ ${esc(it.thoi_luong)} · ${it.loai === "video" ? "Video > 3p" : "Shorts"}</span>` : "";
+  return `<td class="vid" title="${esc(it.link)}"><b>${esc(it.short)}</b>${dur}${t}</td>`;
 }
+let qLoai = "";                         // tab lọc hàng đợi: "" tất cả / "short" / "video"
+$("qTabs").querySelectorAll("button").forEach(b => b.onclick = () => {
+  qLoai = b.dataset.loai;
+  $("qTabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  if (lastState) renderTable(lastState.items);
+});
 function bindTitleEdit(root) {
   root.querySelectorAll(".ttl").forEach(el => el.onclick = () => {
     const v = prompt("Tiêu đề video (TikTok/Zalo đăng đúng dòng này; YouTube dùng làm tiêu đề):", el.dataset.title || "");
     if (v !== null) post("/api/set_title", {id: el.dataset.id, title: v});
   });
 }
-function renderTable(items) {
+function renderTable(all) {
   const tb = $("tbody");
+  ["", "short", "video"].forEach(l => {
+    const n = all.filter(it => !l || it.loai === l).length;
+    $("qc-" + l).textContent = n ? `(${n})` : "";
+  });
+  const items = all.filter(it => !qLoai || it.loai === qLoai);
   $("emptyRow").style.display = items.length ? "none" : "";
   tb.innerHTML = items.map((it, i) => `
     <tr>
@@ -878,10 +900,6 @@ function renderResults(jobs) {
   $("btnSeoAddAll").style.display = done.some(j => !j.da_them) ? "" : "none";
 }
 function renderSeo(st) {
-  const qd = st.qua_dai || [];
-  $("seoQuaDai").style.display = qd.length ? "" : "none";
-  if (qd.length) $("seoQuaDaiList").innerHTML = qd.map(m =>
-    `<li>${linkify(m.nguon)} — ${esc(m.thoi_luong)} · ${esc(m.luc)}</li>`).join("");
   const jobs = st.seo_jobs || [], running = !!st.seo_running;
   const cur = jobs.find(j => j.status === "đang chạy");
   const het = jobs.filter(j => j.status === "xong" || j.status === "lỗi");
@@ -914,6 +932,7 @@ $("btnDelete").onclick = () => {
   post("/api/delete", {ids: [...checked]}).then(() => checked.clear());
 };
 $("btnClear").onclick = () => post("/api/clear_finished");
+$("btnDocLich").onclick = () => post("/api/doc_lich");
 $("selAll").onchange = e => {
   checked.clear();
   if (e.target.checked) (lastState?.items || []).forEach(it => checked.add(it.id));

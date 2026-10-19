@@ -63,6 +63,8 @@ class Api:
         app.S.stop_flag.set()                       # worker đang đăng thì dừng sau video hiện tại
         if self._httpd:
             threading.Thread(target=self._httpd.shutdown, daemon=True).start()
+        # tắt server = lúc duy nhất ngắt kết nối trình duyệt (đóng 3 tab điều khiển)
+        threading.Thread(target=app.chrome_cdp.disconnect_all, daemon=True).start()
 
     # ---- JS gọi
     def trang_thai(self):
