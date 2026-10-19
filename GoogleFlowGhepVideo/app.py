@@ -3,7 +3,9 @@
 
 Chạy:  python app.py  ->  tự mở trình duyệt tại http://127.0.0.1:8766
        (hoặc bấm đúp mo_gui.bat / shortcut "Ghép video Flow": cửa sổ desktop app_gui.py nạp thẳng giao diện này)
-Giao diện nằm ở web/index.html, 5 tab: Ghép video · Chỉnh sửa · Kết nối AI · Nhật ký · Cài đặt;
+Giao diện nằm ở web/index.html, 6 tab: Ghép video · Chỉnh sửa · Làm đẹp · Kết nối AI · Nhật ký · Cài đặt;
+Tab Làm đẹp (lam_dep.py): làm trắng da / son môi / sức sống / sáng / tương phản / nhiệt độ màu, kéo thanh trượt xem
+thử trên ảnh mẫu, Lưu -> --lam-dep khi render, CHỈ clip hook (mặt nạ từng khung bằng MediaPipe trong venv_lamdep riêng);
 app.py chỉ là server: giữ hàng đợi, tùy chọn chỉnh sửa, nhật ký, chạy worker, dò trạng thái 3 AI.
 
 Tab Chỉnh sửa = các tùy chọn dòng lệnh của ghep_tieude.py (bố cục, màu, âm thanh, phụ đề, seed, chế độ
@@ -18,10 +20,12 @@ Cách dùng:
      giọng đọc (clip cuối dài hơn thì cắt) — xem mục 6 trong ghep_tieude.py.
   2. Dán danh sách link THƯ MỤC Drive (mỗi dòng một link; mỗi thư mục = một tập có đủ
      Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản theo quy ước tên của ghep_tieude.py).
-  3. Bấm Chạy: worker làm TỪNG tập một (GPU dùng chung): tải thư mục Drive về Downloads\\drive_<giờ>
+  3. Bấm Chạy: worker làm TỪNG tập một (GPU dùng chung): tải thư mục Drive về Downloads\\<tên kịch bản>
      (drive_thu_muc.py, không dùng gdown) -> chạy ghep_tieude.py --thu-muc <đó> --phan-sau <thư mục clip>
-     --seed <số ngẫu nhiên> trong tiến trình con -> video _full_ ra Downloads như chạy tay. Số seed và
-     thứ tự clip đã dùng được ghi lại ở từng mục (chạy tay cùng --seed sẽ ra đúng thứ tự đó).
+     --seed <số ngẫu nhiên> trong tiến trình con -> video _full_ + ảnh bố cục + .srt + file link minh họa
+     (<tên>_minh_hoa_<stamp>.txt: cảnh nào ở mốc nào, dùng Link Drive nào) gom vào Downloads\\done\\<tên tập>\\
+     như chạy tay. Số seed và thứ tự clip đã dùng được ghi lại ở từng mục (chạy tay cùng --seed sẽ ra đúng
+     thứ tự đó).
 
 Hàng đợi + thư mục clip lưu ở ~/.ghep_video_flow.json (không để file dữ liệu trong thư mục dự án).
 Server chỉ nghe trên 127.0.0.1.
@@ -45,8 +49,16 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
+import base64
+
+import cv2
+import numpy as np
+
 import drive_thu_muc as dtm
-from ghep_tieude import THU_MUC_GOC, TEN_VAI_TRO, downloads_dir, liet_ke_clip, unique_path, vai_tro_theo_ten
+import lam_dep                                    # tab Làm đẹp: làm trắng da / son môi / màu toàn khung (xem thử tại chỗ)
+import minh_hoa                                   # kho video minh họa (Sheet) + thư mục video mẫu
+from ghep_tieude import (THU_MUC_GOC, TEN_VAI_TRO, downloads_dir, liet_ke_clip, need_ffmpeg, pick_from_folder,
+                         unique_path, vai_tro_theo_ten)
 
 APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR.parent))          # hoi_claude / hoi_gpt / hoi_gemini nằm ở gốc repo
@@ -59,6 +71,9 @@ PHIEN_BAN = "2026-10-17"
 # kiểm thử: GHEP_VIDEO_SETTINGS = file trạng thái khác, GHEP_VIDEO_OUT = thư mục ra khác Downloads
 SETTINGS_PATH = Path(os.environ.get("GHEP_VIDEO_SETTINGS") or Path.home() / ".ghep_video_flow.json")
 THU_MUC_XEM_TRUOC = Path(tempfile.gettempdir()) / "ghep_video_flow_xem_truoc"   # ảnh xem trước (tạm, không vào Downloads)
+THU_MUC_MINH_HOA = minh_hoa.CACHE_DIR            # thư mục video mẫu mặc định: "video minh họa" cạnh tool
+# ảnh mẫu mặc định cho tab Làm đẹp (ảnh xem trước user chọn lúc đầu, 19/10/2026); không còn thì để trống, chọn ảnh khác
+ANH_MAU_LAM_DEP = downloads_dir() / "Người bị đau dạ dày cần tránh 4 thói quen làm việc xuyên giờ ăn_ghep_20261019_180943_preview.jpg"
 MAX_LOG_LINES = 3000
 VAI_BAT_BUOC = ("video", "tieude", "anh", "audio")   # thiếu thì cảnh báo ngay khi thêm link
 NHA_AI = {"claude": hoi_claude, "gpt": hoi_gpt, "gemini": hoi_gemini}   # thứ tự hiện ở tab Kết nối AI
@@ -79,8 +94,28 @@ TUY_CHON_MAC_DINH = {
     "minh_hoa_sheet": "https://docs.google.com/spreadsheets/d/1n_rCUBFRCLi5NlDZovoDvHZd3ETCLtjKeLNPxHOAqUY/edit?gid=0#gid=0",
     "minh_hoa_ai": "gpt",    # gpt | claude | gemini
     "minh_hoa_model": "",    # "" = model mặc định của CLI đó
-    "minh_hoa_giay": 6.0,    # mỗi cảnh tối đa (giây)
-    "minh_hoa_ti_le": 0.45,  # tổng minh họa tối đa / thời lượng phần sau
+    "minh_hoa_giay": 6.0,    # mỗi cảnh tối đa (giây) — điểm xuyết; phủ kín: ảnh tĩnh giữ tối đa
+    "minh_hoa_ti_le": 0.45,  # tổng minh họa tối đa / thời lượng phần sau (chỉ điểm xuyết)
+    "minh_hoa_che_do": "phu_kin",   # phu_kin = cảnh kho là nền chính, bác sĩ bù | diem_xuyet = vài cảnh ngắn (cũ)
+    "minh_hoa_chuyen": 0.5,         # giây mờ chồng khi vào/ra mỗi cảnh minh họa, CHỈ dùng với kiểu mo_chong; 0 = cắt cụp
+    "minh_hoa_chuyen_kieu": "ngau_nhien",   # ngau_nhien = rút ngẫu nhiên kiểu xfade ffmpeg (bỏ fadeblack/fadewhite), thời gian
+                                            # chuyển = gốc của ffmpeg 1s (user 19/10) | mo_chong = mờ chồng theo ô giây
+    "minh_hoa_anh_dong": True,      # ảnh tĩnh -> động (phóng to / thu nhỏ / lắc / trượt) thay vì đứng hình
+    "minh_hoa_sfx": True,           # mỗi lần chuyển cảnh xfade trộn một tiếng hợp kiểu đó (tab Âm thanh hiệu ứng, cột K)
+    "minh_hoa_sfx_db": -4.0,        # tiếng chuyển cảnh nhỏ hơn giọng đọc bấy nhiêu dB (user chốt -4 sau khi nghe thử -8)
+    # checkbox "Hỏi GPT mới khi chạy" ở tab Ghép video: False = tập đã hỏi AI rồi (gpt_minh_hoa.json trong thư mục
+    # tập) thì dùng lại trả lời cũ, chỉ ghép lại; True = hỏi AI mới mỗi lần chạy (--minh-hoa-hoi-lai)
+    "minh_hoa_hoi_lai": False,
+    # tab Làm đẹp (lam_dep.py): làm trắng da / son môi theo mặt nạ từng khung (MediaPipe) + màu toàn khung;
+    # CHỈ áp lên clip hook (10 giây đầu); phần sau và cảnh kho minh họa giữ nguyên. Chỉnh theo ảnh mẫu rồi Lưu.
+    "lam_dep": True,           # mặc định BẬT khi render (--lam-dep ...); user chốt 19/10/2026
+    "ld_trang": 30,            # làm trắng da 0..100 (user chốt 30, 19/10/2026)
+    "ld_son": 15,              # son môi 0..100 (user chốt 15)
+    "ld_son_mau": "cam",       # hong | do | cam (user chốt cam)
+    "ld_suc_song": 20,         # sức sống (vibrance) -100..100
+    "ld_sang": 0,              # độ sáng -100..100
+    "ld_tuong_phan": 0,        # tương phản -100..100
+    "ld_nhiet": 0,             # nhiệt độ màu -100 (lạnh) .. 100 (ấm)
 }
 CHE_DO_HOP_LE = ("auto", "nhe", "manh", "cpu")
 DO_PHAN_GIAI_HOP_LE = (0, 540, 720, 900)
@@ -126,6 +161,12 @@ def thu_muc_ra() -> Path:
     return Path(os.environ["GHEP_VIDEO_OUT"]) if os.environ.get("GHEP_VIDEO_OUT") else downloads_dir()
 
 
+def thu_muc_done() -> Path:
+    """<thư mục kết quả>\\done\\ — ghep_tieude.py gom video, ảnh bố cục, .srt, file link minh họa của mỗi tập vào
+    một thư mục con ở đây (done\\<tên tập>\\); ngoài Downloads chỉ còn thư mục Drive tải về."""
+    return thu_muc_ra() / "done"
+
+
 def _so(v, kieu, mac_dinh, lo=None, hi=None):
     try:
         x = kieu(v)
@@ -164,15 +205,38 @@ def chuan_hoa_tuy_chon(d: dict) -> dict:
         "minh_hoa_model": str(d.get("minh_hoa_model") or "").strip()[:80],
         "minh_hoa_giay": round(_so(d.get("minh_hoa_giay"), float, m["minh_hoa_giay"], 2.5, 20.0), 1),
         "minh_hoa_ti_le": round(_so(d.get("minh_hoa_ti_le"), float, m["minh_hoa_ti_le"], 0.05, 0.9), 2),
+        "minh_hoa_che_do": d.get("minh_hoa_che_do") if d.get("minh_hoa_che_do") in minh_hoa.CHE_DO_MINH_HOA else m["minh_hoa_che_do"],
+        "minh_hoa_chuyen": round(_so(d.get("minh_hoa_chuyen"), float, m["minh_hoa_chuyen"], 0.0, 2.0), 2),
+        "minh_hoa_chuyen_kieu": d.get("minh_hoa_chuyen_kieu") if d.get("minh_hoa_chuyen_kieu") in ("ngau_nhien", "mo_chong") else m["minh_hoa_chuyen_kieu"],
+        "minh_hoa_anh_dong": bool(d.get("minh_hoa_anh_dong", m["minh_hoa_anh_dong"])),
+        "minh_hoa_sfx": bool(d.get("minh_hoa_sfx", m["minh_hoa_sfx"])),
+        "minh_hoa_sfx_db": round(_so(d.get("minh_hoa_sfx_db"), float, m["minh_hoa_sfx_db"], -30.0, 6.0), 1),
+        "minh_hoa_hoi_lai": bool(d.get("minh_hoa_hoi_lai", m["minh_hoa_hoi_lai"])),
+        "lam_dep": bool(d.get("lam_dep", m["lam_dep"])),
+        "ld_trang": _so(d.get("ld_trang"), int, m["ld_trang"], 0, 100),
+        "ld_son": _so(d.get("ld_son"), int, m["ld_son"], 0, 100),
+        "ld_son_mau": d.get("ld_son_mau") if d.get("ld_son_mau") in lam_dep.SON_MAU else m["ld_son_mau"],
+        "ld_suc_song": _so(d.get("ld_suc_song"), int, m["ld_suc_song"], -100, 100),
+        "ld_sang": _so(d.get("ld_sang"), int, m["ld_sang"], -100, 100),
+        "ld_tuong_phan": _so(d.get("ld_tuong_phan"), int, m["ld_tuong_phan"], -100, 100),
+        "ld_nhiet": _so(d.get("ld_nhiet"), int, m["ld_nhiet"], -100, 100),
     }
     if tc["do_phan_giai"] not in DO_PHAN_GIAI_HOP_LE:
         tc["do_phan_giai"] = m["do_phan_giai"]
     return tc
 
 
-def args_tuy_chon(tc: dict) -> list[str]:
-    """Tùy chọn -> tham số dòng lệnh ghep_tieude.py (không gồm --seed, worker tự quyết)."""
+def tc_lam_dep(tc: dict) -> dict:
+    """Khóa ld_* của tùy chọn -> tham số lam_dep.py (trang, son, son_mau, suc_song, sang, tuong_phan, nhiet)."""
+    return lam_dep.doc_tc({k: tc.get("ld_" + k, lam_dep.MAC_DINH[k]) for k in lam_dep.KHOA})
+
+
+def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
+    """Tùy chọn -> tham số dòng lệnh ghep_tieude.py (không gồm --seed, worker tự quyết).
+    thu_muc_minh_hoa: thư mục video mẫu đang chọn trên GUI (trống = mặc định của tool)."""
     a = ["--ti-le-tieude", str(tc["ti_le_tieude"]), "--khoang-cach", str(tc["khoang_cach"])]
+    if tc.get("lam_dep") and lam_dep.co_hieu_ung(tc_lam_dep(tc)):
+        a += ["--lam-dep", lam_dep.chuoi_tc(tc_lam_dep(tc))]
     if not tc["chinh_mau"]:
         a.append("--khong-chinh-mau")
     if not tc["chuan_am"]:
@@ -192,9 +256,21 @@ def args_tuy_chon(tc: dict) -> list[str]:
         a += ["--do-phan-giai", str(tc["do_phan_giai"])]
     if tc["minh_hoa"] and tc["minh_hoa_sheet"]:
         a += ["--minh-hoa", tc["minh_hoa_sheet"], "--minh-hoa-ai", tc["minh_hoa_ai"],
-              "--minh-hoa-giay", str(tc["minh_hoa_giay"]), "--minh-hoa-ti-le", str(tc["minh_hoa_ti_le"])]
+              "--minh-hoa-giay", str(tc["minh_hoa_giay"]), "--minh-hoa-ti-le", str(tc["minh_hoa_ti_le"]),
+              "--minh-hoa-che-do", tc["minh_hoa_che_do"], "--minh-hoa-chuyen", str(tc["minh_hoa_chuyen"]),
+              "--minh-hoa-chuyen-kieu", tc.get("minh_hoa_chuyen_kieu", "ngau_nhien")]
+        if not tc.get("minh_hoa_anh_dong", True):
+            a.append("--minh-hoa-anh-tinh")
+        if tc.get("minh_hoa_sfx", True):
+            a += ["--minh-hoa-sfx-db", str(tc.get("minh_hoa_sfx_db", -4.0))]
+        else:
+            a.append("--khong-minh-hoa-sfx")
         if tc["minh_hoa_model"]:
             a += ["--minh-hoa-model", tc["minh_hoa_model"]]
+        if thu_muc_minh_hoa:
+            a += ["--minh-hoa-thu-muc", thu_muc_minh_hoa]
+        if tc.get("minh_hoa_hoi_lai"):
+            a.append("--minh-hoa-hoi-lai")
     return a
 
 
@@ -206,6 +282,19 @@ def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
     root.withdraw()
     root.attributes("-topmost", True)
     p = filedialog.askdirectory(parent=root, title=tieu_de, initialdir=bat_dau or str(Path.home()))
+    root.destroy()
+    return p or ""
+
+
+def _chon_anh_dialog(tieu_de: str, bat_dau: str) -> str:
+    """Hộp thoại chọn một file ảnh (jpg/png); '' nếu hủy."""
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    p = filedialog.askopenfilename(parent=root, title=tieu_de, initialdir=bat_dau or str(Path.home()),
+                                   filetypes=[("Ảnh", "*.jpg *.jpeg *.png *.webp"), ("Mọi file", "*.*")])
     root.destroy()
     return p or ""
 
@@ -258,6 +347,13 @@ class State:
         d = self._doc()
         # thư mục clip gốc: đã lưu -> dùng; chưa có -> "video gốc" cạnh tool (nếu tồn tại)
         self.goc_dir = d.get("goc_dir") or (str(THU_MUC_GOC) if THU_MUC_GOC.is_dir() else "")
+        # thư mục video mẫu (kho minh họa): clip tải từ Drive + file tự chép cho dòng Sheet chưa có link
+        self.minh_hoa_dir = str(d.get("minh_hoa_dir") or THU_MUC_MINH_HOA)
+        # ảnh mẫu tab Làm đẹp (khung hình bác sĩ): đã lưu -> dùng; chưa có -> ảnh xem trước user đưa lúc đầu nếu còn
+        self.lam_dep_anh = str(d.get("lam_dep_anh") or (ANH_MAU_LAM_DEP if ANH_MAU_LAM_DEP.is_file() else ""))
+        self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
+        self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
+        self._kho_mh_ky = None                        # chữ ký file trong thư mục lúc tính trạng thái lần cuối
         self.items = d.get("items", []) if isinstance(d.get("items"), list) else []
         for it in self.items:                      # lần trước tắt giữa chừng -> làm lại
             if it.get("status") == DANG:
@@ -285,6 +381,59 @@ class State:
         self.ai_dang_hoi: set[str] = set()
         self.ai_loi_xac_thuc: dict[str, str] = {}
         threading.Thread(target=self._vong_do_ai, daemon=True, name="do-ai").start()
+        threading.Thread(target=self.lam_moi_kho_mh, daemon=True, name="kho-mh").start()
+
+    # ---- kho video minh họa (thẻ 3 tab Ghép video)
+    def lam_moi_kho_mh(self, moi: bool = False):
+        """Đọc (lại) Sheet kho minh họa ở thread nền rồi tính trạng thái từng dòng. moi=True: bỏ bản đệm 5 phút."""
+        with self.lock:
+            if self.kho_mh["dang"]:
+                return
+            self.kho_mh["dang"], sheet = "doc", self.tuy_chon["minh_hoa_sheet"]
+        dong, loi = None, ""
+        try:
+            dong = minh_hoa._doc_dong(sheet, log=self.log, moi=moi) if sheet else []
+        except Exception as e:                       # noqa: BLE001
+            loi = str(e)
+        with self.lock:
+            if dong is not None:
+                self.kho_mh_dong = dong
+            self.kho_mh.update(loi=loi, luc=time.strftime("%H:%M:%S"), dang="")
+            self._kho_mh_ky = None
+        self.cap_nhat_kho_mh()
+
+    def cap_nhat_kho_mh(self):
+        """Tính lại trạng thái theo thư mục video mẫu (không gọi mạng) khi danh sách file trong thư mục đổi."""
+        with self.lock:
+            if self.kho_mh_dong is None:
+                return
+            d = Path(self.minh_hoa_dir)
+            try:
+                ky = (str(d), tuple(sorted((p.name, p.stat().st_size) for p in d.iterdir() if p.is_file()))) if d.is_dir() else (str(d), ())
+            except OSError:
+                ky = (str(d), ())
+            if ky == self._kho_mh_ky:
+                return
+            self.kho_mh.update(minh_hoa.trang_thai_tu_dong(self.kho_mh_dong, d))
+            self._kho_mh_ky = ky
+
+    def tai_kho_mh(self) -> bool:
+        """Nút 'Tải video mẫu từ Sheet': tải mọi clip có Link Drive mà thư mục chưa có (thread nền)."""
+        with self.lock:
+            if self.kho_mh["dang"]:
+                return False
+            self.kho_mh["dang"], sheet, d = "tai", self.tuy_chon["minh_hoa_sheet"], self.minh_hoa_dir
+        self.log(f"Kho minh họa: tải các clip có Link Drive về {d} ...")
+        try:
+            kq = minh_hoa.tai_tat_ca(sheet, d, log=self.log)
+            self.log(f"Kho minh họa: tải mới {kq['tai']} file, {kq['da_co']} file đã có sẵn"
+                     + (f", {len(kq['loi'])} lỗi" if kq["loi"] else ""))
+        except Exception as e:                       # noqa: BLE001
+            self.log(f"Kho minh họa: tải lỗi: {e}")
+        with self.lock:
+            self.kho_mh["dang"] = ""
+        self.lam_moi_kho_mh()                        # Sheet vừa tải lại trong tai_tat_ca -> dùng bản đệm, không gọi mạng thêm
+        return True
 
     def _vong_do_ai(self):
         while True:
@@ -315,7 +464,7 @@ class State:
     def save(self):
         with self.lock:
             data = {"goc_dir": self.goc_dir, "items": self.items, "tuy_chon": self.tuy_chon,
-                    "thu_muc_ra": self.thu_muc_ra_cfg}
+                    "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -341,8 +490,10 @@ S = State()
 
 # ------------------------------------------------------------------ API
 def state_payload(after: int) -> dict:
+    S.cap_nhat_kho_mh()                             # rẻ: chỉ tính lại khi file trong thư mục video mẫu đổi
     with S.lock:
         kho = kho_clip(S.goc_dir)
+        mh_dir = Path(S.minh_hoa_dir)
         items = list(S.items)
         logs = [t for n, t in S.logs if n > after]
         if after == 0:
@@ -360,13 +511,17 @@ def state_payload(after: int) -> dict:
                     "clips": [{"ten": t, "giay": g} for t, g in kho],
                     "tong_giay": round(sum(g for _, g in kho), 1)},
             "downloads": str(thu_muc_ra()),
+            "minh_hoa": {"dir": S.minh_hoa_dir, "ton_tai": mh_dir.is_dir(), "mac_dinh": mh_dir == THU_MUC_MINH_HOA,
+                         "sheet": S.tuy_chon["minh_hoa_sheet"], "bat": S.tuy_chon["minh_hoa"], "kho": dict(S.kho_mh)},
             "tuy_chon": dict(S.tuy_chon),
             "tuy_chon_mac_dinh": dict(TUY_CHON_MAC_DINH),
+            "lam_dep": {"anh": S.lam_dep_anh, "ton_tai": bool(S.lam_dep_anh) and Path(S.lam_dep_anh).is_file(),
+                        "san_sang": _LD_SAN_SANG[0], "ly_do": "" if _LD_SAN_SANG[0] else _LD_SAN_SANG[1]},
             "xem_truoc": dict(S.xem_truoc),
             "ai": {"nha": [dict(S.ai[k], ma=k, dang_hoi=(k in S.ai_dang_hoi), loi_xac_thuc=S.ai_loi_xac_thuc.get(k, ""))
                            for k in NHA_AI],
                    "luc_do": time.strftime("%H:%M:%S", time.localtime(S.ai_luc_do)) if S.ai_luc_do else ""},
-            "cai_dat": {"thu_muc_ra": S.thu_muc_ra_cfg, "thu_muc_ra_thuc": str(thu_muc_ra()),
+            "cai_dat": {"thu_muc_ra": S.thu_muc_ra_cfg, "thu_muc_ra_thuc": str(thu_muc_ra()), "thu_muc_done": str(thu_muc_done()),
                         "url": S.url, "phien_ban": PHIEN_BAN, "goc_mac_dinh": str(THU_MUC_GOC),
                         "file_trang_thai": str(SETTINGS_PATH), "thu_muc_xem_truoc": str(THU_MUC_XEM_TRUOC)},
             "now": time.time(),
@@ -405,20 +560,108 @@ def api_chon_thu_muc(_data):
     return api_set_goc_dir({"dir": p})
 
 
-# ---- tab Chỉnh sửa
-def api_save_tuy_chon(data):
-    tc = chuan_hoa_tuy_chon(data.get("tuy_chon") or data)
+# ---- thẻ 3: kho video minh họa
+def api_set_minh_hoa_dir(data):
+    """Đổi thư mục video mẫu. Thư mục mặc định chưa có thì tạo; thư mục khác phải tồn tại (được phép trống)."""
+    p = str(data.get("dir") or "").strip().strip('"')
+    if not p:
+        return {"ok": False, "msg": "Chưa nhập thư mục video mẫu."}
+    pp = Path(p)
+    if pp == THU_MUC_MINH_HOA:
+        pp.mkdir(parents=True, exist_ok=True)
+    if not pp.is_dir():
+        return {"ok": False, "msg": f"Không thấy thư mục: {p}"}
     with S.lock:
+        S.minh_hoa_dir = str(pp)
+        S._kho_mh_ky = None
+        S.save()
+    n = sum(1 for q in pp.iterdir() if q.is_file() and q.suffix.lower() in minh_hoa.DUOI_VIDEO + minh_hoa.DUOI_ANH)
+    msg = f"Thư mục video mẫu: {pp} — {n} file video/ảnh"
+    S.log(msg)
+    return {"ok": True, "msg": msg}
+
+
+def api_chon_thu_muc_minh_hoa(_data):
+    if not _DIALOG.acquire(blocking=False):
+        return {"ok": False, "msg": "Hộp thoại chọn thư mục đang mở."}
+    try:
+        p = _chon_thu_muc_dialog("Chọn thư mục video mẫu (clip minh họa tải về / tự chép)", S.minh_hoa_dir)
+    finally:
+        _DIALOG.release()
+    if not p:
+        return {"ok": False, "msg": "Đã hủy chọn thư mục."}
+    return api_set_minh_hoa_dir({"dir": p})
+
+
+def _doc_lai_kho_nen(moi: bool = True):
+    with S.lock:
+        S.kho_mh_dong = None
+        S.kho_mh.update(dong=[], co=0, chua_tai=0, thieu=0, loi="")
+    threading.Thread(target=S.lam_moi_kho_mh, args=(moi,), daemon=True, name="kho-mh").start()
+
+
+def api_set_minh_hoa_sheet(data):
+    """Lưu link Sheet kho (cùng khóa minh_hoa_sheet với tab Chỉnh sửa) rồi đọc lại kho."""
+    s = str(data.get("sheet") or "").strip()
+    if s and not (minh_hoa.sheet_csv_url(s) or Path(s).is_file()):
+        return {"ok": False, "msg": "Phải là link Google Sheet hoặc đường dẫn file CSV trên máy."}
+    with S.lock:
+        S.tuy_chon = chuan_hoa_tuy_chon({**S.tuy_chon, "minh_hoa_sheet": s})
+        S.save()
+    S.log(f"Kho minh họa: {s or '(bỏ trống)'}")
+    _doc_lai_kho_nen()
+    return {"ok": True, "msg": "Đã lưu link kho, đang đọc lại Sheet…" if s else "Đã bỏ link kho."}
+
+
+def api_kho_minh_hoa_lam_moi(_data):
+    if S.kho_mh["dang"]:
+        return {"ok": False, "msg": "Đang đọc Sheet / tải clip, chờ xong đã."}
+    _doc_lai_kho_nen(moi=True)
+    return {"ok": True, "msg": "Đang đọc lại Sheet kho…"}
+
+
+def api_tai_minh_hoa(_data):
+    if not S.tuy_chon["minh_hoa_sheet"]:
+        return {"ok": False, "msg": "Chưa có link Sheet kho."}
+    if S.kho_mh["dang"]:
+        return {"ok": False, "msg": "Đang đọc Sheet / tải clip, chờ xong đã."}
+    threading.Thread(target=S.tai_kho_mh, daemon=True, name="tai-mh").start()
+    return {"ok": True, "msg": "Đang tải các clip có Link Drive về thư mục video mẫu…"}
+
+
+# ---- tab Chỉnh sửa
+def api_set_minh_hoa_hoi_lai(data):
+    """Checkbox 'Hỏi GPT mới khi chạy' ở tab Ghép video — khóa minh_hoa_hoi_lai, lưu cùng tùy chọn chỉnh sửa."""
+    bat = bool(data.get("bat"))
+    with S.lock:
+        S.tuy_chon = chuan_hoa_tuy_chon({**S.tuy_chon, "minh_hoa_hoi_lai": bat})
+        S.save()
+    S.log("Minh họa: " + ("HỎI AI MỚI mỗi lần chạy (bỏ trả lời đã nhớ trong thư mục tập)" if bat
+                         else "chạy lại cùng kịch bản thì dùng lại trả lời AI đã nhớ, chỉ ghép lại"))
+    return {"ok": True, "bat": bat}
+
+
+def api_save_tuy_chon(data):
+    d = data.get("tuy_chon") or data
+    # form tab Chỉnh sửa không có ô minh_hoa_hoi_lai (nó nằm ở tab Ghép video) -> giữ giá trị đang có
+    tc = chuan_hoa_tuy_chon({"minh_hoa_hoi_lai": S.tuy_chon["minh_hoa_hoi_lai"], **d})
+    with S.lock:
+        sheet_doi = tc["minh_hoa_sheet"] != S.tuy_chon["minh_hoa_sheet"]
         S.tuy_chon = tc
         S.save()
+    if sheet_doi:
+        _doc_lai_kho_nen()
     S.log("Đã lưu tùy chọn chỉnh sửa: " + " ".join(args_tuy_chon(tc)) + (f" --seed {tc['seed']}" if tc["seed"] is not None else ""))
     return {"ok": True, "msg": "Đã lưu — áp dụng cho các tập chạy từ giờ.", "tuy_chon": tc}
 
 
 def api_mac_dinh_tuy_chon(_data):
     with S.lock:
+        sheet_doi = S.tuy_chon["minh_hoa_sheet"] != TUY_CHON_MAC_DINH["minh_hoa_sheet"]
         S.tuy_chon = dict(TUY_CHON_MAC_DINH)
         S.save()
+    if sheet_doi:
+        _doc_lai_kho_nen()
     S.log("Tùy chọn chỉnh sửa về mặc định.")
     return {"ok": True, "msg": "Đã về mặc định.", "tuy_chon": dict(TUY_CHON_MAC_DINH)}
 
@@ -434,8 +677,7 @@ def _xem_truoc_job(item_id):
     try:
         folder = Path(thu_muc) if thu_muc and Path(thu_muc).is_dir() else None
         if folder is None:
-            dest = unique_path(thu_muc_ra(), "drive_" + time.strftime("%Y%m%d_%H%M%S"))
-            ten_drive, _ = dtm.tai_thu_muc(link, dest, log=S.log)
+            ten_drive, dest, _ = dtm.tai_thu_muc_theo_ten(link, thu_muc_ra(), log=S.log)   # Downloads\<tên kịch bản>
             with S.lock:
                 it["thu_muc"], it["ten"] = str(dest), ten_drive or it.get("ten", "")
                 S.save()
@@ -443,7 +685,7 @@ def _xem_truoc_job(item_id):
         THU_MUC_XEM_TRUOC.mkdir(parents=True, exist_ok=True)
         seed = tc["seed"] if tc["seed"] is not None else random.randrange(1, 10 ** 9)
         cmd = [python_exe(), "-u", str(TOOL), "--thu-muc", str(folder), "--phan-sau", goc, "--preview-only",
-               "--out", str(THU_MUC_XEM_TRUOC), "--seed", str(seed), *args_tuy_chon(tc)]
+               "--out", str(THU_MUC_XEM_TRUOC), "--seed", str(seed), *args_tuy_chon(tc, S.minh_hoa_dir)]
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
         with S.lock:
             S.xem_truoc["buoc"] = "Nhận diện mặt"
@@ -499,6 +741,116 @@ def api_xem_truoc(data):
         S.xem_truoc.update(status="dang", ten=it.get("ten") or it["link"], buoc="Chuẩn bị", preview="", mau="", loi="")
     threading.Thread(target=_xem_truoc_job, args=(it["id"],), daemon=True, name="xem-truoc").start()
     return {"ok": True, "msg": "Đang tạo ảnh xem trước (10–30 giây, không render video)."}
+
+
+# ---- tab Làm đẹp
+_LD_SAN_SANG = lam_dep.san_sang()                 # (ok, python | lý do): venv_lamdep + ffmpeg, dò một lần lúc khởi động
+_LD_LOCK = threading.Lock()                       # xem thử tuần tự (mediapipe subprocess + ffmpeg)
+_LD_MOC: dict = {}                                # điểm mốc ảnh mẫu: {"ky": (đường dẫn, mtime), "pts": mảng | None}
+
+
+def _doc_anh_bgr(p: Path):
+    img = cv2.imdecode(np.fromfile(str(p), np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise RuntimeError(f"Không đọc được ảnh: {p}")
+    return img
+
+
+def _lam_dep_moc(anh: Path):
+    """478 điểm mặt của ảnh mẫu: tính qua venv_lamdep một lần (2–3 s) rồi nhớ theo (đường dẫn, mtime)."""
+    ky = (str(anh), anh.stat().st_mtime_ns)
+    if _LD_MOC.get("ky") != ky:
+        _LD_MOC.update(ky=ky, pts=lam_dep.diem_moc_qua_subprocess(anh))
+    return _LD_MOC["pts"]
+
+
+def api_lam_dep_xem_thu(data):
+    """Thanh trượt -> ảnh ghép gốc|chỉnh (jpg base64) tính trên ảnh mẫu bằng đúng hai bước sẽ dùng khi render:
+    da/môi theo điểm mặt (numpy) rồi màu toàn khung (filter ffmpeg)."""
+    tc = lam_dep.doc_tc(data.get("tc") or {})
+    with S.lock:
+        anh = S.lam_dep_anh
+    p = Path(anh) if anh else None
+    if not p or not p.is_file():
+        return {"ok": False, "msg": "Chưa có ảnh mẫu — bấm Chọn ảnh… hoặc Lấy khung hình tập đầu."}
+    if not _LD_SAN_SANG[0]:
+        return {"ok": False, "msg": _LD_SAN_SANG[1]}
+    if not _LD_LOCK.acquire(timeout=30):
+        return {"ok": False, "msg": "Đang tính ảnh xem thử trước đó, thử lại."}
+    try:
+        t0 = time.time()
+        goc = _doc_anh_bgr(p)
+        pts = _lam_dep_moc(p)
+        img = lam_dep.xem_thu(goc, pts, tc, rong=int(_so(data.get("rong"), int, 820, 400, 1600)))
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        if not ok:
+            raise RuntimeError("không mã hóa được jpg")
+        return {"ok": True, "anh": "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii"),
+                "co_mat": pts is not None, "giay": round(time.time() - t0, 2), "loc": lam_dep.loc_toan_khung(tc),
+                "tc": lam_dep.chuoi_tc(tc)}
+    except Exception as e:                         # noqa: BLE001
+        return {"ok": False, "msg": f"Xem thử lỗi: {e}"}
+    finally:
+        _LD_LOCK.release()
+
+
+def _dat_anh_mau(p: Path, nguon: str):
+    with S.lock:
+        S.lam_dep_anh = str(p)
+        S.save()
+    _LD_MOC.clear()
+    msg = f"Ảnh mẫu Làm đẹp: {p.name} ({nguon})"
+    S.log(msg)
+    return {"ok": True, "msg": msg, "anh": str(p)}
+
+
+def api_lam_dep_set_anh(data):
+    p = Path(str(data.get("anh") or "").strip().strip('"'))
+    if not p.is_file():
+        return {"ok": False, "msg": f"Không thấy ảnh: {p}"}
+    return _dat_anh_mau(p, "nhập đường dẫn")
+
+
+def api_lam_dep_chon_anh(_data):
+    if not _DIALOG.acquire(blocking=False):
+        return {"ok": False, "msg": "Hộp thoại chọn file đang mở."}
+    try:
+        with S.lock:
+            bat_dau = str(Path(S.lam_dep_anh).parent) if S.lam_dep_anh else str(thu_muc_ra())
+        p = _chon_anh_dialog("Chọn ảnh mẫu (khung hình bác sĩ) cho tab Làm đẹp", bat_dau)
+    finally:
+        _DIALOG.release()
+    if not p:
+        return {"ok": False, "msg": "Đã hủy chọn ảnh."}
+    return _dat_anh_mau(Path(p), "chọn file")
+
+
+def api_lam_dep_khung_hinh(data):
+    """Lấy một khung hình (mặc định giây 2) của clip Hook ở tập đầu hàng đợi (hoặc tập có id) làm ảnh mẫu."""
+    with S.lock:
+        it = S.find(data.get("id")) if data.get("id") is not None else next((x for x in S.items), None)
+    if it is None:
+        return {"ok": False, "msg": "Hàng đợi trống — thêm link thư mục Drive trước."}
+    folder = it.get("thu_muc")
+    if not folder or not Path(folder).is_dir():
+        return {"ok": False, "msg": "Tập này chưa tải về máy — bấm Xem trước (tab Chỉnh sửa) hoặc chạy tập rồi thử lại."}
+    giay = _so(data.get("giay"), float, 2.0, 0.0, 600.0)
+    try:
+        hook = pick_from_folder(Path(folder)).get("video")
+        if not hook:
+            return {"ok": False, "msg": f"Không thấy clip Hook trong {folder}"}
+        THU_MUC_XEM_TRUOC.mkdir(parents=True, exist_ok=True)
+        ra = THU_MUC_XEM_TRUOC / f"lam_dep_{it['id']}.jpg"
+        r = subprocess.run([need_ffmpeg(), "-v", "error", "-y", "-ss", f"{giay:.2f}", "-i", str(hook), "-frames:v", "1",
+                            "-q:v", "2", str(ra)], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           creationflags=NO_WINDOW)
+        if r.returncode != 0 or not ra.is_file():
+            return {"ok": False, "msg": "ffmpeg không lấy được khung hình: " + (r.stderr or "")[-300:]}
+    except SystemExit as e:                        # pick_from_folder / need_ffmpeg thoát bằng sys.exit
+        return {"ok": False, "msg": f"Lỗi: {e}"}
+    except Exception as e:                         # noqa: BLE001
+        return {"ok": False, "msg": f"Lỗi lấy khung hình: {e}"}
+    return _dat_anh_mau(ra, f"giây {giay:g} clip Hook tập “{it.get('ten') or it['link']}”")
 
 
 # ---- tab Cài đặt
@@ -736,10 +1088,23 @@ def api_mo(data):
     if loai in ("downloads", "thu_muc_ra"):
         os.startfile(thu_muc_ra())
         return {"ok": True}
+    if loai == "done":                             # <thư mục kết quả>\done\ — mỗi tập một thư mục con
+        d = thu_muc_done()
+        d.mkdir(parents=True, exist_ok=True)
+        os.startfile(d)
+        return {"ok": True}
     if loai == "goc":
         if not S.goc_dir or not Path(S.goc_dir).is_dir():
             return {"ok": False, "msg": "Chưa có thư mục clip gốc."}
         os.startfile(S.goc_dir)
+        return {"ok": True}
+    if loai == "minh_hoa":                         # thư mục video mẫu (mặc định chưa có thì tạo)
+        d = Path(S.minh_hoa_dir)
+        if d == THU_MUC_MINH_HOA:
+            d.mkdir(parents=True, exist_ok=True)
+        if not d.is_dir():
+            return {"ok": False, "msg": f"Không thấy thư mục video mẫu: {d}"}
+        os.startfile(d)
         return {"ok": True}
     if loai == "url":                              # mở link ở trình duyệt mặc định (cửa sổ desktop không có tab)
         url = str(data.get("url") or "")
@@ -755,7 +1120,8 @@ def api_mo(data):
         return {"ok": True}
     with S.lock:
         it = S.find(data.get("id"))
-        khoa = {"video": "out", "thu_muc_video": "out", "srt": "srt", "preview": "preview", "tai": "thu_muc"}.get(loai)
+        khoa = {"video": "out", "thu_muc_video": "out", "srt": "srt", "preview": "preview", "tai": "thu_muc",
+                "link_minh_hoa": "minh_hoa_file"}.get(loai)
         path = it and khoa and it.get(khoa)
     if not path or not Path(path).exists():
         return {"ok": False, "msg": "File không còn (đã xoá/di chuyển?)."}
@@ -786,6 +1152,7 @@ def _duoc_phep(p: Path) -> bool:
 # ------------------------------------------------------------------ worker
 _BUOC = [  # (đầu dòng log của ghep_tieude.py, tên bước hiện trên giao diện)
     ("Nhận diện khuôn mặt", "Nhận diện mặt"),
+    ("Làm đẹp :", "Làm đẹp"),
     ("Phân tích màu", "Chỉnh màu"),
     ("Phụ đề   : nhận diện", "Phụ đề"),
     ("Khớp lời :", "Khớp lời"),
@@ -800,7 +1167,7 @@ def _doc_dong(it, s: str):
     for dau, buoc in _BUOC:
         if s.startswith(dau):
             it["buoc"] = buoc
-    m = re.match(r"^(XONG|Xem trước|Phụ đề|Thời lượng|Phần sau|Minh họa)\s*:\s*(.+)$", s)
+    m = re.match(r"^(XONG|Xem trước|Phụ đề|Thời lượng|Phần sau|Minh họa|Link minh họa|Âm thanh)\s*:\s*(.+)$", s)
     if not m:
         return
     k, v = m.group(1), m.group(2).strip()
@@ -808,6 +1175,10 @@ def _doc_dong(it, s: str):
         it["out"] = v
     elif k == "Xem trước":
         it["preview"] = v
+    elif k == "Link minh họa":                     # file .txt cạnh video: cảnh nào ở mốc nào, dùng Link Drive nào
+        it["minh_hoa_file"] = v
+    elif k == "Âm thanh" and "lần chuyển cảnh" in v:   # "7/9 lần chuyển cảnh có tiếng: 12.2s AT07 (wipeleft) → ..."
+        it["am_thanh"] = v
     elif k == "Phần sau" and "clip:" in v:         # "6 clip: 9.mov 4.2s → 14.mov 6.7s → ..."
         it["phan_sau"] = v
     elif k == "Minh họa" and ("cảnh" in v and not v.endswith("...")):   # "3 cảnh: 12.3s ợ nóng (...)" / "không chèn cảnh nào (...)"
@@ -834,7 +1205,8 @@ def _chay_muc(it):
         ten, link, goc, tc = it.get("ten") or it["link"], it["link"], S.goc_dir, dict(S.tuy_chon)
         # seed cố định (tab Chỉnh sửa) hoặc mỗi lần chạy một thứ tự clip khác; ghi lại để làm lại được
         seed = tc["seed"] if tc["seed"] is not None else random.randrange(1, 10 ** 9)
-        it.update(status=DANG, buoc="Tải Drive", loi="", bat_dau=t0, out="", srt="", preview="", phan_sau="", seed=seed)
+        it.update(status=DANG, buoc="Tải Drive", loi="", bat_dau=t0, out="", srt="", preview="", phan_sau="",
+                  minh_hoa_file="", am_thanh="", seed=seed)
         S.current = it["id"]
         S.save()
     kho = kho_clip(goc)
@@ -845,8 +1217,8 @@ def _chay_muc(it):
 
     # 1) tải thư mục Drive
     try:
-        dest = unique_path(thu_muc_ra(), "drive_" + time.strftime("%Y%m%d_%H%M%S"))
-        ten_drive, _files = dtm.tai_thu_muc(link, dest, log=S.log, dung=S.stop_flag.is_set)
+        # Downloads\<tên thư mục Drive = tên kịch bản>; đã có thì dùng lại, chỉ tải file thiếu
+        ten_drive, dest, _files = dtm.tai_thu_muc_theo_ten(link, thu_muc_ra(), log=S.log, dung=S.stop_flag.is_set)
         with S.lock:
             it["ten"] = ten_drive or it.get("ten", "")
             it["thu_muc"] = str(dest)
@@ -859,7 +1231,7 @@ def _chay_muc(it):
 
     # 2) ghép bằng ghep_tieude.py (tiến trình riêng: ffmpeg/whisper nặng, lỗi không kéo sập server)
     cmd = [python_exe(), "-u", str(TOOL), "--thu-muc", str(dest), "--phan-sau", goc, "--seed", str(seed),
-           "--out", str(thu_muc_ra()), *args_tuy_chon(tc)]
+           "--out", str(thu_muc_ra()), *args_tuy_chon(tc, S.minh_hoa_dir)]
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
     cuoi: list[str] = []
     try:
@@ -925,6 +1297,12 @@ def _worker():
 ROUTES = {
     "/api/set_goc_dir": api_set_goc_dir,
     "/api/chon_thu_muc": api_chon_thu_muc,
+    "/api/set_minh_hoa_dir": api_set_minh_hoa_dir,
+    "/api/chon_thu_muc_minh_hoa": api_chon_thu_muc_minh_hoa,
+    "/api/set_minh_hoa_sheet": api_set_minh_hoa_sheet,
+    "/api/kho_minh_hoa_lam_moi": api_kho_minh_hoa_lam_moi,
+    "/api/tai_minh_hoa": api_tai_minh_hoa,
+    "/api/set_minh_hoa_hoi_lai": api_set_minh_hoa_hoi_lai,
     "/api/add_links": api_add_links,
     "/api/delete": api_delete,
     "/api/retry": api_retry,
@@ -934,6 +1312,10 @@ ROUTES = {
     "/api/mo": api_mo,
     "/api/save_tuy_chon": api_save_tuy_chon,
     "/api/mac_dinh_tuy_chon": api_mac_dinh_tuy_chon,
+    "/api/lam_dep_xem_thu": api_lam_dep_xem_thu,
+    "/api/lam_dep_set_anh": api_lam_dep_set_anh,
+    "/api/lam_dep_chon_anh": api_lam_dep_chon_anh,
+    "/api/lam_dep_khung_hinh": api_lam_dep_khung_hinh,
     "/api/xem_truoc": api_xem_truoc,
     "/api/save_cai_dat": api_save_cai_dat,
     "/api/chon_thu_muc_ra": api_chon_thu_muc_ra,

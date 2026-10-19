@@ -2,3 +2,6 @@
 video gốc/
 # cache clip minh họa tải từ Drive + CSV kho + danh sách từ khóa thiếu
 video minh họa/
+
+# model MediaPipe Face Landmarker (lam_dep.py tự tải, 3,7 MB)
+*.task

@@ -131,3 +131,6 @@ GoogleFlowGhepVideo/models/
 # HTML/screenshot dò DOM (có thể chứa thông tin tài khoản)
 DangvideoYTBTikTokZalo/dom_dump/
 DangvideoYTBTikTokZalo/video_qua_dai.json
+
+# venv riêng cho mediapipe (GoogleFlowGhepVideo/lam_dep.py); numpy 2 + opencv-contrib, không dùng chung venv
+venv_lamdep/

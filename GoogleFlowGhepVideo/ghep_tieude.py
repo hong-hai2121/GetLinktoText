@@ -71,9 +71,14 @@ Cách dùng:
                                         # tải cả thư mục về Downloads rồi tự ghép (mp3 trong thư mục = giọng đọc)
   python ghep_tieude.py --thu-muc ... --nhe [--do-phan-giai 720]   # ép chế độ máy yếu (xem mục 11)
 
-Kết quả ghi ra Downloads: <tên video>_ghep_<stamp>.mp4 (chỉ hook) hoặc _full_<stamp>.mp4 (hook + phần sau),
-kèm _preview.jpg bố cục 10s đầu.
-Yêu cầu: opencv-python >= 4.8 (có FaceDetectorYN), ffmpeg trên PATH, gdown (chỉ khi --drive).
+Kết quả của MỖI TẬP gom vào Downloads\done\<tên tập>\ (không rải ngoài Downloads): <tên>_ghep_<stamp>.mp4 (chỉ hook)
+hoặc _full_<stamp>.mp4 (hook + phần sau), _preview.jpg bố cục 10s đầu, _mau_truoc_sau.jpg, .srt, và
+<tên>_minh_hoa_<stamp>.txt = các cảnh minh họa đã chèn theo mốc phút:giây trong video cuối kèm Link Drive từng clip
+(xem video thấy cảnh sai thì tra mốc đó biết đang dùng link nào). --out đổi thư mục gốc (vẫn thêm done\<tên>\);
+--preview-only ghi thẳng vào --out (thư mục xem trước của GUI).
+Yêu cầu: opencv-python >= 4.8 (có FaceDetectorYN), ffmpeg trên PATH, requests (--drive tải qua drive_thu_muc.py).
+--lam-dep "trang=..,son=..,...": làm đẹp CHỈ clip hook (lam_dep.py, MediaPipe trong venv_lamdep cạnh thư mục dự án):
+hook được xử lý trước thành bản đã làm đẹp (cache <out>\\Làm đẹp\\) rồi mới render như thường; phần sau giữ nguyên.
 """
 from __future__ import annotations
 
@@ -140,6 +145,13 @@ def downloads_dir() -> Path:
     except Exception:
         pass
     return Path.home() / "Downloads"
+
+
+def thu_muc_done(goc: Path, ten: str) -> Path:
+    """Kết quả của một tập gom vào <goc>\\done\\<tên tập>\\ (video, ảnh bố cục, .srt, file link minh họa) thay vì
+    rải ngoài Downloads. Tên tập bỏ ký tự Windows cấm trong tên thư mục."""
+    an_toan = "".join("_" if c in '<>:"/\\|?*' or ord(c) < 32 else c for c in ten).strip(" .") or "video"
+    return goc / "done" / an_toan[:120]
 
 
 def unique_path(folder: Path, name: str) -> Path:
@@ -705,13 +717,206 @@ def clip_filter(W: int, H: int, bw: int, bh: int, dung: float, mau: str = "", nh
     return ",".join(parts)
 
 
+MH_CHUYEN_MAC_DINH = 0.5      # giây: cảnh minh họa mờ chồng (crossfade) vào/ra; 0 = cắt cụp như cũ
+KIEU_ANH_DONG = ("phong_to", "thu_nho", "truot_ngang", "lac", "truot_doc")   # ảnh tĩnh -> động, xoay vòng theo cảnh
+# kiểu chuyển cảnh khi vào/ra cảnh minh họa: ngau_nhien = mỗi lần đổi cảnh rút ngẫu nhiên một kiểu xfade của ffmpeg
+# (XFADE_KIEU, theo seed); mo_chong = mờ chồng alpha như cũ (overlay). User chốt 19/10/2026: ngẫu nhiên, bỏ fadeblack/fadewhite
+MH_CHUYEN_KIEU = ("ngau_nhien", "mo_chong")
+XFADE_GIAY_GOC = 1.0     # thời gian gốc của xfade trong ffmpeg (duration mặc định 1s): chế độ ngẫu nhiên KHÔNG truyền
+                         # duration (user 19/10: "dùng thời gian gốc của hiệu ứng"), chỉ cần số này để giữ khung cuối đoạn trước
+XFADE_KIEU = ("fade", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown",
+              "circlecrop", "rectcrop", "distance", "radial", "smoothleft", "smoothright", "smoothup", "smoothdown",
+              "circleopen", "circleclose", "vertopen", "vertclose", "horzopen", "horzclose", "dissolve", "pixelize",
+              "diagtl", "diagtr", "diagbl", "diagbr", "hlslice", "hrslice", "vuslice", "vdslice", "hblur", "fadegrays",
+              "wipetl", "wipetr", "wipebl", "wipebr", "squeezeh", "squeezev", "zoomin", "fadefast", "fadeslow",
+              "hlwind", "hrwind", "vuwind", "vdwind", "coverleft", "coverright", "coverup", "coverdown",
+              "revealleft", "revealright", "revealup", "revealdown")   # 56 kiểu xfade ffmpeg 7.1 (bỏ custom/fadeblack/fadewhite)
+
+
+def anh_dong_filter(W: int, H: int, n: int, kieu: str, nhe: bool = False) -> str:
+    """Ảnh tĩnh -> cảnh động kiểu Ken Burns bằng zoompan: phóng to / thu nhỏ / lắc nhẹ / trượt ngang / trượt dọc.
+    Ảnh được phóng lên 2x trước để zoompan không rung; n = số khung ra (fps FPS_RA)."""
+    giua = ("iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)")
+    kieu_fx = {
+        "phong_to":    (f"1+0.18*on/{n}", *giua),                         # 1.00 -> 1.18
+        "thu_nho":     (f"1.18-0.18*on/{n}", *giua),                      # 1.18 -> 1.00
+        "lac":         ("1.10", f"{giua[0]}+sin(on/7)*iw*0.012", f"{giua[1]}+cos(on/9)*ih*0.008"),   # máy cầm tay
+        "truot_ngang": ("1.12", f"(iw-iw/zoom)*on/{n}", giua[1]),          # trái -> phải
+        "truot_doc":   ("1.12", giua[0], f"(ih-ih/zoom)*on/{n}"),          # trên -> dưới
+    }
+    z, x, y = kieu_fx.get(kieu, kieu_fx["phong_to"])
+    fl = scale_flags(nhe)
+    return (f"scale={2 * W}:{2 * H}:force_original_aspect_ratio=increase:flags={fl},crop={2 * W}:{2 * H},"
+            f"zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={W}x{H}:fps={FPS_RA},format=yuv420p")
+
+
+def canh_minh_hoa_chain(idx: int, k: int, p: Path, t0: float, dai: float, loai: str, toc: float, W: int, H: int,
+                        enc: dict, nhe: bool, chuyen: float, anh_dong: bool, nhan_bv: str,
+                        co_canh_sau: bool = False) -> tuple[list[str], str, str]:
+    """Một cảnh minh họa -> (tham số -i, chuỗi filter tạo [m{k}], chuỗi overlay [bv{k+1}]).
+    - Video: lấy dai*toc giây nguồn, kéo chậm nếu toc < 1, phủ kín khung; ảnh: động kiểu Ken Burns (anh_dong) hoặc giữ tĩnh.
+    - chuyen > 0: cảnh MỜ DẦN VÀO trong `chuyen` giây đầu; cửa sổ overlay kéo thêm `chuyen` giây (giữ khung cuối).
+      co_canh_sau=True (cảnh kế bắt đầu đúng t0+dai): giữ khung cuối ĐỤC để cảnh sau mờ chồng lên (crossfade thật,
+      không tụt sáng); False (sau đó là bác sĩ / hết): khung cuối MỜ RA về nền."""
+    chuyen = max(0.0, float(chuyen or 0.0))
+    if loai == "anh":
+        if anh_dong:
+            n = int(round((dai + chuyen) * FPS_RA)) + 1
+            inputs = ["-i", str(p)]
+            nguon = anh_dong_filter(W, H, n, KIEU_ANH_DONG[k % len(KIEU_ANH_DONG)], nhe)
+        else:
+            inputs = ["-loop", "1", "-framerate", str(FPS_RA), "-t", f"{dai + chuyen + 0.5:.3f}", "-i", str(p)]
+            nguon = clip_filter(W, H, W, H, dai + chuyen, "", nhe)
+    else:
+        nguon_giay = dai * toc                                   # lấy bấy nhiêu giây nguồn, kéo dài ra dai
+        inputs = [*hwdec_args(enc), "-t", f"{nguon_giay + 0.5:.3f}", "-i", str(p)]
+        nguon = clip_filter(W, H, W, H, nguon_giay, "", nhe)     # cảnh minh họa luôn PHỦ KÍN khung (phóng + cắt giữa)
+        if chuyen > 0:
+            # giữ khung cuối thêm `chuyen` giây cho cảnh sau mờ chồng lên. Sau trim+setpts, tpad thêm khung nhưng
+            # không tăng pts -> đánh lại pts theo số thứ tự khung (N/fps), rồi mới kéo chậm.
+            nguon += f",tpad=stop={int(math.ceil(chuyen * FPS_RA))}:stop_mode=clone,setpts=N/({FPS_RA}*TB)"
+        if toc < 0.999:
+            nguon += f",setpts=PTS/{toc:.4f}"
+    mo = ""
+    if chuyen > 0:
+        mo = f",format=yuva420p,fade=t=in:st=0:d={chuyen:.3f}:alpha=1"
+        if not co_canh_sau:
+            mo += f",fade=t=out:st={dai:.3f}:d={chuyen:.3f}:alpha=1"
+    chain = f"[{idx}:v]{nguon}{mo},setpts=PTS+{t0:.3f}/TB[m{k}]"
+    ov = (f"{nhan_bv}[m{k}]overlay=eof_action=pass:"
+          f"enable='between(t,{t0:.3f},{t0 + dai + chuyen:.3f})'[bv{k + 1}]")
+    return inputs, chain, ov
+
+
+def canh_minh_hoa_xfade(idx: int, k: int, p: Path, dai: float, loai: str, toc: float, W: int, H: int, enc: dict,
+                        nhe: bool, chuyen: float, anh_dong: bool, nhan_ra: str, giu_cuoi: bool) -> tuple[list[str], str]:
+    """Một cảnh minh họa thành luồng ĐỘC LẬP `nhan_ra` (pts từ 0, CFR, không alpha) dài `dai` giây, giữ thêm khung cuối
+    `chuyen` giây nếu giu_cuoi (đoạn sau xfade đè lên phần giữ đó). Dùng cho cách nối xfade (ghep_xfade)."""
+    giu = chuyen if giu_cuoi else 0.0
+    if loai == "anh":
+        if anh_dong:
+            n = int(round((dai + giu) * FPS_RA)) + 1
+            inputs = ["-i", str(p)]
+            nguon = anh_dong_filter(W, H, n, KIEU_ANH_DONG[k % len(KIEU_ANH_DONG)], nhe)
+        else:
+            inputs = ["-loop", "1", "-framerate", str(FPS_RA), "-t", f"{dai + giu + 0.5:.3f}", "-i", str(p)]
+            nguon = clip_filter(W, H, W, H, dai + giu, "", nhe)
+    else:
+        nguon_giay = dai * toc                                   # lấy bấy nhiêu giây nguồn, kéo chậm ra đúng dai
+        inputs = [*hwdec_args(enc), "-t", f"{nguon_giay + 0.5:.3f}", "-i", str(p)]
+        nguon = clip_filter(W, H, W, H, nguon_giay, "", nhe)
+        if giu > 0:
+            nguon += f",tpad=stop={int(math.ceil(giu * FPS_RA))}:stop_mode=clone,setpts=N/({FPS_RA}*TB)"
+        if toc < 0.999:
+            nguon += f",setpts=PTS/{toc:.4f}"
+    # fps + setsar ở cuối: xfade đòi hai luồng cùng kích thước, định dạng, fps, timebase, SAR
+    return inputs, f"[{idx}:v]{nguon},fps={FPS_RA},setsar=1,format=yuv420p{nhan_ra}"
+
+
+def ghep_xfade(ds_mh: list, D: float, rng, W: int, H: int, enc: dict, nhe: bool, anh_dong: bool,
+               a_in: int) -> tuple[list[str], list[str], str, list[tuple[float, str]]]:
+    """Phần sau = chuỗi đoạn [bác sĩ][cảnh][cảnh]…[bác sĩ] nối bằng xfade, mỗi lần đổi cảnh rút một kiểu ngẫu nhiên
+    (XFADE_KIEU, theo rng), thời gian chuyển = thời gian gốc của xfade (không truyền duration, ffmpeg tự dùng 1s;
+    chỉ rút ngắn khi đoạn sau ngắn hơn 1s). Mỗi đoạn trừ đoạn cuối giữ khung cuối thêm XFADE_GIAY_GOC giây để đoạn
+    sau xfade đè lên, nên mốc bắt đầu từng cảnh trong video ra KHÔNG đổi (= t0 của kế hoạch). Đoạn bác sĩ cắt từ
+    [bv] bằng split + trim. Trả về (tham số -i, các chuỗi filter, nhãn luồng cuối, [(t0, kiểu)…])."""
+    chuyen = XFADE_GIAY_GOC
+    canh = sorted(ds_mh, key=lambda m: float(m[1]))
+    doan: list[tuple[str, float, float, tuple | None]] = []     # (bs|mh, bắt đầu, kết thúc, cảnh)
+    prev_end = 0.0
+    for mh in canh:
+        t0, dai = float(mh[1]), float(mh[2])
+        t0 = max(t0, prev_end)
+        if t0 - prev_end < 0.1:            # sát cảnh trước -> nối liền, không chèn mẩu bác sĩ ngắn
+            t0 = prev_end
+        t1 = min(t0 + dai, D)
+        if t1 - t0 < 0.2:
+            continue
+        if t0 > prev_end:
+            doan.append(("bs", prev_end, t0, None))
+        doan.append(("mh", t0, t1, mh))
+        prev_end = t1
+    if D - prev_end > 0.02:
+        doan.append(("bs", prev_end, D, None))
+    if not any(d[0] == "mh" for d in doan):
+        return [], [], "[bv]", []
+    n_bs = sum(1 for d in doan if d[0] == "bs")
+    inputs: list[str] = []
+    chains = [f"[bv]split={n_bs}" + "".join(f"[b{j}]" for j in range(n_bs))] if n_bs else []
+    j = so_mh = 0
+    nhan: list[tuple[str, float, float]] = []
+    for q, (loai, a, b, mh) in enumerate(doan):
+        cuoi = q == len(doan) - 1
+        if loai == "bs":
+            f = f"[b{j}]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS"
+            if not cuoi:
+                f += f",tpad=stop={int(math.ceil(chuyen * FPS_RA))}:stop_mode=clone,setpts=N/({FPS_RA}*TB)"
+            chains.append(f + f",fps={FPS_RA},setsar=1,format=yuv420p[s{q}]")
+            j += 1
+        else:
+            p_mh, _, _, loai_mh = mh[:4]
+            toc = float(mh[4]) if len(mh) > 4 and mh[4] else 1.0
+            inp, ch = canh_minh_hoa_xfade(a_in + 1 + so_mh, so_mh, Path(p_mh), b - a, loai_mh, toc, W, H, enc, nhe,
+                                          chuyen, anh_dong, f"[s{q}]", giu_cuoi=not cuoi)
+            inputs += inp
+            chains.append(ch)
+            so_mh += 1
+        nhan.append((f"[s{q}]", a, b))
+    cur = nhan[0][0]
+    chon: list[tuple[float, str]] = []
+    for q in range(1, len(nhan)):
+        lab, a, b = nhan[q]
+        kieu = rng.choice(XFADE_KIEU)
+        d = min(chuyen, max(0.1, (b - a) - 0.05))      # đoạn sau phải dài hơn thời gian chuyển
+        giay = "" if d >= chuyen - 1e-6 else f":duration={d:.3f}"   # bình thường để ffmpeg dùng thời gian gốc
+        ra = f"[x{q}]"
+        chains.append(f"{cur}{lab}xfade=transition={kieu}{giay}:offset={a:.3f}{ra}")
+        chon.append((a, kieu))
+        cur = ra
+    return inputs, chains, cur, chon
+
+
+def tron_sfx(chon: list[tuple[float, str]], sfx_kho: list, rng, idx0: int, sfx_db: float,
+             hook_dur: float) -> tuple[list[str], list[str], str, list[dict]]:
+    """Âm thanh hiệu ứng cho các lần chuyển cảnh xfade: với mỗi (mốc a trong phần sau, kiểu) rút MỘT tiếng hợp kiểu đó
+    (minh_hoa.chon_sfx — cột K tab Âm thanh hiệu ứng; rng theo seed để chạy lại y hệt), căn giữa tiếng vào khoảng chuyển
+    XFADE_GIAY_GOC (tiếng 1,5s vào sớm 0,25s, pop 0,3s rơi đúng giữa), đặt `sfx_db` dB so với giọng đọc đã chuẩn hóa.
+    Input đánh số từ idx0. -> (tham số -i, chuỗi filter từng tiếng [sfxN], chuỗi amix [ba0]+[sfx…]->[ba], thông tin từng tiếng)"""
+    import minh_hoa
+    inputs, chains, ds, tranh = [], [], [], ""
+    for a, kieu in chon:
+        s = minh_hoa.chon_sfx(kieu, sfx_kho, rng, tranh)
+        if s is None:
+            continue
+        tranh = s.id
+        giay = s.giay or probe_media(s.duong_dan)[2] or 0.5
+        bat_dau = max(0.0, a + (XFADE_GIAY_GOC - giay) / 2)
+        n = len(ds)
+        inputs += ["-i", str(s.duong_dan)]
+        chains.append(f"[{idx0 + n}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+                      f"volume={sfx_db:+.1f}dB,adelay=delays={int(round(bat_dau * 1000))}:all=1[sfx{n}]")
+        ds.append(dict(t=round(hook_dur + a, 2), kieu=kieu, id=s.id, ten=s.ten, link=s.link,
+                       bat_dau=round(hook_dur + bat_dau, 2), giay=round(giay, 2)))
+    if not ds:
+        return [], [], "", []
+    # amix normalize=0: giữ nguyên mức giọng đọc (không chia đều); duration=first: dài đúng bằng giọng đọc;
+    # alimiter cùng mức với chuẩn hóa âm lượng để tiếng cộng vào không vượt đỉnh
+    mix = ("[ba0]" + "".join(f"[sfx{n}]" for n in range(len(ds)))
+           + f"amix=inputs={len(ds) + 1}:duration=first:normalize=0,"
+           "alimiter=limit=0.8913:attack=5:release=100:level=false:latency=1[ba]")
+    return inputs, chains, mix, ds
+
+
 def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
            phan_sau: list[tuple[Path, float, str]] | None = None, audio: Path | None = None,
            lufs: float | None = LUFS_MUC_TIEU, mau_hook: str = "",
            che_do: dict | None = None, cua_so_khop: float | None = None, lech_giong: float = 0.0,
            srt: Path | None = None, sub_style: str | None = None,
            kich_thuoc_ra: tuple[int, int] | None = None,
-           minh_hoa: list[tuple[Path, float, float, str]] | None = None) -> dict:
+           minh_hoa: list[tuple] | None = None,
+           mh_chuyen: float = MH_CHUYEN_MAC_DINH, mh_anh_dong: bool = True,
+           mh_chuyen_kieu: str = "ngau_nhien", mh_seed: int | None = None,
+           sfx_kho: list | None = None, sfx_db: float = -4.0) -> dict:
     """Render clip hook đã ghép tiêu đề/ảnh. Nếu có `phan_sau` + `audio`: nối thêm phần sau =
     các clip [(clip, số giây dùng, filter màu riêng clip)] nối liền nhau, TẮT TIẾNG, lồng `audio`,
     dài đúng bằng audio (hết audio là hết video; tổng clip ngắn hơn thì đứng hình frame cuối).
@@ -725,7 +930,9 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
     `kich_thuoc_ra`: (W, H) video xuất; khác kích thước hook thì hook (đã đè tiêu đề/ảnh ở độ phân giải
     gốc) được thu về kích thước này, phần sau đưa thẳng về kích thước này.
     `minh_hoa`: [(file clip/ảnh, giây bắt đầu TRONG PHẦN SAU, số giây, "video"|"anh")] — cảnh minh họa đè
-    kín khung lên phần sau đúng khoảng đó (overlay bật/tắt theo giây, tắt tiếng), phụ đề vẫn ở trên cùng."""
+    kín khung lên phần sau đúng khoảng đó (overlay bật/tắt theo giây, tắt tiếng), phụ đề vẫn ở trên cùng.
+    `sfx_kho`: các minh_hoa.Sfx đã tải (tab Âm thanh hiệu ứng) — chỉ với mh_chuyen_kieu ngau_nhien: mỗi lần chuyển
+    cảnh trộn một tiếng hợp kiểu xfade đó vào giọng đọc, nhỏ hơn giọng `sfx_db` dB (xem tron_sfx); info['sfx'] liệt kê."""
     tx, ty, title = title_item
     ix, iy, crop = illus_item
     che_do = che_do or dict(nhe=False, ly_do="mặc định", enc=dict(loai="x264", name=TEN_MA_HOA["x264"]))
@@ -774,17 +981,37 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
             thieu = max(D - sum(d for _, d, _ in phan_sau), 0) + 0.5   # tổng clip ngắn hơn -> đứng hình frame cuối
             # cảnh minh họa: input a_in+1.., mỗi cảnh một overlay bật đúng khoảng [t0, t0+dai] trên phần sau
             mh_chains, nhan_bv = [], "[bv]"
-            for k, (p_mh, t0_mh, dai_mh, loai_mh) in enumerate(minh_hoa or []):
-                if loai_mh == "anh":
-                    cmd += ["-loop", "1", "-framerate", str(FPS_RA), "-t", f"{dai_mh + 0.5:.3f}", "-i", str(p_mh)]
-                else:
-                    cmd += [*hwdec_args(enc), "-t", f"{dai_mh + 0.5:.3f}", "-i", str(p_mh)]
-                # cảnh minh họa luôn PHỦ KÍN khung (phóng + cắt giữa), kể cả clip ngang -> coi như cùng tỉ lệ
-                mh_chains.append(f"[{a_in + 1 + k}:v]{clip_filter(Wo, Ho, Wo, Ho, dai_mh, '', nhe)},"
-                                 f"setpts=PTS+{t0_mh:.3f}/TB[m{k}]")
-                mh_chains.append(f"{nhan_bv}[m{k}]overlay=eof_action=pass:"
-                                 f"enable='between(t,{t0_mh:.3f},{t0_mh + dai_mh:.3f})'[bv{k + 1}]")
-                nhan_bv = f"[bv{k + 1}]"
+            sfx_chains_all, nhan_ba = [], "[ba]"       # có tiếng chuyển cảnh thì giọng đọc ra [ba0], amix mới thành [ba]
+            ds_mh = list(minh_hoa or [])
+            if ds_mh and mh_chuyen_kieu == "ngau_nhien":
+                # nối xfade: [bác sĩ][cảnh]…[bác sĩ], mỗi lần đổi cảnh một kiểu ngẫu nhiên (theo seed để chạy lại y hệt),
+                # thời gian chuyển = gốc của ffmpeg (1s), không dùng mh_chuyen
+                inputs, mh_chains, nhan_bv, chon = ghep_xfade(ds_mh, D, random.Random(mh_seed), Wo, Ho, enc,
+                                                              nhe, mh_anh_dong, a_in)
+                cmd += inputs
+                info["chuyen_canh"] = " → ".join(f"{t:.1f}s {k}" for t, k in chon)
+                print(f"Chuyển cảnh: {len(chon)} lần, ngẫu nhiên xfade (thời gian gốc {XFADE_GIAY_GOC:g}s): "
+                      + " → ".join(k for _, k in chon))
+                info["so_chuyen"] = len(chon)
+                if sfx_kho and chon:
+                    # tiếng chuyển cảnh: seed riêng (seed+1) để không làm đổi kết quả rút kiểu xfade ở trên;
+                    # input tiếng xếp sau các input cảnh minh họa (đếm "-i" trong inputs của ghep_xfade)
+                    rng_sfx = random.Random(None if mh_seed is None else mh_seed + 1)
+                    sfx_in, sfx_ch, sfx_mix, info["sfx"] = tron_sfx(chon, sfx_kho, rng_sfx, a_in + 1 + inputs.count("-i"),
+                                                                    sfx_db, hook_dur)
+                    if sfx_in:
+                        cmd += sfx_in
+                        sfx_chains_all, nhan_ba = sfx_ch + [sfx_mix], "[ba0]"
+            else:
+                for k, mh in enumerate(ds_mh):
+                    p_mh, t0_mh, dai_mh, loai_mh = mh[:4]
+                    toc = float(mh[4]) if len(mh) > 4 and mh[4] else 1.0   # < 1 = chiếu chậm cho clip vừa trọn câu
+                    co_sau = k + 1 < len(ds_mh) and abs(float(ds_mh[k + 1][1]) - (t0_mh + dai_mh)) < 0.05   # cảnh kế nối liền
+                    inputs, chain, ov = canh_minh_hoa_chain(a_in + 1 + k, k, Path(p_mh), t0_mh, dai_mh, loai_mh, toc, Wo, Ho,
+                                                            enc, nhe, mh_chuyen, mh_anh_dong, nhan_bv, co_canh_sau=co_sau)
+                    cmd += inputs
+                    mh_chains += [chain, ov]
+                    nhan_bv = f"[bv{k + 1}]"
             info["minh_hoa"] = len(minh_hoa or [])
             st_hook, st_voice = to_stereo_filter(video), to_stereo_filter(audio)
             norm_hook = norm_voice = ""
@@ -813,8 +1040,9 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
                 # tăng -> bộ mã hóa bỏ đi (video hụt vài frame so với tiếng)
                 "".join(f"[c{k}]" for k in range(K)) + f"concat=n={K}:v=1:a=0,fps={FPS_RA},"
                 f"tpad=stop_mode=clone:stop_duration={thieu:.3f},trim=duration={D:.3f},setpts=PTS-STARTPTS[bv]",
-                f"[{a_in}:a]atrim=duration={D:.3f},asetpts=PTS-STARTPTS,{st_voice}{norm_voice}[ba]",
+                f"[{a_in}:a]atrim=duration={D:.3f},asetpts=PTS-STARTPTS,{st_voice}{norm_voice}{nhan_ba}",
                 *mh_chains,
+                *sfx_chains_all,                      # tiếng chuyển cảnh: [idx:a]…[sfxN] rồi [ba0][sfx…]amix…[ba]
                 f"[hv][ha]{nhan_bv}[ba]concat=n=2:v=1:a=1{v_cuoi}[a]",
             ]
             maps = ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", AUDIO_BR]
@@ -831,15 +1059,43 @@ def render(video: Path, title_item, illus_item, out: Path, ffmpeg: str,
 
 # ================================================================== Drive
 def download_drive_folder(url: str, dest_root: Path) -> Path:
-    try:
-        import gdown
-    except ImportError:
-        sys.exit("Cần cài gdown để tải thư mục Drive: pip install gdown")
-    dest = unique_path(dest_root, "drive_" + time.strftime("%Y%m%d_%H%M%S"))
-    dest.mkdir(parents=True)
-    print(f"Tải thư mục Drive về {dest} ...")
-    gdown.download_folder(url=url, output=str(dest), quiet=False, use_cookies=False)
+    """Tải thư mục Drive về dest_root\\<tên thư mục Drive = tên kịch bản> (drive_thu_muc.py, không cần gdown).
+    Thư mục đã có thì dùng lại, chỉ tải file còn thiếu."""
+    import drive_thu_muc as dtm
+    _, dest, _ = dtm.tai_thu_muc_theo_ten(url, dest_root, log=print)
     return dest
+
+
+def lam_dep_clip(src: Path, giay: float | None, tc: dict, cache_dir: Path) -> Path:
+    """Bản đã làm đẹp của một clip bác sĩ (lam_dep.py chạy bằng python của venv_lamdep), cache theo
+    nguồn + số giây + tham số: chạy lại cùng tham số thì dùng lại ngay, không tính lại."""
+    import lam_dep
+    ok, py = lam_dep.san_sang()
+    if not ok:
+        sys.exit(f"Làm đẹp: {py}")
+    ra = cache_dir / f"{src.stem} - lam dep {lam_dep.ma_cache(src, giay, tc)}.mp4"
+    if ra.exists() and ra.stat().st_size > 0:
+        print(f"  làm đẹp {src.name}: dùng lại {ra.name}")
+        return ra
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [py, "-u", str(HERE / "lam_dep.py"), "--video", str(src), "--ra", str(ra), "--tc", lam_dep.chuoi_tc(tc)]
+    if giay:
+        cmd += ["--giay", f"{giay:.3f}"]
+    t0 = time.time()
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                         text=True, encoding="utf-8", errors="replace", bufsize=1,
+                         env={**os.environ, **lam_dep.ENV_IM}, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    cuoi: list[str] = []
+    for line in p.stdout:
+        s = line.rstrip()
+        if not s or s.startswith(("W0000", "I0000", "E0000", "INFO:", "WARNING: Logging")):   # log rác mediapipe
+            continue
+        cuoi = (cuoi + [s])[-8:]
+        print(s, flush=True)
+    if p.wait() != 0 or not ra.exists():
+        sys.exit("Làm đẹp lỗi: " + " | ".join(cuoi[-3:]))
+    print(f"  làm đẹp {src.name}: xong sau {time.time() - t0:.0f}s -> {ra.name}")
+    return ra
 
 
 # vai trò -> (các tiền tố chấp nhận, viết không dấu/thường ; đuôi file hợp lệ)
@@ -979,6 +1235,10 @@ def main():
                     help="cố ý cho giọng đọc to/nhỏ hơn hook bấy nhiêu dB (vd -1 = nhỏ hơn 1 dB), mặc định 0")
     ap.add_argument("--khong-chinh-mau", action="store_true",
                     help="tắt chỉnh màu tự động (mặc định bật: auto levels, cân bằng trắng, bão hòa, làm nét như CapCut)")
+    ap.add_argument("--lam-dep", default="",
+                    help='làm đẹp CHỈ clip hook (phần sau giữ nguyên) bằng lam_dep.py: '
+                         '"trang=60,son=40,son_mau=hong,suc_song=30,sang=0,tuong_phan=0,nhiet=0" — mặt nạ da/môi '
+                         'từng khung hình (MediaPipe, chạy trong venv_lamdep), bản đã làm đẹp cache ở <out>\\Làm đẹp')
     ap.add_argument("--cpu", action="store_true",
                     help="ép mã hóa CPU libx264 (bỏ dò NVENC/QSV/AMF); mặc định tự dò GPU NVIDIA, có thì dùng NVENC/NVDEC. "
                          "Không kèm --manh thì vào chế độ máy yếu")
@@ -1006,6 +1266,31 @@ def main():
     ap.add_argument("--minh-hoa-giay", type=float, default=6.0, help="mỗi cảnh minh họa tối đa bấy nhiêu giây (mặc định 6)")
     ap.add_argument("--minh-hoa-ti-le", type=float, default=0.45, help="tổng minh họa tối đa bấy nhiêu phần thời lượng phần sau (0.45)")
     ap.add_argument("--khong-minh-hoa", action="store_true", help="bỏ cảnh minh họa dù có --minh-hoa")
+    ap.add_argument("--minh-hoa-chuyen", type=float, default=MH_CHUYEN_MAC_DINH,
+                    help="giây mờ chồng khi vào/ra mỗi cảnh minh họa, CHỈ dùng với --minh-hoa-chuyen-kieu mo_chong "
+                         "(mặc định 0.5; 0 = cắt cụp)")
+    ap.add_argument("--minh-hoa-chuyen-kieu", choices=MH_CHUYEN_KIEU, default="ngau_nhien",
+                    help="ngau_nhien = mỗi lần đổi cảnh rút ngẫu nhiên một kiểu xfade của ffmpeg (56 kiểu, bỏ fadeblack/"
+                         "fadewhite; theo --seed; thời gian chuyển = gốc của ffmpeg 1s) | mo_chong = mờ chồng alpha như cũ "
+                         "(mặc định ngau_nhien)")
+    ap.add_argument("--minh-hoa-sfx", default=None, metavar="SHEET|CSV",
+                    help="kho âm thanh hiệu ứng: link Sheet chỉ thẳng tab hoặc file CSV; mặc định = tab 'Âm thanh hiệu ứng' "
+                         "của chính Sheet --minh-hoa. Cột K = các kiểu xfade mà tiếng đó hợp; mỗi lần chuyển cảnh (kiểu "
+                         "ngau_nhien) rút một tiếng hợp kiểu vừa rút, theo --seed, trộn vào giọng đọc đúng mốc chuyển")
+    ap.add_argument("--minh-hoa-sfx-db", type=float, default=-4.0, metavar="DB",
+                    help="tiếng chuyển cảnh nhỏ hơn giọng đọc bấy nhiêu dB (mặc định -4, user chốt 19/10/2026; âm = nhỏ hơn)")
+    ap.add_argument("--khong-minh-hoa-sfx", action="store_true", help="không gắn tiếng khi chuyển cảnh")
+    ap.add_argument("--minh-hoa-anh-tinh", action="store_true",
+                    help="ảnh minh họa giữ tĩnh (mặc định: ảnh động phóng to / thu nhỏ / lắc / trượt bằng zoompan)")
+    ap.add_argument("--minh-hoa-hoi-lai", action="store_true",
+                    help="hỏi AI mới dù thư mục tập đã có gpt_minh_hoa.json cho đúng kịch bản này (mặc định: chạy lại "
+                         "cùng kịch bản thì dùng lại trả lời cũ, chỉ ghép lại)")
+    ap.add_argument("--minh-hoa-che-do", default="phu_kin", choices=["phu_kin", "diem_xuyet"],
+                    help="phu_kin = cảnh kho phủ kín phần sau, bác sĩ chỉ bù chỗ không có cảnh (mặc định); "
+                         "diem_xuyet = vài cảnh ≤ --minh-hoa-giay trên nền bác sĩ, tổng ≤ --minh-hoa-ti-le (cách cũ)")
+    ap.add_argument("--minh-hoa-thu-muc", default=None, metavar="THU_MUC",
+                    help="thư mục video mẫu: chứa clip tải từ Drive và file tự chép cho dòng Sheet chưa có link "
+                         "(trùng Tên clip / ID). Mặc định 'video minh họa' cạnh tool")
     args = ap.parse_args()
     if args.nhe and args.manh:
         sys.exit("--nhe và --manh loại trừ nhau, chọn một.")
@@ -1013,16 +1298,20 @@ def main():
         sys.exit("--do-phan-giai phải >= 0 (0 = giữ kích thước hook).")
 
     out_dir = Path(args.out) if args.out else downloads_dir()
+    out_root = out_dir                            # gốc thư mục ra (cache "Làm đẹp" dùng chung cho mọi tập)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    body = Path(args.phan_sau) if args.phan_sau else None
-    audio = Path(args.audio) if args.audio else None
-    kich_ban = Path(args.kich_ban) if args.kich_ban else None
+    # đường dẫn tuyệt đối: ffmpeg render chạy với cwd = thư mục tạm nên "video gốc" tương đối sẽ không tìm thấy
+    body = Path(args.phan_sau).resolve() if args.phan_sau else None
+    audio = Path(args.audio).resolve() if args.audio else None
+    kich_ban = Path(args.kich_ban).resolve() if args.kich_ban else None
     ten = None
+    thu_muc_bo: Path | None = None                # thư mục nguyên liệu của tập: giữ gpt_minh_hoa.json (trả lời AI đã nhớ)
     if args.drive or args.thu_muc:
         folder = download_drive_folder(args.drive, out_dir) if args.drive else Path(args.thu_muc)
         if not folder.is_dir():
             sys.exit(f"Không thấy thư mục: {folder}")
+        thu_muc_bo = folder
         f = pick_from_folder(folder)
         video, tieude, anh, ten = f["video"], f["tieude"], f["anh"], f["ten"]
         body, audio = body or f.get("body"), audio or f.get("audio")
@@ -1041,6 +1330,11 @@ def main():
         if p and not p.exists():
             sys.exit(f"Không thấy file: {p}")
     ten = ten or vai_tro_theo_ten(video)[1]       # tên chung của bộ -> đặt tên file ra
+    # mọi file ra của tập này vào <out>\done\<tên>\; xem trước (GUI) vẫn ghi thẳng --out (thư mục xem trước riêng)
+    if not args.preview_only:
+        out_dir = thu_muc_done(out_dir, ten)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Thư mục ra: {out_dir}")
     # phụ đề chỉ ở PHẦN SAU (10s hook đã có tiêu đề + ảnh minh họa nên để sạch) -> không có phần sau thì bỏ
     lam_sub = bool(kich_ban) and bool(body) and not args.khong_sub
     # cảnh minh họa theo từ khóa: cũng cần kịch bản khớp giọng đọc (lấy giây từng câu) + phần sau
@@ -1154,21 +1448,63 @@ def main():
         if not lam_sub:                              # chỉ cần mốc câu, không đốt phụ đề
             srt_path.unlink(missing_ok=True)
             srt_path = None
+    # làm đẹp CHỈ clip hook (user: không áp cho phần sau) -> bản đã làm đẹp thay vào; đặt SAU nhận diện giọng nói
+    # (whisper nghe tiếng gốc) và TRƯỚC render
+    if args.lam_dep:
+        import lam_dep
+        tc_ld = lam_dep.doc_tc(args.lam_dep)
+        if lam_dep.co_hieu_ung(tc_ld):
+            thu_muc_ld = out_root / "Làm đẹp"
+            print(f"Làm đẹp : {lam_dep.chuoi_tc(tc_ld)} — chỉ clip hook, mặt nạ da/môi từng khung hình (MediaPipe), cache {thu_muc_ld}")
+            video = lam_dep_clip(video, None, tc_ld, thu_muc_ld)
+    tag = "full" if body else "ghep"
+    out_path = unique_path(out_dir, f"{ten}_{tag}_{stamp}.mp4")
     canh_mh = []
+    link_mh: Path | None = None
     if lam_minh_hoa and tu_khop:
         import minh_hoa
-        print(f"Minh họa : {args.minh_hoa_ai} chọn câu + từ khóa theo kho {args.minh_hoa} ...")
+        print(f"Minh họa : {args.minh_hoa_ai} đề xuất từ khóa từng câu, khớp kho {args.minh_hoa} "
+              f"({'phủ kín' if args.minh_hoa_che_do == 'phu_kin' else 'điểm xuyết'}) ...")
+        tho_mh: dict = {}
+        # trả lời AI nhớ trong thư mục tập (cạnh kịch bản): chạy lại cùng kịch bản thì không hỏi lại, chỉ ghép lại
+        bo_nho_mh = thu_muc_bo or (kich_ban.parent if kich_ban else None)
         kq_mh = minh_hoa.chuan_bi(tu_khop, kho_nguon=args.minh_hoa, tong_giay=D, tu_giay=dur, nha=args.minh_hoa_ai,
                                   model=args.minh_hoa_model, toi_da_giay=args.minh_hoa_giay, ti_le_toi_da=args.minh_hoa_ti_le,
-                                  seed=args.seed, ten_bo=ten, log=lambda s: print("  " + s))
+                                  seed=args.seed, ten_bo=ten, log=lambda s: print("  " + s), thu_muc=args.minh_hoa_thu_muc,
+                                  luu_tho=tho_mh, che_do=args.minh_hoa_che_do, bo_nho=bo_nho_mh, hoi_lai=args.minh_hoa_hoi_lai)
+        if tho_mh.get("text"):                       # trả lời thô vào nhật ký để soát lại trên GUI
+            print(f"  {tho_mh.get('nha', 'AI')} trả lời"
+                  + (f" (dùng lại trả lời lúc {tho_mh['dung_lai']})" if tho_mh.get("dung_lai") else "")
+                  + ": " + " ".join(tho_mh["text"].split())[:2000])
         # mốc trong video cuối -> mốc trong phần sau (trừ thời lượng hook)
-        canh_mh = [(c.clip.duong_dan, c.start - dur, c.end - c.start, c.clip.loai) for c in kq_mh["canh"]]
+        canh_mh = [(c.clip.duong_dan, c.start - dur, c.end - c.start, c.clip.loai, getattr(c, "toc_do", 1.0))
+                   for c in kq_mh["canh"]]
         if kq_mh["canh"]:
             print(f"Minh họa : {len(kq_mh['canh'])} cảnh: " + minh_hoa.mo_ta_canh(kq_mh["canh"]))
         else:
             print("Minh họa : không chèn cảnh nào" + (f" ({kq_mh['loi']})" if kq_mh["loi"] else ""))
-    tag = "full" if body else "ghep"
-    out_path = unique_path(out_dir, f"{ten}_{tag}_{stamp}.mp4")
+        # file link cạnh video: cảnh nào ở mốc nào, dùng Link Drive nào -> xem video thấy cảnh sai thì tra ngay
+        link_mh = unique_path(out_dir, f"{ten}_minh_hoa_{stamp}.txt")
+        try:
+            link_mh.write_text(minh_hoa.bao_cao_da_dung(kq_mh, ten_bo=ten, video_ra=out_path.name, kho_nguon=args.minh_hoa,
+                                                        thu_muc_mau=args.minh_hoa_thu_muc, seed=args.seed, tho=tho_mh),
+                               encoding="utf-8")
+            print(f"Link minh họa: {link_mh}")
+        except Exception as e:                       # noqa: BLE001 — file phụ, không được làm hỏng video
+            print(f"  không ghi được file link minh họa: {e}")
+    # tiếng chuyển cảnh: tab Âm thanh hiệu ứng (cùng Sheet kho), tải mp3 về thư mục video mẫu; chỉ có nghĩa khi có cảnh
+    # minh họa nối bằng xfade ngẫu nhiên. Lỗi kho/tải -> bỏ tiếng, video vẫn ghép
+    sfx_kho: list = []
+    if canh_mh and args.minh_hoa_chuyen_kieu == "ngau_nhien" and not args.khong_minh_hoa_sfx:
+        import minh_hoa
+        try:
+            kho_sfx = minh_hoa.doc_kho_sfx(args.minh_hoa_sfx or args.minh_hoa, log=lambda s: print("  " + s),
+                                           cung_sheet=not args.minh_hoa_sfx)
+            sfx_kho = minh_hoa.tai_tat_ca_sfx(kho_sfx, log=lambda s: print("  " + s), thu_muc=args.minh_hoa_thu_muc)
+            print(f"Âm thanh : kho {len(kho_sfx)} tiếng hiệu ứng, dùng được {len(sfx_kho)}, đặt {args.minh_hoa_sfx_db:+g} dB "
+                  f"so với giọng đọc, rút theo kiểu xfade của từng lần chuyển cảnh")
+        except Exception as e:                       # noqa: BLE001
+            print(f"Âm thanh : bỏ tiếng chuyển cảnh ({e})")
     print("Đang render ffmpeg..." + (" (có phần sau, mã hóa CPU, chờ vài phút)"
                                     if body and che_do["enc"]["loai"] == "x264" else ""))
     sub_style = None
@@ -1180,7 +1516,19 @@ def main():
                   lufs=None if args.khong_chuan_am else args.lufs,
                   mau_hook=mau_hook, che_do=che_do,
                   cua_so_khop=args.cua_so_khop, lech_giong=args.lech_giong,
-                  srt=srt_path, sub_style=sub_style, kich_thuoc_ra=kt_ra, minh_hoa=canh_mh)
+                  srt=srt_path, sub_style=sub_style, kich_thuoc_ra=kt_ra, minh_hoa=canh_mh,
+                  mh_chuyen=args.minh_hoa_chuyen, mh_anh_dong=not args.minh_hoa_anh_tinh,
+                  mh_chuyen_kieu=args.minh_hoa_chuyen_kieu, mh_seed=args.seed,
+                  sfx_kho=sfx_kho, sfx_db=args.minh_hoa_sfx_db)
+    if sfx_kho and info.get("so_chuyen"):
+        import minh_hoa
+        print("Âm thanh : " + minh_hoa.mo_ta_sfx(info.get("sfx") or [], info["so_chuyen"]))
+        if link_mh and link_mh.exists():              # nối vào file link: mốc chuyển → kiểu → tiếng → Link Drive
+            try:
+                with link_mh.open("a", encoding="utf-8") as f:
+                    f.write(minh_hoa.bao_cao_sfx(info.get("sfx") or [], info["so_chuyen"]))
+            except Exception as e:                   # noqa: BLE001
+                print(f"  không ghi được tiếng chuyển cảnh vào file link: {e}")
     if info.get("hook"):
         print(f"Thời lượng: hook {info['hook']}s + phần sau {info['audio']}s ({info['so_clip']} clip"
               + (f", {info['minh_hoa']} cảnh minh họa" if info.get("minh_hoa") else "") + f", {info['body_size']}) = {info['tong']}s")

@@ -9,9 +9,9 @@
   "channel_url": "",
   "schedule_times": [
     "08:00",
-    "19:00"
+    "18:00"
   ],
-  "schedule_start": "2026-10-15",
+  "schedule_start": "2026-10-19",
   "default_desc": "",
   "default_playlist": "Dạ dày tiêu hóa",
   "default_tags": "",
@@ -21,6 +21,12 @@
     "youtube",
     "tiktok",
     "zalo"
+  ],
+  "gio_da_dung": [
+    "2026-10-19T18:00",
+    "2026-10-20T08:00",
+    "2026-10-20T18:00",
+    "2026-10-21T08:00"
   ],
   "platforms": {
     "youtube": {

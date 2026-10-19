@@ -31,7 +31,14 @@ body{margin:0;display:flex;background:var(--bg);color:var(--fg);font:14px/1.5 "S
 .nav button.active{background:var(--sidebar-2);box-shadow:inset 3px 0 0 var(--primary)}
 .nav .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;font-size:13px;font-weight:700}
 .ic-ghep{background:#dc2626;color:#fff} .ic-cs{background:#2563eb;color:#fff} .ic-ai{background:#0f172a;color:#fff;border:1px solid #334155}
-.ic-log{background:#374151;color:#fff} .ic-cd{background:#4b5563;color:#fff}
+.ic-log{background:#374151;color:#fff} .ic-cd{background:#4b5563;color:#fff} .ic-ld{background:#db2777;color:#fff}
+/* tab Làm đẹp */
+.ld-wrap{display:grid;grid-template-columns:minmax(320px,1fr) minmax(300px,400px);gap:18px;margin-top:6px}
+@media (max-width:1000px){.ld-wrap{grid-template-columns:1fr}}
+.ld-anh img{max-width:100%;border:1px solid var(--border);border-radius:8px;background:#0b1220}
+.ld-sliders h4{margin:10px 0 8px;font-size:13px}
+.ld-sl{margin-bottom:8px} .ld-sl label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px}
+.ld-sl input[type=range]{width:100%;accent-color:var(--blue);margin:0}
 .nav .cnt{margin-left:auto;font-size:11px;color:var(--sidebar-dim)} .nav .cnt b{color:#fbbf24;font-weight:600}
 .side-foot{margin-top:auto;padding:12px 16px;font-size:11px;color:#6b7280;border-top:1px solid #263142;line-height:1.6}
 .side-foot .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;margin-right:6px;vertical-align:middle}
@@ -125,6 +132,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
   <nav class="nav">
     <button data-tab="ghep" class="active"><span class="ic ic-ghep">▶</span>Ghép video<span class="cnt" id="cntGhep"></span></button>
     <button data-tab="chinh-sua"><span class="ic ic-cs">✂</span>Chỉnh sửa<span class="cnt" id="cntCs"></span></button>
+    <button data-tab="lam-dep"><span class="ic ic-ld">✦</span>Làm đẹp<span class="cnt" id="cntLd"></span></button>
     <button data-tab="ai"><span class="ic ic-ai">◉</span>Kết nối AI<span class="cnt" id="cntAi"></span></button>
     <button data-tab="nhat-ky"><span class="ic ic-log">☰</span>Nhật ký</button>
     <button data-tab="cai-dat"><span class="ic ic-cd">⚙</span>Cài đặt</button>
@@ -137,7 +145,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
     <h2 id="tbTitle">Ghép video</h2><span class="sub" id="tbSub">Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề</span>
     <span class="spacer"></span>
     <span id="chipRun" class="chip">Đang dừng</span>
-    <button class="btn sm" onclick="api('/api/mo',{loai:'thu_muc_ra'})">Mở thư mục kết quả</button>
+    <button class="btn sm" title="Mỗi tập một thư mục con: video, ảnh bố cục, phụ đề, file link minh họa đã dùng" onclick="api('/api/mo',{loai:'done'})">Mở thư mục done</button>
   </div>
   <div class="content">
 
@@ -171,6 +179,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
     <div class="card">
       <h3>3. Hàng đợi <small id="qSum"></small>
         <span class="spacer"></span>
+        <label class="sw" title="Tắt: tập đã hỏi AI rồi (gpt_minh_hoa.json trong thư mục tập) thì chạy lại chỉ ghép lại với câu trả lời cũ. Bật: hỏi GPT mới mỗi lần chạy (--minh-hoa-hoi-lai); kịch bản đổi thì luôn hỏi mới."><input type="checkbox" id="mhHoiLai" onchange="datHoiLai(this)"> Hỏi GPT mới khi chạy</label>
         <button id="btnStart" class="btn blue sm" onclick="api('/api/start')">▶ Chạy</button>
         <button id="btnStop" class="btn sm" onclick="api('/api/stop')">■ Dừng</button>
         <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
@@ -188,6 +197,36 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
       <h3>Nhật ký gần đây <span class="spacer"></span><button class="btn link sm" onclick="moTab('nhat-ky')">Xem đầy đủ →</button></h3>
       <pre class="log" id="logMini"></pre>
     </div>
+    <div class="card" id="cardMinhHoa">
+      <h3>4. Kho video minh họa <small>clip/ảnh chèn vào phần sau theo từ khóa — AI đọc kịch bản chọn câu</small>
+        <span class="spacer"></span><span id="mhTomTat" class="muted"></span></h3>
+      <div class="body">
+        <div class="row">
+          <span class="muted" style="width:140px">Link Sheet kho</span>
+          <input id="mhSheet" type="text" class="grow" placeholder="https://docs.google.com/spreadsheets/d/…" spellcheck="false">
+          <button class="btn" onclick="api('/api/mo',{loai:'url',url:$('mhSheet').value})">Mở Sheet</button>
+          <button class="btn" onclick="luuMhSheet()">Lưu</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted" style="width:140px">Thư mục video mẫu</span>
+          <input id="mhDir" type="text" class="grow" placeholder="…\GoogleFlowGhepVideo\video minh họa" spellcheck="false">
+          <button class="btn" onclick="chonThuMucMh()">Chọn…</button>
+          <button class="btn" onclick="api('/api/mo',{loai:'minh_hoa'})">Mở thư mục</button>
+          <button class="btn" onclick="luuMhDir()">Lưu</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary sm" id="btnMhTai" onclick="api('/api/tai_minh_hoa')">⬇ Tải video mẫu từ Sheet</button>
+          <button class="btn sm" id="btnMhDoc" onclick="api('/api/kho_minh_hoa_lam_moi')">↻ Đọc lại Sheet</button>
+          <span id="mhInfo" class="muted"></span>
+        </div>
+        <div class="tbl-wrap" style="margin-top:8px">
+          <table><thead><tr><th>ID</th><th>Tên clip</th><th>Từ khóa</th><th>Video mẫu</th></tr></thead>
+            <tbody id="mhBody"><tr><td colspan="4" class="empty">Đang đọc Sheet…</td></tr></tbody></table>
+        </div>
+        <p class="hint">Dòng <b>chưa có Link Drive</b>: chép file vào thư mục video mẫu, đặt tên trùng <b>Tên clip</b> hoặc <b>ID</b> (vd <b>MH01.mp4</b>) là tool tự dùng. Dòng có Link Drive thì tải về thư mục này một lần. Tùy chọn AI, số giây mỗi cảnh, tỉ lệ minh họa ở tab Chỉnh sửa.</p>
+      </div>
+    </div>
+
   </section>
 
   <!-- ===================== CHỈNH SỬA ===================== -->
@@ -251,8 +290,12 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
             <p class="hint">Máy yếu: scale bicubic, bỏ làm nét, mã hóa QSV/AMF/x264 veryfast. Model phụ đề không đổi.</p>
           </div>
         </div>
-        <h4 style="margin:16px 0 8px;font-size:13px">Minh họa theo từ khóa <small class="muted">(AI đọc kịch bản, chọn câu + từ khóa trong kho; tool chèn clip đúng giây câu đó)</small></h4>
+        <h4 style="margin:16px 0 8px;font-size:13px">Minh họa theo từ khóa <small class="muted">(AI đọc kịch bản, đề xuất từ khóa cho từng câu; tool khớp với kho rồi phủ cảnh đúng giây câu đó)</small></h4>
         <label class="sw"><input type="checkbox" id="tc_minh_hoa"> Chèn cảnh minh họa vào phần sau</label>
+        <div class="row" style="margin-top:8px">
+          <div class="fld"><label>Cách chèn</label>
+            <select id="tc_minh_hoa_che_do" style="width:auto"><option value="phu_kin">Phủ kín — cảnh kho là nền chính, bác sĩ chỉ bù chỗ không có cảnh</option><option value="diem_xuyet">Điểm xuyết — vài cảnh ngắn trên nền bác sĩ (cách cũ)</option></select></div>
+        </div>
         <div class="row" style="margin-top:8px">
           <div class="fld grow"><label>Kho minh họa (link Google Sheet tab "Kho minh họa", hoặc file CSV trên máy)</label>
             <div class="row"><input type="text" id="tc_minh_hoa_sheet" class="grow" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/…">
@@ -262,10 +305,17 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <div class="fld"><label>AI chọn từ khóa</label>
             <select id="tc_minh_hoa_ai" style="width:auto"><option value="gpt">GPT (Codex)</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
           <div class="fld"><label>Model (trống = mặc định)</label><input type="text" id="tc_minh_hoa_model" style="width:170px" placeholder="vd gpt-6-astra"></div>
-          <div class="fld"><label>Mỗi cảnh tối đa</label><div class="row"><input type="number" id="tc_minh_hoa_giay" min="2.5" max="20" step="0.5"><span class="u">giây</span></div></div>
-          <div class="fld"><label>Tổng minh họa tối đa</label><div class="row"><input type="number" id="tc_minh_hoa_ti_le" min="5" max="90" step="5"><span class="u">% phần sau</span></div></div>
+          <div class="fld"><label>Mỗi cảnh tối đa (điểm xuyết) / ảnh giữ (phủ kín)</label><div class="row"><input type="number" id="tc_minh_hoa_giay" min="2.5" max="20" step="0.5"><span class="u">giây</span></div></div>
+          <div class="fld"><label>Tổng minh họa tối đa (chỉ điểm xuyết)</label><div class="row"><input type="number" id="tc_minh_hoa_ti_le" min="5" max="90" step="5"><span class="u">% phần sau</span></div></div>
+          <div class="fld"><label>Chuyển cảnh vào/ra mỗi cảnh</label><div class="row">
+            <select id="tc_minh_hoa_chuyen_kieu" style="width:auto" onchange="tcChuyenKieu()"><option value="ngau_nhien">Ngẫu nhiên — rút 1 trong 56 kiểu xfade của ffmpeg mỗi lần đổi cảnh (bỏ fadeblack, fadewhite), thời gian gốc của hiệu ứng (1 giây)</option><option value="mo_chong">Mờ chồng (crossfade) cố định theo số giây</option></select>
+            <input type="number" id="tc_minh_hoa_chuyen" min="0" max="2" step="0.1" style="width:64px"><span class="u" id="tc_minh_hoa_chuyen_u">giây (0 = cắt cụp)</span></div></div>
+          <div class="fld"><label>Tiếng lúc chuyển cảnh (tab Âm thanh hiệu ứng của Sheet kho)</label><div class="row">
+            <label class="sw" title="Mỗi lần chuyển cảnh rút một tiếng có kiểu xfade đó ở cột K (một tiếng hợp nhiều kiểu), theo seed; mp3 tải về thư mục video mẫu"><input type="checkbox" id="tc_minh_hoa_sfx"> Gắn tiếng hợp kiểu xfade</label>
+            <input type="number" id="tc_minh_hoa_sfx_db" min="-30" max="6" step="1" style="width:64px"><span class="u">dB so với giọng đọc (âm = nhỏ hơn)</span></div></div>
+          <div class="fld"><label>Ảnh tĩnh</label><label class="sw"><input type="checkbox" id="tc_minh_hoa_anh_dong"> Làm động (phóng to / thu nhỏ / lắc / trượt)</label></div>
         </div>
-        <p class="hint">Kho: mỗi dòng một clip/ảnh, cột <b>Từ khóa</b> (nhiều từ, cách nhau dấu phẩy) và <b>Link Drive</b>. AI chỉ chọn từ khóa có trong kho; câu nên minh họa mà kho thiếu được ghi vào Nhật ký và file <code>video minh họa\thieu_minh_hoa.jsonl</code>. Không minh họa câu đầu/câu cuối, hai cảnh cách nhau ít nhất một câu.</p>
+        <p class="hint">Kho: mỗi dòng một clip/ảnh, cột <b>Từ khóa</b> (nhiều từ, cách nhau dấu phẩy) và <b>Link Drive</b>. AI đọc kịch bản rồi <b>tự đề xuất</b> 2–4 từ khóa hình ảnh cho mỗi câu (ưu tiên 1/3 đầu kịch bản), tool so với cột Từ khóa theo 3 mức: trùng hẳn → cụm từ chứa nhau → trùng phần lớn từ đặc trưng. Câu không khớp cảnh nào được ghi vào Nhật ký, file <code>video minh họa\thieu_minh_hoa.jsonl</code> và tab <b>Thiếu</b> của Sheet. <b>Phủ kín</b>: câu dài / mục "Thứ nhất, Thứ hai…" được tách thành từng ý; thời gian câu chia đều cho các clip, không đoạn nào dưới 3s (đoạn ngắn thì bỏ, kéo hai clip bên cạnh cho chạm nhau, clip chiếu chậm tới 25%); thiếu clip thì nối thêm clip cùng từ khóa rồi clip có chung từ khóa với clip đã khớp, hết mới chiếu lại, không hở hình bác sĩ giữa hai cảnh; mỗi lần đổi cảnh (bác sĩ → cảnh, cảnh → cảnh, cảnh → bác sĩ) dùng một kiểu <b>rút ngẫu nhiên trong 56 kiểu xfade của ffmpeg</b> với thời gian gốc của hiệu ứng (1 giây; bỏ fadeblack, fadewhite; cùng seed thì rút y hệt; Nhật ký ghi dòng "Chuyển cảnh:" kiểu nào ở giây nào; bật <b>Gắn tiếng</b> thì mỗi lần chuyển trộn thêm một tiếng hiệu ứng có kiểu xfade đó ở cột K tab <b>Âm thanh hiệu ứng</b> — một tiếng hợp nhiều kiểu, rút theo seed, tránh lặp tiếng vừa dùng, căn giữa tiếng vào 1 giây chuyển, mp3 tải về thư mục video mẫu; dòng "Âm thanh:" và file link minh họa ghi mốc nào dùng tiếng nào) hoặc mờ chồng cố định theo số giây nếu chọn; ảnh tĩnh làm động xoay vòng phóng to / thu nhỏ / trượt / lắc; câu không có cảnh (hoặc AI để bác sĩ nói, như lời kêu gọi cuối) giữ hình bác sĩ. <b>Điểm xuyết</b>: vài cảnh ngắn, không chọn câu cuối, hai cảnh cách nhau ít nhất một câu. Trả lời của AI được nhớ trong <code>gpt_minh_hoa.json</code> ở thư mục tập: <b>chạy lại cùng kịch bản thì không hỏi lại</b>, chỉ ghép lại; kịch bản / chế độ / AI đổi thì hỏi mới. Muốn hỏi mới ngay thì bật <b>Hỏi GPT mới khi chạy</b> ở thẻ Hàng đợi (tab Ghép video) hoặc chạy với <code>--minh-hoa-hoi-lai</code>.</p>
         <div class="muted" style="margin-top:10px">Dòng lệnh tương ứng: <code id="tcCmd" style="font-size:12px"></code></div>
       </div>
     </div>
@@ -279,6 +329,49 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
       <div class="body">
         <div id="xtTrangThai" class="muted" style="margin:6px 0 10px"></div>
         <div class="xt" id="xtAnh"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LÀM ĐẸP ===================== -->
+  <section class="tab" id="tab-lam-dep">
+    <div class="card">
+      <h3>Làm đẹp &amp; ánh sáng <small>chỉ áp lên clip hook (10 giây đầu) khi render; phần sau và cảnh kho giữ nguyên</small>
+        <span class="spacer"></span>
+        <span id="ldTrangThai" class="muted"></span>
+        <button class="btn sm" onclick="ldMacDinh()">Đặt lại</button>
+        <button class="btn blue sm" onclick="tcLuu()">Lưu – áp dụng khi render</button>
+      </h3>
+      <div class="body">
+        <div class="ld-wrap">
+          <div class="ld-anh">
+            <div class="row" style="margin:6px 0 8px">
+              <span class="muted">Ảnh mẫu:</span><span id="ldAnhTen" class="grow" style="font-size:12.5px;word-break:break-all"></span>
+              <button class="btn sm" onclick="ldChonAnh()">Chọn ảnh…</button>
+              <button class="btn sm" onclick="ldKhungHinh()">Lấy khung hình tập đầu</button>
+            </div>
+            <div id="ldXemThuTt" class="muted" style="margin-bottom:6px"></div>
+            <img id="ldAnh" alt="" style="display:none">
+          </div>
+          <div class="ld-sliders">
+            <label class="sw" style="margin-bottom:6px"><input type="checkbox" id="tc_lam_dep"> <b>Bật làm đẹp khi render</b></label>
+            <h4>Khuôn mặt</h4>
+            <div class="ld-sl"><label><span>Làm trắng da</span><b id="v_tc_ld_trang"></b></label><input type="range" id="tc_ld_trang" min="0" max="100" step="1"></div>
+            <div class="ld-sl"><label><span>Son môi</span><b id="v_tc_ld_son"></b></label><input type="range" id="tc_ld_son" min="0" max="100" step="1"></div>
+            <div class="row" style="margin:0 0 10px;font-size:13px">Màu son:
+              <label class="sw"><input type="radio" name="tc_ld_son_mau" value="hong"> hồng</label>
+              <label class="sw"><input type="radio" name="tc_ld_son_mau" value="do"> đỏ</label>
+              <label class="sw"><input type="radio" name="tc_ld_son_mau" value="cam"> cam</label>
+            </div>
+            <h4>Ánh sáng &amp; màu <small class="muted">(cả khung, chỉnh theo ảnh mẫu)</small></h4>
+            <div class="ld-sl"><label><span>Sức sống</span><b id="v_tc_ld_suc_song"></b></label><input type="range" id="tc_ld_suc_song" min="-100" max="100" step="1"></div>
+            <div class="ld-sl"><label><span>Độ sáng</span><b id="v_tc_ld_sang"></b></label><input type="range" id="tc_ld_sang" min="-100" max="100" step="1"></div>
+            <div class="ld-sl"><label><span>Tương phản</span><b id="v_tc_ld_tuong_phan"></b></label><input type="range" id="tc_ld_tuong_phan" min="-100" max="100" step="1"></div>
+            <div class="ld-sl"><label><span>Nhiệt độ màu</span><b id="v_tc_ld_nhiet"></b></label><input type="range" id="tc_ld_nhiet" min="-100" max="100" step="1"><div class="muted" style="display:flex;justify-content:space-between"><span>lạnh</span><span>ấm</span></div></div>
+            <p class="hint">Kéo thanh trượt, thả tay là ảnh xem thử cập nhật (khoảng 1 giây; lần đầu 3–4 giây để dò điểm mặt). Da và môi tính theo <b>478 điểm mặt từng khung hình</b> (MediaPipe) nên bám theo khi bác sĩ nói, cử động; sức sống, sáng, tương phản, nhiệt độ màu dùng filter ffmpeg. Khi render, clip hook được xử lý trước (vài giây), bản đã làm đẹp lưu ở <code>Làm đẹp\</code> trong thư mục kết quả, chạy lại cùng tham số thì dùng lại. Nhớ bấm <b>Lưu</b>.</p>
+            <div class="muted">Tham số: <code id="ldCmd" style="font-size:12px"></code></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -326,7 +419,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
   <!-- ===================== CÀI ĐẶT ===================== -->
   <section class="tab" id="tab-cai-dat">
     <div class="card">
-      <h3>Thư mục kết quả <small>video _full_, phụ đề .srt, thư mục Drive tải về</small></h3>
+      <h3>Thư mục kết quả <small>thư mục Drive tải về; video _full_, ảnh bố cục, .srt, file link minh họa gom vào done\&lt;tên tập&gt;\</small></h3>
       <div class="body">
         <div class="row">
           <input id="cdThuMucRa" type="text" class="grow" placeholder="trống = Downloads" spellcheck="false">
@@ -334,7 +427,8 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <button class="btn" onclick="cdLuu()">Lưu</button>
           <button class="btn" onclick="$('cdThuMucRa').value='';cdLuu()">Về Downloads</button>
         </div>
-        <p class="hint">Đang dùng: <b id="cdThuMucRaThuc"></b> · <button class="btn link sm" onclick="api('/api/mo',{loai:'thu_muc_ra'})">mở</button></p>
+        <p class="hint">Đang dùng: <b id="cdThuMucRaThuc"></b> · <button class="btn link sm" onclick="api('/api/mo',{loai:'thu_muc_ra'})">mở</button><br>
+          Video đã xong: <b id="cdThuMucDone"></b> · <button class="btn link sm" onclick="api('/api/mo',{loai:'done'})">mở</button> — mỗi tập một thư mục con gồm video, ảnh bố cục, phụ đề và file <code>&lt;tên&gt;_minh_hoa_&lt;stamp&gt;.txt</code> (cảnh minh họa nào ở mốc nào, dùng Link Drive nào).</p>
       </div>
     </div>
     <div class="card">
@@ -371,6 +465,7 @@ let aiChon = 'claude', aiBusy = false;
 const TAB_INFO = {
   'ghep': ['Ghép video', 'Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề'],
   'chinh-sua': ['Chỉnh sửa', 'Bố cục · màu · âm thanh · phụ đề · phần sau · render — áp cho mọi tập'],
+  'lam-dep': ['Làm đẹp', 'Làm trắng da · son môi · sức sống · ánh sáng — chỉnh theo ảnh mẫu, chỉ áp cho clip hook'],
   'ai': ['Kết nối AI', 'Claude · GPT · Gemini qua tài khoản đang đăng nhập'],
   'nhat-ky': ['Nhật ký', 'Toàn bộ log của phiên này'],
   'cai-dat': ['Cài đặt', 'Thư mục kết quả, địa chỉ server'],
@@ -385,6 +480,9 @@ async function api(path, body){
   }catch(e){ toast('Mất kết nối server: ' + e, true); return {ok:false}; }
 }
 function saoChep(t){ try{ navigator.clipboard.writeText(t); toast('Đã sao chép.'); } catch(e){ toast('Không sao chép được: ' + e, true); } }
+/* checkbox "Hỏi GPT mới khi chạy" (thẻ Hàng đợi) = tùy chọn minh_hoa_hoi_lai; đang gửi thì tick() không ghi đè */
+let hoiLaiDangGui = false;
+async function datHoiLai(el){ hoiLaiDangGui = true; try{ const j = await api('/api/set_minh_hoa_hoi_lai', {bat: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hoiLaiDangGui = false; } }
 
 /* ---------- tab ---------- */
 function moTab(name){
@@ -393,6 +491,7 @@ function moTab(name){
   const [t, sub] = TAB_INFO[name] || ['', '']; $('tbTitle').textContent = t; $('tbSub').textContent = sub;
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'nhat-ky') { const p = $('logFull'); p.scrollTop = p.scrollHeight; }
+  if (name === 'lam-dep' && $('ldAnh').style.display === 'none') ldHen(50);   // mở tab lần đầu -> tính ảnh xem thử
 }
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => moTab(b.dataset.tab));
 const tabTuHash = () => moTab(TAB_INFO[location.hash.slice(1)] ? location.hash.slice(1) : 'ghep');
@@ -418,6 +517,45 @@ function renderGoc(g){
     h += g.clips.map(c => `<span class="f">${esc(c.ten)} <span class="muted">${c.giay.toFixed(1)}s</span></span>`).join(''); }
   $('gocInfo').innerHTML = h;
 }
+
+/* ---------- thẻ 3: kho video minh họa ---------- */
+let mhDirty = {sheet: false, dir: false}, mhLast = '';
+$('mhSheet').addEventListener('input', () => mhDirty.sheet = true);
+$('mhSheet').addEventListener('keydown', e => { if (e.key === 'Enter') luuMhSheet(); });
+$('mhDir').addEventListener('input', () => mhDirty.dir = true);
+$('mhDir').addEventListener('keydown', e => { if (e.key === 'Enter') luuMhDir(); });
+async function luuMhSheet(){ const j = await api('/api/set_minh_hoa_sheet', {sheet: $('mhSheet').value}); if (j.ok) mhDirty.sheet = false; }
+async function luuMhDir(){ const j = await api('/api/set_minh_hoa_dir', {dir: $('mhDir').value}); if (j.ok) mhDirty.dir = false; }
+async function chonThuMucMh(){ toast('Đang mở hộp thoại chọn thư mục…'); mhDirty.dir = false; await api('/api/chon_thu_muc_minh_hoa'); }
+const MH_TT = {file_may: ['ok', 'có trong thư mục'], drive_da_tai: ['ok', 'đã tải từ Drive'], drive_chua_tai: ['warn', 'có link, chưa tải'],
+  link_la: ['bad', 'link không nhận ra'], thieu: ['bad', 'chưa có video mẫu']};
+function renderMinhHoa(m){
+  if (!m) return;
+  if (!mhDirty.sheet && document.activeElement !== $('mhSheet')) $('mhSheet').value = m.sheet || '';
+  if (!mhDirty.dir && document.activeElement !== $('mhDir')) $('mhDir').value = m.dir || '';
+  const k = m.kho || {}, dong = k.dong || [];
+  $('btnMhTai').disabled = !!k.dang || !m.sheet; $('btnMhDoc').disabled = !!k.dang || !m.sheet;
+  let info = '';
+  if (k.dang === 'doc') info = '<span class="chip run"><span class="spin"></span> Đang đọc Sheet…</span>';
+  else if (k.dang === 'tai') info = '<span class="chip run"><span class="spin"></span> Đang tải clip từ Drive…</span>';
+  else if (!m.sheet) info = '<span class="chip warn">Chưa có link Sheet kho</span>';
+  else if (k.loi) info = `<span class="chip bad">Không đọc được Sheet</span> <span class="err-t">${esc(k.loi)}</span>`;
+  else if (!dong.length) info = '<span class="chip warn">Sheet chưa có dòng nào có từ khóa</span>';
+  else info = `Sheet: ${dong.length} dòng · <span class="chip ok">${k.co} có video</span>`
+    + (k.chua_tai ? ` <span class="chip warn">${k.chua_tai} có link chưa tải</span>` : '')
+    + (k.thieu ? ` <span class="chip bad">${k.thieu} chưa có video mẫu</span>` : '');
+  if (!m.ton_tai) info += ' <span class="chip bad">Không thấy thư mục video mẫu</span>';
+  else if (m.mac_dinh) info += ' <span class="chip">thư mục mặc định của tool</span>';
+  if (!m.bat) info += ' <span class="chip warn">đang TẮT "Chèn cảnh minh họa" ở tab Chỉnh sửa</span>';
+  $('mhInfo').innerHTML = info;
+  $('mhTomTat').textContent = k.luc ? `đọc Sheet lúc ${k.luc}` : '';
+  const key = JSON.stringify(dong);
+  if (key === mhLast) return; mhLast = key;
+  $('mhBody').innerHTML = dong.map(d => { const [cls, nhan] = MH_TT[d.trang_thai] || ['', d.trang_thai];
+    return `<tr><td>${esc(d.id)}</td><td>${esc(d.ten)}</td><td class="muted">${esc(d.tu_khoa)}</td>`
+      + `<td><span class="chip ${cls}">${nhan}</span>${d.file ? ` <span class="muted">${esc(d.file)}</span>` : ''}</td></tr>`; }).join('')
+    || `<tr><td colspan="4" class="empty">${k.dang === 'doc' ? 'Đang đọc Sheet…' : 'Chưa có dòng nào'}</td></tr>`;
+}
 function stCell(it, now){
   if (it.status === 'dang') return `<span class="chip run"><span class="spin"></span> ${esc(it.buoc || 'Đang chạy')}</span> <span class="muted" data-bd="${it.bat_dau||''}">${it.bat_dau ? fmt(now - it.bat_dau) : ''}</span>`;
   if (it.status === 'xong') return `<span class="chip ok">✓ Xong</span><div class="muted">làm ${fmt(it.giay_chay||0)}${it.thoi_luong ? ` · video ${fmt(it.thoi_luong)}` : ''}</div>`;
@@ -426,7 +564,8 @@ function stCell(it, now){
 }
 function clipCell(it){
   if (it.phan_sau) return `<div class="muted" style="white-space:normal;max-width:300px">${esc(it.phan_sau)}</div>` + (it.seed ? `<div class="muted">seed ${it.seed}</div>` : '')
-    + (it.minh_hoa ? `<div class="muted" style="white-space:normal;max-width:300px;margin-top:3px"><b>Minh họa:</b> ${esc(it.minh_hoa)}</div>` : '');
+    + (it.minh_hoa ? `<div class="muted" style="white-space:normal;max-width:300px;margin-top:3px"><b>Minh họa:</b> ${esc(it.minh_hoa)}</div>` : '')
+    + (it.am_thanh ? `<div class="muted" style="white-space:normal;max-width:300px;margin-top:3px"><b>Tiếng chuyển cảnh:</b> ${esc(it.am_thanh)}</div>` : '');
   return `<span class="muted">${it.status === 'cho' ? 'xáo ngẫu nhiên khi chạy' : it.status === 'dang' ? 'đang xáo…' : '—'}</span>`;
 }
 function kqCell(it){
@@ -434,6 +573,7 @@ function kqCell(it){
   if (it.out && it.status === 'xong'){ b.push(`<button class="btn sm blue" onclick="api('/api/mo',{id:${it.id},loai:'video'})">▶ Xem</button>`);
     b.push(`<button class="btn sm" title="Mở thư mục, chọn sẵn file video" onclick="api('/api/mo',{id:${it.id},loai:'thu_muc_video'})">📁</button>`); }
   if (it.preview) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'preview'})">ảnh bố cục</button>`);
+  if (it.minh_hoa_file) b.push(`<button class="btn link" title="Cảnh minh họa nào ở mốc phút:giây nào, dùng Link Drive nào" onclick="api('/api/mo',{id:${it.id},loai:'link_minh_hoa'})">link minh họa</button>`);
   if (it.thu_muc) b.push(`<button class="btn link" onclick="api('/api/mo',{id:${it.id},loai:'tai'})">file Drive</button>`);
   return b.join(' ');
 }
@@ -476,7 +616,9 @@ function renderItems(s){
 
 /* ---------- tab Chỉnh sửa ---------- */
 const TC_IDS = ['tc_ti_le','tc_khoang_cach','tc_chinh_mau','tc_chuan_am','tc_lufs','tc_cua_so_khop','tc_lech_giong','tc_sub','tc_sub_font','tc_sub_co','tc_sub_le_duoi','tc_model_sub','tc_seed',
-  'tc_minh_hoa','tc_minh_hoa_sheet','tc_minh_hoa_ai','tc_minh_hoa_model','tc_minh_hoa_giay','tc_minh_hoa_ti_le'];
+  'tc_minh_hoa','tc_minh_hoa_sheet','tc_minh_hoa_ai','tc_minh_hoa_model','tc_minh_hoa_giay','tc_minh_hoa_ti_le','tc_minh_hoa_che_do','tc_minh_hoa_chuyen','tc_minh_hoa_chuyen_kieu','tc_minh_hoa_anh_dong','tc_minh_hoa_sfx','tc_minh_hoa_sfx_db',
+  'tc_lam_dep','tc_ld_trang','tc_ld_son','tc_ld_suc_song','tc_ld_sang','tc_ld_tuong_phan','tc_ld_nhiet'];
+const LD_IDS = ['tc_ld_trang','tc_ld_son','tc_ld_suc_song','tc_ld_sang','tc_ld_tuong_phan','tc_ld_nhiet'];
 function tcFill(tc){
   $('tc_ti_le').value = Math.round(tc.ti_le_tieude * 100); $('tc_khoang_cach').value = tc.khoang_cach;
   $('tc_chinh_mau').checked = tc.chinh_mau; $('tc_chuan_am').checked = tc.chuan_am;
@@ -485,8 +627,16 @@ function tcFill(tc){
   $('tc_seed').value = tc.seed ?? '';
   $('tc_minh_hoa').checked = !!tc.minh_hoa; $('tc_minh_hoa_sheet').value = tc.minh_hoa_sheet || ''; $('tc_minh_hoa_ai').value = tc.minh_hoa_ai || 'gpt';
   $('tc_minh_hoa_model').value = tc.minh_hoa_model || ''; $('tc_minh_hoa_giay').value = tc.minh_hoa_giay; $('tc_minh_hoa_ti_le').value = Math.round((tc.minh_hoa_ti_le || 0.45) * 100);
+  $('tc_minh_hoa_che_do').value = tc.minh_hoa_che_do || 'phu_kin';
+  $('tc_minh_hoa_chuyen').value = tc.minh_hoa_chuyen ?? 0.5; $('tc_minh_hoa_anh_dong').checked = tc.minh_hoa_anh_dong !== false;
+  $('tc_minh_hoa_sfx').checked = tc.minh_hoa_sfx !== false; $('tc_minh_hoa_sfx_db').value = tc.minh_hoa_sfx_db ?? -4;
+  $('tc_minh_hoa_chuyen_kieu').value = tc.minh_hoa_chuyen_kieu || 'ngau_nhien'; tcChuyenKieu();
   document.querySelectorAll('input[name=tc_che_do]').forEach(r => r.checked = r.value === tc.che_do);
   document.querySelectorAll('input[name=tc_do_phan_giai]').forEach(r => r.checked = +r.value === +tc.do_phan_giai);
+  $('tc_lam_dep').checked = !!tc.lam_dep;
+  LD_IDS.forEach(id => { $(id).value = tc[id.slice(3)] ?? 0; });
+  document.querySelectorAll('input[name=tc_ld_son_mau]').forEach(r => r.checked = r.value === (tc.ld_son_mau || 'hong'));
+  ldNhan();
   tcCmd();
 }
 function tcLay(){
@@ -496,7 +646,16 @@ function tcLay(){
     sub: $('tc_sub').checked, sub_font: v('tc_sub_font'), sub_co: +v('tc_sub_co'), sub_le_duoi: +v('tc_sub_le_duoi'), model_sub: v('tc_model_sub'),
     seed: v('tc_seed') === '' ? null : +v('tc_seed'), che_do: rad('tc_che_do') || 'auto', do_phan_giai: +(rad('tc_do_phan_giai') || 0),
     minh_hoa: $('tc_minh_hoa').checked, minh_hoa_sheet: v('tc_minh_hoa_sheet').trim(), minh_hoa_ai: v('tc_minh_hoa_ai'), minh_hoa_model: v('tc_minh_hoa_model').trim(),
-    minh_hoa_giay: +v('tc_minh_hoa_giay') || 6, minh_hoa_ti_le: (+v('tc_minh_hoa_ti_le') || 45) / 100 };
+    minh_hoa_giay: +v('tc_minh_hoa_giay') || 6, minh_hoa_ti_le: (+v('tc_minh_hoa_ti_le') || 45) / 100, minh_hoa_che_do: v('tc_minh_hoa_che_do') || 'phu_kin',
+    minh_hoa_chuyen: v('tc_minh_hoa_chuyen') === '' ? 0.5 : +v('tc_minh_hoa_chuyen'), minh_hoa_chuyen_kieu: v('tc_minh_hoa_chuyen_kieu') || 'ngau_nhien', minh_hoa_anh_dong: $('tc_minh_hoa_anh_dong').checked,
+    minh_hoa_sfx: $('tc_minh_hoa_sfx').checked, minh_hoa_sfx_db: v('tc_minh_hoa_sfx_db') === '' ? -4 : +v('tc_minh_hoa_sfx_db'),
+    lam_dep: $('tc_lam_dep').checked, ld_trang: +v('tc_ld_trang'), ld_son: +v('tc_ld_son'), ld_son_mau: rad('tc_ld_son_mau') || 'hong',
+    ld_suc_song: +v('tc_ld_suc_song'), ld_sang: +v('tc_ld_sang'), ld_tuong_phan: +v('tc_ld_tuong_phan'), ld_nhiet: +v('tc_ld_nhiet') };
+}
+function tcChuyenKieu(){   // ô giây chỉ dùng với mờ chồng; ngẫu nhiên lấy thời gian gốc của xfade (1s)
+  const nn = $('tc_minh_hoa_chuyen_kieu').value === 'ngau_nhien';
+  $('tc_minh_hoa_chuyen').disabled = nn; $('tc_minh_hoa_chuyen_u').textContent = nn ? 'giây — không dùng, ffmpeg tự lấy 1 giây gốc' : 'giây (0 = cắt cụp)';
+  $('tc_minh_hoa_sfx').disabled = !nn; $('tc_minh_hoa_sfx_db').disabled = !nn;   // tiếng chuyển cảnh chỉ đi với xfade ngẫu nhiên
 }
 function tcCmd(){
   const t = tcLay(), a = [`--ti-le-tieude ${t.ti_le_tieude}`, `--khoang-cach ${t.khoang_cach}`];
@@ -504,15 +663,57 @@ function tcCmd(){
   if (!t.chuan_am) a.push('--khong-chuan-am'); else { a.push(`--lufs ${t.lufs}`, `--lech-giong ${t.lech_giong}`); if (t.cua_so_khop !== null) a.push(`--cua-so-khop ${t.cua_so_khop}`); }
   if (!t.sub) a.push('--khong-sub'); else { a.push(`--sub-font "${t.sub_font}"`, `--sub-co ${t.sub_co}`, `--sub-le-duoi ${t.sub_le_duoi}`); if (t.model_sub) a.push(`--model-sub ${t.model_sub}`); }
   if (t.che_do !== 'auto') a.push('--' + t.che_do); if (t.do_phan_giai) a.push(`--do-phan-giai ${t.do_phan_giai}`); if (t.seed !== null) a.push(`--seed ${t.seed}`);
-  if (t.minh_hoa && t.minh_hoa_sheet){ a.push(`--minh-hoa "${t.minh_hoa_sheet.length > 60 ? t.minh_hoa_sheet.slice(0, 57) + '…' : t.minh_hoa_sheet}"`, `--minh-hoa-ai ${t.minh_hoa_ai}`, `--minh-hoa-giay ${t.minh_hoa_giay}`, `--minh-hoa-ti-le ${t.minh_hoa_ti_le}`); if (t.minh_hoa_model) a.push(`--minh-hoa-model ${t.minh_hoa_model}`); }
+  if (t.minh_hoa && t.minh_hoa_sheet){ a.push(`--minh-hoa "${t.minh_hoa_sheet.length > 60 ? t.minh_hoa_sheet.slice(0, 57) + '…' : t.minh_hoa_sheet}"`, `--minh-hoa-ai ${t.minh_hoa_ai}`, `--minh-hoa-giay ${t.minh_hoa_giay}`, `--minh-hoa-ti-le ${t.minh_hoa_ti_le}`, `--minh-hoa-che-do ${t.minh_hoa_che_do}`, `--minh-hoa-chuyen ${t.minh_hoa_chuyen}`, `--minh-hoa-chuyen-kieu ${t.minh_hoa_chuyen_kieu}`); if (!t.minh_hoa_anh_dong) a.push('--minh-hoa-anh-tinh');
+    if (t.minh_hoa_chuyen_kieu === 'ngau_nhien') a.push(t.minh_hoa_sfx ? `--minh-hoa-sfx-db ${t.minh_hoa_sfx_db}` : '--khong-minh-hoa-sfx'); if (t.minh_hoa_model) a.push(`--minh-hoa-model ${t.minh_hoa_model}`);
+    if (state.tuy_chon && state.tuy_chon.minh_hoa_hoi_lai) a.push('--minh-hoa-hoi-lai'); }
+  if (t.lam_dep) a.push(`--lam-dep "${ldChuoi()}"`);
   $('tcCmd').textContent = a.join(' ');
   $('tcTrangThai').textContent = tcDirty ? 'có thay đổi chưa lưu' : (tcLoaded ? 'đã lưu' : '');
+  $('ldTrangThai').textContent = $('tcTrangThai').textContent;
   $('cntCs').innerHTML = tcDirty ? '<b>●</b>' : '';
+  $('cntLd').innerHTML = tcDirty ? '<b>●</b>' : (t.lam_dep ? 'bật' : '');
 }
 TC_IDS.forEach(id => $(id).addEventListener('input', () => { tcDirty = true; tcCmd(); }));
 document.querySelectorAll('input[name=tc_che_do],input[name=tc_do_phan_giai]').forEach(r => r.addEventListener('change', () => { tcDirty = true; tcCmd(); }));
 async function tcLuu(){ const j = await api('/api/save_tuy_chon', {tuy_chon: tcLay()}); if (j.ok){ tcDirty = false; tcFill(j.tuy_chon); } }
 async function tcMacDinh(){ if (!confirm('Đưa mọi tùy chọn chỉnh sửa về mặc định?')) return; const j = await api('/api/mac_dinh_tuy_chon'); if (j.ok){ tcDirty = false; tcFill(j.tuy_chon); } }
+
+/* ---------- tab Làm đẹp: thanh trượt -> xem thử trên ảnh mẫu (server tính đúng hai bước sẽ render) ---------- */
+function ldLay(){ const v = id => +$(id).value; return { trang: v('tc_ld_trang'), son: v('tc_ld_son'),
+  son_mau: (document.querySelector('input[name=tc_ld_son_mau]:checked') || {}).value || 'hong',
+  suc_song: v('tc_ld_suc_song'), sang: v('tc_ld_sang'), tuong_phan: v('tc_ld_tuong_phan'), nhiet: v('tc_ld_nhiet') }; }
+function ldChuoi(){ return Object.entries(ldLay()).map(([k, x]) => k + '=' + x).join(','); }
+function ldNhan(){ LD_IDS.forEach(id => { $('v_' + id).textContent = $(id).value; }); $('ldCmd').textContent = ldChuoi(); }
+var ldTimer = null, ldDangTinh = false, ldLai = false, ldAnhCu = null, ldSanSang = true;   // var: moTab() gọi ldHen() ngay lúc tải trang, trước dòng này
+function ldHen(ms){ clearTimeout(ldTimer); ldTimer = setTimeout(ldXemThu, ms ?? 350); }
+async function ldXemThu(){
+  if (!$('tab-lam-dep').classList.contains('active')) return;
+  if (ldDangTinh){ ldLai = true; return; }
+  ldDangTinh = true; $('ldXemThuTt').innerHTML = '<span class="chip run"><span class="spin"></span> Đang tính ảnh xem thử…</span>';
+  try{
+    const r = await fetch('/api/lam_dep_xem_thu', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tc: ldLay()})});
+    const j = await r.json();
+    if (j.ok){ $('ldAnh').src = j.anh; $('ldAnh').style.display = '';
+      $('ldXemThuTt').textContent = (j.co_mat ? 'Trên: cận mặt · Dưới: cả khung — trái gốc, phải đã chỉnh' : 'Không thấy mặt trong ảnh mẫu — chỉ xem được phần ánh sáng & màu') + ` (${j.giay}s)`; }
+    else { $('ldXemThuTt').textContent = j.msg || 'Xem thử lỗi'; }
+  }catch(e){ $('ldXemThuTt').textContent = 'Mất kết nối server'; }
+  finally{ ldDangTinh = false; if (ldLai){ ldLai = false; ldHen(50); } }
+}
+LD_IDS.forEach(id => { $(id).addEventListener('input', ldNhan); $(id).addEventListener('change', () => ldHen()); });
+document.querySelectorAll('input[name=tc_ld_son_mau]').forEach(r => r.addEventListener('change', () => { tcDirty = true; ldNhan(); tcCmd(); ldHen(); }));
+function ldMacDinh(){ const m = (state && state.tuy_chon_mac_dinh) || {}; LD_IDS.forEach(id => { $(id).value = m[id.slice(3)] ?? 0; });
+  document.querySelectorAll('input[name=tc_ld_son_mau]').forEach(r => r.checked = r.value === (m.ld_son_mau || 'hong')); tcDirty = true; ldNhan(); tcCmd(); ldHen(50); }
+async function ldChonAnh(){ toast('Đang mở hộp thoại chọn ảnh…'); await api('/api/lam_dep_chon_anh'); }
+async function ldKhungHinh(){ await api('/api/lam_dep_khung_hinh'); }
+function renderLamDep(l){
+  if (!l) return;
+  const ten = l.anh ? l.anh.split(/[\\/]/).pop() : '';
+  $('ldAnhTen').textContent = l.anh ? ten + (l.ton_tai ? '' : '  (không thấy file)') : 'chưa có — bấm Chọn ảnh… hoặc Lấy khung hình tập đầu';
+  $('ldAnhTen').title = l.anh || '';
+  if (!l.san_sang){ ldSanSang = false; $('ldXemThuTt').textContent = l.ly_do || 'Chưa sẵn sàng'; }
+  if (ldAnhCu !== null && ldAnhCu !== l.anh) ldHen(50);     // đổi ảnh mẫu -> tính lại
+  ldAnhCu = l.anh;
+}
 async function xemTruoc(){ const id = $('xtChon').value; if (!id) return toast('Hàng đợi trống — thêm link trước.', true);
   if (tcDirty && !confirm('Tùy chọn chưa lưu — xem trước dùng bản ĐÃ LƯU. Tiếp tục?')) return; await api('/api/xem_truoc', {id: +id}); }
 function renderXemTruoc(x){
@@ -593,7 +794,7 @@ $('cdThuMucRa').addEventListener('input', () => cdDirty = true);
 async function cdLuu(){ const j = await api('/api/save_cai_dat', {thu_muc_ra: $('cdThuMucRa').value}); if (j.ok) cdDirty = false; }
 function renderCaiDat(c){
   if (!cdDirty && document.activeElement !== $('cdThuMucRa')) $('cdThuMucRa').value = c.thu_muc_ra || '';
-  $('cdThuMucRaThuc').textContent = c.thu_muc_ra_thuc; $('cdUrl').textContent = c.url; $('cdVer').textContent = c.phien_ban;
+  $('cdThuMucRaThuc').textContent = c.thu_muc_ra_thuc; $('cdThuMucDone').textContent = c.thu_muc_done || ''; $('cdUrl').textContent = c.url; $('cdVer').textContent = c.phien_ban;
   $('cdFile').textContent = c.file_trang_thai; $('cdGocMd').textContent = c.goc_mac_dinh; $('cdXt').textContent = c.thu_muc_xem_truoc;
   $('sTxt').textContent = 'server ' + c.url.replace('http://', '').replace(/\/$/, ''); $('sVer').textContent = 'bản ' + c.phien_ban;
 }
@@ -606,7 +807,8 @@ async function tick(){
     if (s.log_seq < seq){ seq = 0; logLines = []; }
     seq = s.log_seq; state = s;
     $('sDot').className = 'dot on';
-    renderGoc(s.goc); renderItems(s); renderLog(s.logs); renderXemTruoc(s.xem_truoc); renderAi(s.ai); renderCaiDat(s.cai_dat);
+    renderGoc(s.goc); renderMinhHoa(s.minh_hoa); renderItems(s); renderLog(s.logs); renderXemTruoc(s.xem_truoc); renderAi(s.ai); renderCaiDat(s.cai_dat); renderLamDep(s.lam_dep);
+    if (!hoiLaiDangGui) $('mhHoiLai').checked = !!(s.tuy_chon && s.tuy_chon.minh_hoa_hoi_lai);
     if (!tcDirty && !TC_IDS.some(id => document.activeElement === $(id))){ tcFill(s.tuy_chon); tcLoaded = true; }
   }catch(e){ $('sDot').className = 'dot'; $('sTxt').textContent = 'mất kết nối server'; $('chipRun').className = 'chip bad'; $('chipRun').textContent = 'Mất kết nối server'; }
   finally{ busy = false; }

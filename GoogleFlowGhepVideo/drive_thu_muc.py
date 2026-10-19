@@ -122,23 +122,45 @@ def tai_file(sess: requests.Session, file_id: str, dest: Path, log: Callable[[st
 
 def tai_thu_muc(link: str, dest: Path, log: Callable[[str], None] = print,
                 dung: Callable[[], bool] | None = None) -> tuple[str, list[Path]]:
-    """Tải mọi file của thư mục Drive về dest (tạo mới). -> (tên thư mục trên Drive, [file đã tải])."""
+    """Tải mọi file của thư mục Drive về dest. File đã có trong dest (cùng tên, khác rỗng) thì giữ, không tải lại
+    -> chạy lại cùng thư mục không tốn mạng. -> (tên thư mục trên Drive, [file])."""
     fid = folder_id(link)
     if not fid:
         raise DriveLoi(f"Không phải link thư mục Drive: {link}")
     ten, files = liet_ke(fid)
     if not files:
         raise DriveLoi(f"Thư mục '{ten or fid}' trống.")
+    return ten, _tai_cac_file(ten, files, dest, log, dung)
+
+
+def _tai_cac_file(ten: str, files: list[tuple[str, str]], dest: Path, log, dung) -> list[Path]:
     dest.mkdir(parents=True, exist_ok=True)
     log(f"  Thư mục Drive '{ten}': {len(files)} file -> {dest}")
     sess = requests.Session()
     ket_qua = []
     for i, (file_id, name) in enumerate(files, 1):
         p = dest / ten_an_toan(name)
-        n = tai_file(sess, file_id, p, log=log, dung=dung)
-        log(f"    [{i}/{len(files)}] {p.name} ({n / 1048576:.2f} MB)")
+        if p.is_file() and p.stat().st_size > 0:
+            log(f"    [{i}/{len(files)}] {p.name} đã có, không tải lại")
+        else:
+            n = tai_file(sess, file_id, p, log=log, dung=dung)
+            log(f"    [{i}/{len(files)}] {p.name} ({n / 1048576:.2f} MB)")
         ket_qua.append(p)
-    return ten, ket_qua
+    return ket_qua
+
+
+def tai_thu_muc_theo_ten(link: str, goc: Path, log: Callable[[str], None] = print,
+                         dung: Callable[[], bool] | None = None) -> tuple[str, Path, list[Path]]:
+    """Tải thư mục Drive về goc\\<tên thư mục trên Drive> (= tên kịch bản, ký tự cấm đổi thành _). Thư mục đã có thì
+    dùng lại, chỉ tải file còn thiếu. -> (tên, thư mục đích, [file])."""
+    fid = folder_id(link)
+    if not fid:
+        raise DriveLoi(f"Không phải link thư mục Drive: {link}")
+    ten, files = liet_ke(fid)
+    if not files:
+        raise DriveLoi(f"Thư mục '{ten or fid}' trống.")
+    dest = Path(goc) / ten_an_toan(ten or fid)[:120]
+    return ten, dest, _tai_cac_file(ten, files, dest, log, dung)
 
 
 if __name__ == "__main__":                       # thử nhanh: python drive_thu_muc.py <link> [thư mục đích]
