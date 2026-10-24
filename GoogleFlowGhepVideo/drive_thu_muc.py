@@ -159,7 +159,9 @@ def tai_thu_muc_theo_ten(link: str, goc: Path, log: Callable[[str], None] = prin
     ten, files = liet_ke(fid)
     if not files:
         raise DriveLoi(f"Thư mục '{ten or fid}' trống.")
-    dest = Path(goc) / ten_an_toan(ten or fid)[:120]
+    # cắt 120 ký tự RỒI mới bỏ khoảng trắng/dấu chấm cuối: tên dài cắt đúng chỗ dấu cách -> Windows tạo thư mục không có
+    # dấu cách cuối nhưng mở file "…chắc \x.part" thì ENOENT (tập 'táo bón… thêm liều chưa chắc tốt' 22/10)
+    dest = Path(goc) / (ten_an_toan(ten or fid)[:120].rstrip(" .") or "file")
     return ten, dest, _tai_cac_file(ten, files, dest, log, dung)
 
 

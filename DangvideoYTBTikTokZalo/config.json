@@ -22,12 +22,7 @@
     "tiktok",
     "zalo"
   ],
-  "gio_da_dung": [
-    "2026-10-19T18:00",
-    "2026-10-20T08:00",
-    "2026-10-20T18:00",
-    "2026-10-21T08:00"
-  ],
+  "gio_da_dung": [],
   "platforms": {
     "youtube": {
       "browser_path": "",

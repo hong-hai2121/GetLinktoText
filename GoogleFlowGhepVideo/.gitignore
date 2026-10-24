@@ -5,3 +5,10 @@ video minh họa/
 
 # model MediaPipe Face Landmarker (lam_dep.py tự tải, 3,7 MB)
 *.task
+
+# cổng server dùng lần gần nhất (riêng từng máy, xem make_server)
+cong.txt
+
+# OAuth client Google (tải Drive / ghi Sheet) + token — không đưa lên git
+client_secret*.json
+token*.json

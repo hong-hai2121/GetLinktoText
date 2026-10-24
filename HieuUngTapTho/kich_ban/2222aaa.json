@@ -1,0 +1,43 @@
+{
+  "ghi_chu": "Tư thế em bé (child's pose). Mốc giờ lấy từ lời nói (chep_loi.py); lời đi trước động tác ~2s nên hiệu ứng giữ tới khi động tác xong.",
+  "sua_loi": {"rũi": "duỗi", "chán": "trán", "sang,": "sang"},
+  "buoc": [
+    {"tu": 0.0,   "den": 4.75,  "so": 1, "chinh": "QUỲ 4 ĐIỂM",        "phu": "Hai đầu gối rộng bằng hông"},
+    {"tu": 4.75,  "den": 7.25,  "so": 2, "chinh": "NGỒI LÙI VỀ GÓT",   "phu": "Mông hướng về gót chân"},
+    {"tu": 7.25,  "den": 9.6,   "so": 3, "chinh": "CÚI NGƯỜI VỀ TRƯỚC", "phu": "Hạ thân người xuống"},
+    {"tu": 9.6,   "den": 13.2,  "so": 4, "chinh": "DUỖI DÀI HAI TAY",  "phu": "Đặt trên mặt giường"},
+    {"tu": 13.2,  "den": 17.15, "so": 5, "chinh": "TRÁN CHẠM GIƯỜNG",  "phu": "Hoặc chạm vào gối"},
+    {"tu": 17.15, "den": 19.95, "so": 6, "chinh": "GIỮ TƯ THẾ",        "phu": "Thở thật chậm"},
+    {"tu": 19.95, "den": 24.7,  "canh_bao": true, "chinh": "NẾU ĐAU GỐI", "phu": "Kê gối mỏng dưới đầu gối"},
+    {"tu": 24.7,  "den": 99,    "canh_bao": true, "chinh": "NẾU ĐAU GỐI", "phu": "Hoặc ngồi cúi nhẹ về trước"}
+  ],
+  "hieu_ung": [
+    {"loai": "vong", "tu": 1.2, "den": 4.75, "diem": "knee", "ban_kinh": 62, "mau": "vang",
+     "nhan": "ĐẦU GỐI", "nhan_lech": [-230, 30]},
+    {"loai": "vong", "tu": 2.2, "den": 4.75, "diem": "hip", "ban_kinh": 62, "mau": "vang",
+     "nhan": "HÔNG", "nhan_lech": [165, -95]},
+    {"loai": "so_do_rong", "tu": 2.2, "den": 4.75, "xy": [715, 470], "mau": "vang"},
+
+    {"loai": "mui_ten", "tu": 4.8, "den": 9.2, "co_dinh": true,
+     "tu_diem": "hip", "toi_diem": {"diem": "heel", "lech": [0, -45]}, "cong": 0.38, "mau": "cam",
+     "nhan": "MÔNG LÙI VỀ GÓT", "nhan_xy": [800, 900]},
+    {"loai": "vong", "tu": 4.8, "den": 9.2, "diem": "heel", "ban_kinh": 55, "mau": "cam",
+     "nhan": "GÓT CHÂN", "nhan_lech": [-70, 125]},
+
+    {"loai": "mui_ten", "tu": 7.4, "den": 10.8,
+     "tu_diem": {"diem": "shoulder", "lech": [-30, -70]}, "vec": [-250, 230], "cong": -0.4, "mau": "cam",
+     "nhan": "CÚI VỀ TRƯỚC", "nhan_lech_dau": [-60, -110]},
+
+    {"loai": "duoi", "tu": 9.7, "den": 13.2, "diem": ["shoulder", "elbow", "wrist", "index"], "mau": "xanh",
+     "nhan": "DUỖI DÀI 2 TAY", "nhan_xy": [300, 1075], "nhan_tre": 0.7},
+
+    {"loai": "vong", "tu": 13.3, "den": 17.15, "diem": {"diem": "ear", "lech": [-62, -5]}, "ban_kinh": 112, "mau": "luc",
+     "cham": [-15, 80], "nhan": "TRÁN CHẠM GIƯỜNG", "nhan_phu": "hoặc chạm vào gối", "nhan_xy": [360, 1000]},
+
+    {"loai": "tho", "tu": 17.3, "den": 25.4, "chu_ky": 8, "xy": [800, 705], "lung": true},
+
+    {"loai": "vong", "tu": 21.0, "den": 25.4, "diem": "knee", "ban_kinh": 62, "mau": "do"},
+    {"loai": "goi", "tu": 22.2, "den": 25.4, "diem": {"diem": "knee", "lech": [70, 48]}, "rong": 330, "cao": 46,
+     "goc": -6, "mau": "do", "nhan": "KÊ GỐI MỎNG", "nhan_lech": [0, 108]}
+  ]
+}

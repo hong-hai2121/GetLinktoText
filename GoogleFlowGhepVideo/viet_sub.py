@@ -37,6 +37,10 @@ THU_MUC_MODEL = [HERE / "models", HERE.parent / "whisper_cache"]   # ưu tiên t
 
 TOC_DO_UOC = 0.30      # giây/từ dùng khi phải ước lượng mốc ở đầu/cuối (không có từ neo)
 CUE_TOI_DA = 46        # số ký tự tối đa một câu phụ đề (libass tự xuống 2 dòng)
+CUE_TOI_DA_HOA = 34    # kiểu karaoke chữ IN HOA rộng hơn ~30% -> câu ngắn hơn để vẫn tối đa 2 dòng
+KIEU_SUB = ("karaoke", "thuong")   # karaoke = in hoa, trắng viền đen đậm, từ đang đọc tô vàng (ASS) | thuong = SRT như cũ
+MAU_NHAN = "&H00FFFF&"             # màu từ đang đọc, ASS ghi BGR: 00FFFF = vàng
+VIEN_KARAOKE = 2.5                 # độ dày viền đen theo thang 288 (2,5 ~ 17px trên video 1920; kiểu thường là 2)
 CUE_NGAN_NHAT = 0.9    # giây, câu phụ đề ngắn hơn thì kéo dài ra
 CUE_DEM_SAU = 0.15     # giây cộng thêm sau từ cuối
 DAU_HET_CAU = ".?!:;…"
@@ -267,6 +271,61 @@ def ghi_srt(cues: list[Cue], path: Path) -> None:
             f.write(f"{i}\n{_ts(c.start)} --> {_ts(c.end)}\n{c.text}\n\n")
 
 
+def _ts_ass(t: float) -> str:
+    t = max(0.0, t)
+    h, r = divmod(t, 3600)
+    m, s = divmod(r, 60)
+    return f"{int(h)}:{int(m):02d}:{s:05.2f}"
+
+
+def ghi_ass(cues: list[Cue], path: Path, W: int, H: int, font: str = "Arial", co: float = 11, le_duoi: int = 45,
+            hoa: bool = True, mau_nhan: str = MAU_NHAN, vien: float = VIEN_KARAOKE) -> int:
+    """Phụ đề ASS kiểu karaoke: cả câu chữ trắng viền đen đậm (IN HOA nếu `hoa`), TỪ ĐANG ĐỌC tô màu `mau_nhan`.
+    Mỗi từ một dòng Dialogue [mốc từ, mốc từ kế) chứa nguyên câu, chỉ từ đó mang thẻ màu -> chữ đứng yên, màu chạy.
+    PlayRes = kích thước video; cỡ chữ / lề / viền quy từ thang 288 (giống force_style) để cùng số thì cùng cỡ.
+    Trả về số dòng Dialogue."""
+    ky, kx = H / 288, W / 384
+    size, outline, shadow = round(co * ky), round(vien * ky), round(1 * ky)
+    mv, ml = round(le_duoi * ky), round(25 * kx)
+    dong = [
+        "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0",
+        "ScaledBorderAndShadow: yes", "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
+        "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+        "MarginR, MarginV, Encoding",
+        f"Style: Sub,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,"
+        f"{outline},{shadow},2,{ml},{ml},{mv},1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    def chu(s: str) -> str:
+        s = s.upper() if hoa else s
+        return s.replace("{", "(").replace("}", ")")      # ngoặc nhọn là thẻ ASS
+
+    n = 0
+    for c in cues:
+        ws = [t for t in c.tu if t.start is not None]
+        if not ws:
+            dong.append(f"Dialogue: 0,{_ts_ass(c.start)},{_ts_ass(c.end)},Sub,,0,0,0,,{chu(c.text)}")
+            n += 1
+            continue
+        tu_hien = [chu(t.hien) for t in ws]
+        moc = [min(max(float(t.start), c.start), c.end) for t in ws]
+        for i in range(len(ws)):
+            a = moc[i] if i > 0 else c.start                   # từ đầu sáng ngay từ lúc câu hiện
+            b = moc[i + 1] if i + 1 < len(ws) else c.end
+            if b - a < 0.01:
+                continue
+            text = " ".join(f"{{\\c{mau_nhan}}}{w}{{\\r}}" if j == i else w for j, w in enumerate(tu_hien))
+            dong.append(f"Dialogue: 0,{_ts_ass(a)},{_ts_ass(b)},Sub,,0,0,0,,{text}")
+            n += 1
+    path.write_text("\n".join(dong) + "\n", encoding="utf-8-sig")
+    return n
+
+
 def force_style(font: str = "Arial", co: float = 11, le_duoi: int = 45) -> str:
     """Chuỗi force_style cho filter subtitles. Kích thước tính trên PlayResY=288 của SRT->ASS,
     libass tự phóng theo chiều cao video (1920 -> nhân ~6,7: co 11 ~ 73px, le_duoi 45 ~ 300px)."""
@@ -278,11 +337,12 @@ def force_style(font: str = "Arial", co: float = 11, le_duoi: int = 45) -> str:
 # ============================================================== tổng hợp
 def tao_srt(kich_ban: Path, nguon: list[tuple[Path, float, float | None]], tong_dai: float,
             out_srt: Path, ten_model: str = MODEL_MAC_DINH, thu_muc_model: Path | None = None,
-            bo_truoc: float = 0.0, log=print) -> dict:
-    """Kịch bản + các nguồn audio -> file .srt. Trả về thống kê khớp.
+            bo_truoc: float = 0.0, log=print, toi_da_cau: int = CUE_TOI_DA) -> dict:
+    """Kịch bản + các nguồn audio -> file .srt. Trả về thống kê khớp (+ `tu` từng từ có mốc, `cues` các câu
+    để ghi_ass kiểu karaoke).
     `bo_truoc`: không ghi phụ đề trước giây này (vd = thời lượng hook: 10s đầu đã có tiêu đề + ảnh
     minh họa nên để sạch). Hook vẫn được nhận diện để căn đúng mốc phần kịch bản của nó, chỉ bỏ
-    lúc ghi ra."""
+    lúc ghi ra. `toi_da_cau`: số ký tự tối đa một câu phụ đề (karaoke in hoa dùng CUE_TOI_DA_HOA)."""
     text = doc_kich_ban(kich_ban)
     tu = tach_tu(text)
     if not tu:
@@ -290,7 +350,7 @@ def tao_srt(kich_ban: Path, nguon: list[tuple[Path, float, float | None]], tong_
     log(f"Kịch bản: {len(tu)} từ")
     asr = nhan_dien(nguon, ten_model, thu_muc_model, log)
     tk = can_chinh(tu, asr, tong_dai)
-    cues = gom_cau(tu)
+    cues = gom_cau(tu, toi_da_cau)
     bo = 0
     if bo_truoc > 0:
         giu = []
@@ -304,7 +364,7 @@ def tao_srt(kich_ban: Path, nguon: list[tuple[Path, float, float | None]], tong_
         cues = giu
     ghi_srt(cues, out_srt)
     # trả cả danh sách từ đã có mốc để bước khác dùng (minh_hoa.py: ghép cảnh minh họa theo câu)
-    tk.update(cau=len(cues), bo=bo, srt=str(out_srt), tu=tu)
+    tk.update(cau=len(cues), bo=bo, srt=str(out_srt), tu=tu, cues=cues)
     log(f"Khớp: {tk['khop']}/{tk['tong']} từ trùng máy nghe, {tk['muon']} từ máy nghe sai (lấy chữ kịch bản), "
         f"{tk['noi_suy']} từ nội suy; {len(cues)} câu phụ đề"
         + (f" (bỏ {bo} câu trước giây {bo_truoc:g} vì thuộc hook)" if bo_truoc > 0 else "") + f" -> {out_srt.name}")

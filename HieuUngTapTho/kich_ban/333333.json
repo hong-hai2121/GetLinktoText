@@ -1,0 +1,45 @@
+{
+  "ghi_chu": "Tư thế số 3: gác chân lên tường. Video KHÔNG có tiếng nói (âm thanh ≈ im lặng) → mốc giờ theo động tác (phan_tich.py); chữ lấy từ nội dung user gửi. Không làm phụ đề.",
+  "buoc": [
+    {"tu": 0.0,  "den": 2.9,  "kieu": "tieu_de", "x": 30, "rong": 790,
+     "tren": "TƯ THẾ SỐ 3", "chinh": "GÁC CHÂN LÊN TƯỜNG", "phu": "GIỮ 3 – 5 PHÚT"},
+    {"tu": 2.9,  "den": 4.6,  "so": 1, "chinh": "NGỒI NGHIÊNG SÁT TƯỜNG", "phu": "Một bên hông áp vào tường"},
+    {"tu": 4.6,  "den": 11.3, "so": 2, "chinh": "XOAY NGƯỜI NẰM NGỬA",    "phu": "Từ từ ngả lưng xuống giường"},
+    {"tu": 11.3, "den": 14.6, "so": 3, "chinh": "ĐƯA 2 CHÂN LÊN TƯỜNG",   "phu": "Duỗi thẳng, tựa vào tường"},
+    {"tu": 14.6, "den": 23.0, "so": 4, "chinh": "THẢ LỎNG · THỞ CHẬM",    "phu": "2 tay thả lỏng 2 bên, mắt nhắm"},
+    {"tu": 23.0, "den": 31.0, "kieu": "meo", "chinh": "MẸO VÀO TƯ THẾ",
+     "phu": ["Áp một bên hông vào tường trước", "rồi mới xoay người nằm ngửa"]},
+    {"tu": 31.0, "den": 99,   "kieu": "nguy_hiem", "chinh": "LƯU Ý QUAN TRỌNG", "phu": "Không nên tập nếu đang bị:"}
+  ],
+  "hieu_ung": [
+    {"loai": "vong", "tu": 1.0, "den": 4.5, "diem": "hip", "ban_kinh": 75, "mau": "vang",
+     "nhan": "HÔNG SÁT TƯỜNG", "nhan_xy": [400, 1190]},
+
+    {"loai": "mui_ten", "tu": 4.6, "den": 7.8, "co_dinh": true,
+     "tu_diem": "nose", "toi_diem": [400, 1040], "cong": -0.35, "mau": "cam",
+     "nhan": "NGẢ LƯNG XUỐNG", "nhan_xy": [430, 640]},
+    {"loai": "vong", "tu": 7.8, "den": 11.3, "diem": "hip", "ban_kinh": 65, "mau": "cam",
+     "nhan": "HÔNG SÁT CHÂN TƯỜNG", "nhan_xy": [600, 1390]},
+
+    {"loai": "duoi", "tu": 12.1, "den": 15.6, "diem": ["hip", "knee", "ankle", "foot"], "mau": "xanh",
+     "nhan": "DUỖI THẲNG 2 CHÂN", "nhan_phu": "tựa vào tường", "nhan_xy": [400, 700], "nhan_tre": 0.4},
+
+    {"loai": "duoi", "tu": 14.8, "den": 19.2, "diem": ["shoulder", "elbow", "wrist", "index"], "mau": "luc",
+     "vach": false, "nhip": true, "nhan": "2 TAY THẢ LỎNG 2 BÊN", "nhan_xy": [690, 1390], "nhan_tre": 0.3},
+    {"loai": "tho", "tu": 15.6, "den": 23.0, "chu_ky": 8, "xy": [310, 730], "ban_kinh": [108, 142]},
+    {"loai": "vong", "tu": 19.4, "den": 23.0, "diem": "eye", "ban_kinh": 44, "mau": "luc",
+     "nhan": "MẮT NHẮM", "nhan_xy": [300, 975]},
+    {"loai": "dong_ho", "tu": 14.8, "den": 39.4, "xy": [975, 790], "ban_kinh": 90, "mau": "hoac_vang",
+     "tren": "GIỮ", "chinh": "3–5", "duoi": "PHÚT", "chu_ky": 6},
+
+    {"loai": "chen_lai", "tu": 23.1, "den": 31.0, "nguon_tu": 0.6, "nguon_den": 13.8,
+     "xy": [40, 530], "rong": 290, "mau": "hoac_vang", "nhan": "XEM LẠI",
+     "vong": {"diem": "hip", "tu": 0.8, "den": 4.4, "ban_kinh": 95}},
+
+    {"loai": "the_canh_bao", "tu": 31.3, "den": 99, "xy": [40, 470], "rong": 600, "mau": "do", "tre": 0.8,
+     "dong": [
+       {"bieu_tuong": "mat", "chu": ["Tăng nhãn áp"]},
+       {"bieu_tuong": "tim", "chu": ["Huyết áp cao", "chưa kiểm soát"]}
+     ]}
+  ]
+}
