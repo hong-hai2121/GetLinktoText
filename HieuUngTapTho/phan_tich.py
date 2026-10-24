@@ -136,6 +136,10 @@ def main():
     print(f"{w}x{h} {fps:.2f}fps {n} khung", flush=True)
 
     keys = ["nose", "mouth", "ear", "eye", "shoulder", "hip", "knee", "elbow", "wrist", "index", "ankle", "heel", "foot"]
+    # thêm điểm RIÊNG từng bên (chân trái/phải) cho bài tập đổi chân: <tên>_l / <tên>_r
+    BEN = {"hip": (L_HIP, R_HIP), "knee": (L_KNEE, R_KNEE), "ankle": (L_ANK, R_ANK),
+           "heel": (L_HEEL, R_HEEL), "foot": (L_FOOT, R_FOOT)}
+    keys += [f"{k}_{s}" for k in BEN for s in ("l", "r")]
     out = {k: np.full((n, 2), np.nan) for k in keys}
     out["back_coef"] = np.full((n, 3), np.nan)
     out["belly_coef"] = np.full((n, 3), np.nan)
@@ -170,6 +174,9 @@ def main():
             out["ankle"][i] = diem_tot(lms, L_ANK, R_ANK, w, h)
             out["heel"][i] = diem_tot(lms, L_HEEL, R_HEEL, w, h)
             out["foot"][i] = diem_tot(lms, L_FOOT, R_FOOT, w, h)
+            for k, (il, ir) in BEN.items():
+                out[f"{k}_l"][i] = diem(lms, il, w, h)[:2]
+                out[f"{k}_r"][i] = diem(lms, ir, w, h)[:2]
             mask = res.segmentation_masks[0].numpy_view() if res.segmentation_masks else None
             if mask is not None:
                 back, belly, bxr, uxr = duong_lung_bung(mask, out["shoulder"][i], out["hip"][i], w, h)

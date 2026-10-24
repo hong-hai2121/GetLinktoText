@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import winreg
+from build_installer import APP_VERSION
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 WORK = PACKAGE_DIR / "build" / "verification"
@@ -18,7 +19,7 @@ def main():
     except FileNotFoundError:
         pass
     WORK.mkdir(parents=True, exist_ok=True)
-    installer = PACKAGE_DIR / "dist" / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
+    installer = PACKAGE_DIR / "dist" / "installer" / f"GetTextFromLink-Setup-{APP_VERSION}-CPU-x64.exe"
     install_dir = WORK / "Cài đặt thử"
     environment = os.environ.copy()
     for key in ("BASE_DIR", "WHISPER_MODEL_PATH", "LINKS_FILE", "OUTPUT_WORD_FILE",

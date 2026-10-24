@@ -4,7 +4,7 @@
 
 Bản CPU dành cho Windows 10/11 x64, kèm Python, FFmpeg, geckodriver và model
 `large-v3-turbo`. Máy đích không cần cài Python/CUDA. Chuyển file
-`GetTextFromLink_Package/dist/installer/GetTextFromLink-Setup-1.0.0-CPU-x64.exe` sang máy khác và chạy để cài.
+`GetTextFromLink_Package/dist/installer/GetTextFromLink-Setup-1.0.1-CPU-x64.exe` sang máy khác và chạy để cài.
 Hướng dẫn sử dụng: [HUONG_DAN.html](GetTextFromLink_Package/packaging/HUONG_DAN.html).
 
 Toàn bộ phần đóng gói được gom trong `GetTextFromLink_Package/`:

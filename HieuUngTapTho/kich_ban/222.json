@@ -1,0 +1,450 @@
+{
+ "ghi_chu": "Động tác 2: ép gối, gồng đùi (quad set), ngồi duỗi chân. Video NGANG 1440x1080, có lời hướng dẫn (không làm phụ đề). Mốc theo lời (chep_loi.py); bộ đếm 1–10 theo lúc ngón tay giơ lên (12.0–20.2 s, xem tay từng 0.25 s). Khung 9 s gốc bị loá trắng (lỗi máy quay), để nguyên.",
+ "the_tren": {
+  "x": 30,
+  "y": 30,
+  "co": 0.75
+ },
+ "buoc": [
+  {
+   "tu": 0.0,
+   "den": 4.7,
+   "kieu": "tieu_de",
+   "tren": "ĐỘNG TÁC 2",
+   "chinh": "ÉP GỐI · GỒNG ĐÙI",
+   "phu": "ĐẾM 10 · ĐỔI CHÂN"
+  },
+  {
+   "tu": 4.7,
+   "den": 6.6,
+   "so": 1,
+   "chinh": "NGỒI DUỖI THẲNG CHÂN",
+   "phu": "Hai chân duỗi trên giường"
+  },
+  {
+   "tu": 6.6,
+   "den": 8.2,
+   "so": 2,
+   "chinh": "KÉO MŨI CHÂN VỀ",
+   "phu": "Về phía người"
+  },
+  {
+   "tu": 8.2,
+   "den": 10.2,
+   "so": 3,
+   "chinh": "ÉP MẶT SAU GỐI XUỐNG",
+   "phu": "Ép sát xuống giường"
+  },
+  {
+   "tu": 10.2,
+   "den": 12.0,
+   "so": 4,
+   "chinh": "GỒNG ĐÙI TRƯỚC HẾT CỠ",
+   "phu": "Đến khi bánh chè chắc lại"
+  },
+  {
+   "tu": 12.0,
+   "den": 20.8,
+   "kieu": "thuong",
+   "huy_hieu": "10",
+   "chinh": "GIỮ GỒNG, ĐẾM ĐẾN 10",
+   "phu": "Bánh chè chắc, không lắc được"
+  },
+  {
+   "tu": 20.8,
+   "den": 22.3,
+   "kieu": "thuong",
+   "huy_hieu": "»",
+   "chinh": "RỒI ĐỔI CHÂN",
+   "phu": "Làm tương tự chân còn lại"
+  },
+  {
+   "tu": 22.3,
+   "den": 30.5,
+   "kieu": "meo",
+   "chinh": "CHƯA CẢM NHẬN RÕ?",
+   "phu": [
+    "Cứ gồng hết sức đùi trước",
+    "Cảm giác rõ dần sau vài tuần tập"
+   ]
+  },
+  {
+   "tu": 30.5,
+   "den": 99,
+   "kieu": "thuong",
+   "huy_hieu": "2",
+   "chinh": "ĐỘNG TÁC 2",
+   "phu": "Ép gối · gồng đùi · đếm đến 10"
+  }
+ ],
+ "hieu_ung": [
+  {
+   "loai": "vong",
+   "tu": 1.0,
+   "den": 4.7,
+   "diem": {
+    "diem": "knee",
+    "lech": [
+     -5,
+     -60
+    ]
+   },
+   "ban_kinh": 55,
+   "mau": "vang"
+  },
+  {
+   "loai": "duoi",
+   "tu": 2.0,
+   "den": 4.7,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -15,
+      -80
+     ]
+    },
+    {
+     "diem": "hip",
+     "lech": [
+      -25,
+      -92
+     ]
+    }
+   ],
+   "mau": "do",
+   "nhip": true,
+   "day": 20
+  },
+  {
+   "loai": "duoi",
+   "tu": 4.8,
+   "den": 6.6,
+   "diem": [
+    "hip",
+    "knee",
+    "ankle"
+   ],
+   "mau": "luc",
+   "nhan": "DUỖI THẲNG CHÂN",
+   "nhan_xy": [
+    600,
+    720
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "vong",
+   "tu": 6.6,
+   "den": 8.4,
+   "diem": "foot",
+   "ban_kinh": 60,
+   "mau": "xanh"
+  },
+  {
+   "loai": "mui_ten",
+   "tu": 6.7,
+   "den": 8.4,
+   "tu_diem": {
+    "diem": "foot",
+    "lech": [
+     -30,
+     -75
+    ]
+   },
+   "vec": [
+    160,
+    10
+   ],
+   "cong": 0.35,
+   "mau": "xanh",
+   "nhan": "VỀ PHÍA NGƯỜI",
+   "nhan_xy": [
+    330,
+    640
+   ]
+  },
+  {
+   "loai": "duoi",
+   "tu": 8.2,
+   "den": 10.4,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      0,
+      -240
+     ]
+    },
+    {
+     "diem": "knee",
+     "lech": [
+      0,
+      -110
+     ]
+    }
+   ],
+   "mau": "cam",
+   "day": 16,
+   "co_vach": 1.8
+  },
+  {
+   "loai": "duoi",
+   "tu": 8.4,
+   "den": 10.4,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -110,
+      52
+     ]
+    },
+    {
+     "diem": "knee",
+     "lech": [
+      110,
+      52
+     ]
+    }
+   ],
+   "mau": "cam",
+   "vach": false,
+   "nhip": true,
+   "nhan": "ÉP GỐI XUỐNG GIƯỜNG",
+   "nhan_xy": [
+    600,
+    1030
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "duoi",
+   "tu": 10.2,
+   "den": 12.2,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -15,
+      -80
+     ]
+    },
+    {
+     "diem": "hip",
+     "lech": [
+      -25,
+      -92
+     ]
+    }
+   ],
+   "mau": "do",
+   "nhip": true,
+   "nhan": "ĐÙI TRƯỚC GỒNG HẾT CỠ",
+   "nhan_xy": [
+    560,
+    690
+   ],
+   "nhan_tre": 0.3,
+   "day": 20
+  },
+  {
+   "loai": "duoi",
+   "tu": 12.0,
+   "den": 20.8,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -15,
+      -80
+     ]
+    },
+    {
+     "diem": "hip",
+     "lech": [
+      -25,
+      -92
+     ]
+    }
+   ],
+   "mau": "do",
+   "nhip": true,
+   "day": 20
+  },
+  {
+   "loai": "vong",
+   "tu": 12.4,
+   "den": 15.2,
+   "diem": {
+    "diem": "knee",
+    "lech": [
+     -5,
+     -60
+    ]
+   },
+   "ban_kinh": 50,
+   "mau": "luc",
+   "nhan": "BÁNH CHÈ CHẮC LẠI",
+   "nhan_xy": [
+    560,
+    690
+   ]
+  },
+  {
+   "loai": "dem",
+   "tu": 11.8,
+   "den": 21.8,
+   "xy": [
+    650,
+    400
+   ],
+   "ban_kinh": 110,
+   "mau": "hoac_vang",
+   "tren": "ĐẾM",
+   "moc": [
+    12.0,
+    13.0,
+    13.6,
+    14.7,
+    15.7,
+    16.25,
+    17.45,
+    18.45,
+    19.45,
+    20.2
+   ],
+   "xong": "ĐỔI CHÂN"
+  },
+  {
+   "loai": "vong",
+   "tu": 24.8,
+   "den": 26.3,
+   "diem": {
+    "diem": "knee",
+    "lech": [
+     -5,
+     -60
+    ]
+   },
+   "ban_kinh": 50,
+   "mau": "luc"
+  },
+  {
+   "loai": "duoi",
+   "tu": 26.9,
+   "den": 30.5,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -15,
+      -80
+     ]
+    },
+    {
+     "diem": "hip",
+     "lech": [
+      -25,
+      -92
+     ]
+    }
+   ],
+   "mau": "do",
+   "nhip": true,
+   "nhan": "GỒNG HẾT SỨC",
+   "nhan_xy": [
+    560,
+    690
+   ],
+   "nhan_tre": 0.3,
+   "day": 20
+  },
+  {
+   "loai": "danh_sach",
+   "tu": 30.6,
+   "den": 99,
+   "xy": [
+    40,
+    250
+   ],
+   "rong": 520,
+   "mau": "luc",
+   "tieu_de": "CÁC BƯỚC",
+   "dong": [
+    {
+     "chu": "Kéo mũi chân về",
+     "tu": 31.0
+    },
+    {
+     "chu": "Ép mặt sau gối xuống",
+     "tu": 32.2
+    },
+    {
+     "chu": "Gồng đùi trước hết cỡ",
+     "tu": 33.4
+    },
+    {
+     "chu": "Đếm đến 10 rồi đổi chân",
+     "tu": 34.6
+    }
+   ]
+  },
+  {
+   "loai": "vong",
+   "tu": 31.0,
+   "den": 32.3,
+   "diem": "foot",
+   "ban_kinh": 60,
+   "mau": "xanh"
+  },
+  {
+   "loai": "duoi",
+   "tu": 32.2,
+   "den": 33.5,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -110,
+      52
+     ]
+    },
+    {
+     "diem": "knee",
+     "lech": [
+      110,
+      52
+     ]
+    }
+   ],
+   "mau": "cam",
+   "vach": false,
+   "nhip": true
+  },
+  {
+   "loai": "duoi",
+   "tu": 33.4,
+   "den": 99,
+   "diem": [
+    {
+     "diem": "knee",
+     "lech": [
+      -15,
+      -80
+     ]
+    },
+    {
+     "diem": "hip",
+     "lech": [
+      -25,
+      -92
+     ]
+    }
+   ],
+   "mau": "do",
+   "nhip": true,
+   "day": 20
+  }
+ ]
+}

@@ -19,6 +19,7 @@ DIST_DIR = PACKAGE_DIR / "dist"
 STAGE = BUILD_DIR / "resources"
 DENO_VERSION = "v2.9.7"
 DENO_SHA256 = "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238"
+APP_VERSION = "1.0.1"
 
 
 def run(args):
@@ -163,8 +164,8 @@ def main():
              PACKAGE_DIR / "GetTextFromLink.spec"])
         copy_file(PACKAGE_DIR / "packaging" / "HUONG_DAN.html", DIST_DIR / "GetTextFromLink" / "HUONG_DAN.html")
     if inno:
-        run([inno, PACKAGE_DIR / "packaging" / "installer.iss"])
-        installer = DIST_DIR / "installer" / "GetTextFromLink-Setup-1.0.0-CPU-x64.exe"
+        run([inno, f"/DAppVersion={APP_VERSION}", PACKAGE_DIR / "packaging" / "installer.iss"])
+        installer = DIST_DIR / "installer" / f"GetTextFromLink-Setup-{APP_VERSION}-CPU-x64.exe"
         with installer.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         installer.with_suffix(".sha256").write_text(f"{digest}  {installer.name}\n", encoding="ascii")

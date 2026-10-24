@@ -24,6 +24,17 @@ Loại hiệu ứng trong kịch bản (mọi điểm là tên điểm mốc, {"
     tho_bung   : thở bụng theo tín hiệu đo thật (do_bung.py → tin_hieu), pha = [[t0, t1, hit1|hit2|tho]],
                  bong bóng to/nhỏ theo bụng, vùng bụng phồng, thanh nhịp [HÍT][HÍT][THỞ RA DÀI]
     zzz        : chữ Z bay lên từ một điểm (ngủ quên)
+    so_do_goc  : thẻ sơ đồ chân duỗi gối cong nhẹ + 2 tay đan dưới khoeo + góc (goc, chu, tieu_de)
+    goc_vuong  : dấu góc vuông tại tam, một cạnh hướng về 'huong', nhãn chu (mặc định 90°)
+    do_cao     : thước khoảng hở từ mặt giường (day) lên tới một điểm khi điểm được nhấc (vd "khỏi mặt giường")
+    tien_do    : thanh tiến độ chạy tới 'phan' (0..1), nhãn phía trên + phần trăm
+    dem        : bộ đếm vòng N ô, moc = [t1, t2, ...] lúc nhảy số; xong = nhãn khi đếm hết
+    bien_do    : biên độ khớp — cung tại 'tam', kim theo hướng goc→dau đo thật (vd tam=ankle, goc=heel, dau=foot;
+                 goc có thể là điểm cố định [x, y], vd gối tựa trên gối kê), tang / giam = {nhan, mau, het_muc}
+                 ('' = không bật 'hết mức' ở đầu đó), nguong_cuc = tỉ lệ biên độ coi như chạm cực (0.86);
+                 cung=false: ẩn dải cung/kim, chỉ còn đường chi (chuoi = các điểm trước 'dau'), mũi tên theo đường đi
+                 và nhãn hai đầu
+Thẻ trên cùng chung: kb["the_tren"] = {x, y, co} (co = tỉ lệ thu nhỏ, dùng cho video ngang).
 Thẻ trên cùng (buoc): kieu = buoc | canh_bao | meo | nguy_hiem | tieu_de; phu = chuỗi hoặc danh sách dòng.
 Không có --loi thì chỉ xuất bản không phụ đề.
 """
@@ -229,10 +240,10 @@ def timer_img(c):
     W = H = 200
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    for txt, size, wgt, col, y in ((c.get("tren", "GIỮ"), 30, "bold", WHITE, 40),
-                                   (c.get("chinh", "3–5"), 66, "black", accent, 100),
-                                   (c.get("duoi", "PHÚT"), 30, "bold", WHITE, 158)):
-        f = font(size, wgt)
+    for txt, size, wgt, col, y, mw in ((c.get("tren", "GIỮ"), 30, "bold", WHITE, 46, 112),
+                                       (c.get("chinh", "3–5"), 66, "black", accent, 100, 150),
+                                       (c.get("duoi", "PHÚT"), 30, "bold", WHITE, 154, 112)):
+        f = fit_font(txt, mw, size, wgt, min_size=18)
         b = f.getbbox(txt)
         d.text(((W - (b[2] - b[0])) / 2 - b[0], y - (b[1] + b[3]) / 2), txt, font=f, fill=col + (255,))
     return np.array(img)
@@ -338,6 +349,62 @@ def z_img(size, color):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.text((10 - b[0], 10 - b[1]), "Z", font=f, fill=color + (255,), stroke_width=4, stroke_fill=DARK + (255,))
+    return np.array(img)
+
+
+def count_img(num, color, top="ĐẾM"):
+    W, H = 200, 190
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    f1 = font(30, "bold")
+    b1 = f1.getbbox(top)
+    d.text(((W - (b1[2] - b1[0])) / 2 - b1[0], 34 - (b1[1] + b1[3]) / 2), top, font=f1, fill=WHITE + (255,))
+    f2 = fit_font(str(num), 150, 104, "black")
+    b2 = f2.getbbox(str(num))
+    d.text(((W - (b2[2] - b2[0])) / 2 - b2[0], 112 - (b2[1] + b2[3]) / 2), str(num), font=f2, fill=color + (255,))
+    return np.array(img)
+
+
+def so_do_goc_img(c):
+    """Sơ đồ nhìn ngang: chân duỗi gối cong nhẹ, 2 tay đan dưới khoeo, cung góc."""
+    color = MAU.get(c.get("mau", "vang"), YELLOW)
+    W, H = 330, 350
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, W - 1, H - 1], 30, fill=DARK + (222,), outline=color + (255,), width=5)
+    ft = fit_font(c.get("tieu_de", "KHÔNG CÓ GỐI KÊ"), W - 36, 30, "black")
+    tt = c.get("tieu_de", "KHÔNG CÓ GỐI KÊ")
+    bt = ft.getbbox(tt)
+    d.text(((W - (bt[2] - bt[0])) / 2 - bt[0], 26 - bt[1]), tt, font=ft, fill=WHITE + (255,))
+    oy = 40
+    hip, knee, ank = (290, 175 + oy), (165, 140 + oy), (40, 150 + oy)
+    d.line([(20, 205 + oy), (W - 20, 205 + oy)], fill=(140, 140, 140, 255), width=4)          # mặt giường
+    ex = (knee[0] - 0.85 * (hip[0] - knee[0]), knee[1] - 0.85 * (hip[1] - knee[1]))      # đùi kéo dài (đường thẳng)
+    for k in range(0, 10, 2):
+        u0, u1 = k / 10, (k + 1) / 10
+        d.line([(knee[0] + (ex[0] - knee[0]) * u0, knee[1] + (ex[1] - knee[1]) * u0),
+                (knee[0] + (ex[0] - knee[0]) * u1, knee[1] + (ex[1] - knee[1]) * u1)], fill=(200, 200, 200, 255), width=3)
+    d.line([hip, knee], fill=(235, 220, 200, 255), width=18)
+    d.line([knee, ank], fill=(235, 220, 200, 255), width=16)
+    d.line([ank, (ank[0] - 4, ank[1] - 38)], fill=(255, 255, 255, 255), width=12)          # bàn chân
+    d.ellipse([knee[0] - 12, knee[1] - 12, knee[0] + 12, knee[1] + 12], fill=(235, 220, 200, 255))
+    for dx in (-14, 8):                                                                      # 2 bàn tay đan dưới khoeo
+        d.ellipse([knee[0] + dx - 14, knee[1] + 10, knee[0] + dx + 16, knee[1] + 40], fill=(240, 196, 160, 255),
+                  outline=DARK + (255,), width=3)
+    a1 = np.degrees(np.arctan2(ex[1] - knee[1], ex[0] - knee[0]))
+    a2 = np.degrees(np.arctan2(ank[1] - knee[1], ank[0] - knee[0]))
+    r = 95
+    delta = (a2 - a1 + 540) % 360 - 180                     # cung NGẮN giữa đường đùi kéo dài và cẳng chân
+    start = a1 if delta > 0 else a2
+    d.arc([knee[0] - r, knee[1] - r, knee[0] + r, knee[1] + r], start, start + abs(delta), fill=color + (255,), width=8)
+    fa = font(36, "black")
+    lab = c.get("goc", "15–20°")
+    ba = fa.getbbox(lab)
+    d.text((knee[0] - 72 - (ba[2] - ba[0]) / 2 - ba[0], knee[1] - 78 - ba[1]), lab, font=fa, fill=color + (255,))
+    fc = fit_font(c.get("chu", "ĐAN TAY GIỮ KHOEO"), W - 30, 34, "black")
+    cc = c.get("chu", "ĐAN TAY GIỮ KHOEO")
+    bc = fc.getbbox(cc)
+    d.text(((W - (bc[2] - bc[0])) / 2 - bc[0], H - 54 - bc[1]), cc, font=fc, fill=color + (255,))
     return np.array(img)
 
 
@@ -559,7 +626,14 @@ class Dung:
         self.kb = kb
         steps = kb.get("buoc", [])
         n_steps = max([int(s.get("so", 0)) for s in steps] + [0])
-        self.headers = [header_img(s, n_steps) for s in steps]
+        self.the_tren = kb.get("the_tren", {})
+        self.headers = []
+        for st in steps:
+            img = header_img(st, n_steps)
+            co = float(st.get("co", self.the_tren.get("co", 1.0)))
+            if abs(co - 1) > 1e-3:
+                img = cv2.resize(img, (int(img.shape[1] * co), int(img.shape[0] * co)), interpolation=cv2.INTER_AREA)
+            self.headers.append(img)
         self.labels = {}
         for c in kb.get("hieu_ung", []):
             if c.get("nhan"):
@@ -577,6 +651,10 @@ class Dung:
             if c["loai"] == "zzz":
                 col = MAU.get(c.get("mau", "trang"), WHITE)
                 self.labels[("z", id(c))] = [z_img(sz, col) for sz in (50, 66, 82, 98)]
+            if c["loai"] == "so_do_goc":
+                self.labels[("sdg", id(c))] = so_do_goc_img(c)
+            if c["loai"] == "goc_vuong":
+                self.labels[("gv", id(c))] = label_img(c.get("chu", "90°"), None, MAU.get(c.get("mau", "vang"), YELLOW))
             if c["loai"] == "the_canh_bao":
                 col = MAU.get(c.get("mau", "do"), RED)
                 self.labels[("cb", id(c))] = [warn_row_img(r, int(c.get("rong", 590)), col) for r in c["dong"]]
@@ -593,6 +671,13 @@ class Dung:
         if "lech" in spec:
             p = p + np.array(spec["lech"], float)
         return p
+
+    def _series(self, spec):
+        if isinstance(spec, (list, tuple)):
+            return np.tile(np.array(spec, float), (self.N, 1))
+        if isinstance(spec, str):
+            return self.P[spec]
+        return self.P[spec["diem"]] + np.array(spec.get("lech", [0, 0]), float)
 
     def pt(self, c, key, i):
         if c.get("co_dinh"):
@@ -672,15 +757,19 @@ class Dung:
         dense = np.array(dense)
         cum = path_len(dense)
         g = ease_out((t - c["tu"]) / 0.6)
-        if c.get("nhip"):
-            a = a * (0.7 + 0.3 * np.sin(2 * np.pi * t / 2.4))
-        draw_glow_poly(fr, dense[:max(2, int(len(dense) * g))], color, a, 10, glow=1.1)
+        al = a * (0.7 + 0.3 * np.sin(2 * np.pi * t / 2.4)) if c.get("nhip") else a   # chỉ đường sáng nhấp nháy, nhãn giữ rõ
+        day = float(c.get("day", 10))
+        seg = dense[:max(2, int(len(dense) * g))]
+        if day >= 16:                                   # vệt dày (vd cơ đang gồng): nền mờ rộng + lõi
+            draw_glow_poly(fr, seg, color, al * 0.35, day * 2.2, glow=0.6)
+        draw_glow_poly(fr, seg, color, al, day, glow=1.1)
+        sv = float(c.get("co_vach", 1.0))
         for k in range(3 if c.get("vach", True) else 0):
             f = ((t - c["tu"]) / 1.2 + k / 3) % 1
             p, dvec = point_at(dense, cum, cum[-1] * f)
             perp = np.array([-dvec[1], dvec[0]])
-            ch = np.array([p - dvec * 16 + perp * 20, p + dvec * 6, p - dvec * 16 - perp * 20])
-            draw_glow_poly(fr, ch, WHITE, a * np.sin(np.pi * f) * g, 7, glow=0.5)
+            ch = np.array([p - dvec * 16 * sv + perp * 20 * sv, p + dvec * 6 * sv, p - dvec * 16 * sv - perp * 20 * sv])
+            draw_glow_poly(fr, ch, WHITE, a * np.sin(np.pi * f) * g, 7 * sv, glow=0.5)
         if id(c) in self.labels:
             lab = self.labels[id(c)]
             Lc = np.array(c["nhan_xy"], float) if "nhan_xy" in c else dense[len(dense) // 2] + [0, -120]
@@ -922,6 +1011,241 @@ class Dung:
             pos = P0 + np.array([-70 * u + 18 * np.sin(u * 6 + kk), -190 * u])
             paste_center(fr, img, pos, a * np.sin(np.pi * u) ** 0.7)
 
+    def _bien_do_data(self, c):
+        key = ("bd", id(c))
+        if key in self.labels:
+            return self.labels[key]
+        A, B = self._series(c["goc"]), self._series(c["dau"])
+        th = smooth(np.unwrap(np.arctan2(B[:, 1] - A[:, 1], B[:, 0] - A[:, 0])), 3)
+        v = np.gradient(smooth(th, 5)) * self.fps
+        j0 = int(c["tu"] * self.fps)
+        j1 = int(min(c["den"] * self.fps, self.N))
+        lo, hi = np.percentile(th[j0:j1], [3, 97])
+        vt = float(c.get("nguong", 0.25))
+        nc = float(c.get("nguong_cuc", 0.86))
+        n = (th - lo) / (hi - lo + 1e-9)
+        dirs = np.zeros(self.N, int)
+        reach = np.full(self.N, -1e9)
+        reach_end = np.zeros(self.N, int)
+        cur, last_r, last_end = 0, -1e9, 0
+        for j in range(self.N):
+            if v[j] > vt:
+                cur = 1
+            elif v[j] < -vt:
+                cur = -1
+            dirs[j] = cur
+            if cur == 1 and n[j] > nc and last_end != 1:
+                last_r, last_end = j / self.fps, 1
+            elif cur == -1 and n[j] < 1 - nc and last_end != -1:
+                last_r, last_end = j / self.fps, -1
+            reach[j], reach_end[j] = last_r, last_end
+        tg, gm = c["tang"], c["giam"]
+        ct, cg = MAU.get(tg.get("mau", "xanh"), BLUE), MAU.get(gm.get("mau", "cam"), ORANGE)
+        hm_t = tg.get("het_muc", c.get("het_muc", "hết mức!"))
+        hm_g = gm.get("het_muc", c.get("het_muc", "hết mức!"))
+        lt, lg = label_img(tg["nhan"], None, ct), label_img(gm["nhan"], None, cg)
+        D = dict(th=th, v=v, lo=lo, hi=hi, n=n, dirs=dirs, reach=reach, reach_end=reach_end, ct=ct, cg=cg,
+                 lt=lt, lt2=label_img(tg["nhan"], hm_t, ct) if hm_t else lt,
+                 lg=lg, lg2=label_img(gm["nhan"], hm_g, cg) if hm_g else lg)
+        self.labels[key] = D
+        return D
+
+    def fx_bien_do(self, fr, c, i, t, a):
+        """Biên độ khớp: cung đo tại 'tam', kim theo hướng goc→dau (vd gót→mũi bàn chân) đo thật từng khung;
+        hai đầu cung = hai cực (tang / giam) sáng lên + 'hết mức!' khi chạm; mũi tên cong theo chiều đang chạy."""
+        D = self._bien_do_data(c)
+        j = int(np.clip(i, 0, self.N - 1))
+        lo, hi = D["lo"], D["hi"]
+        C = self.pt_at(c["tam"], i)
+        R = float(c.get("ban_kinh", 280))
+        dirn = int(D["dirs"][j])
+        col = D["ct"] if dirn > 0 else (D["cg"] if dirn < 0 else WHITE)
+        g = ease_out((t - c["tu"]) / 0.6)
+
+        def P(ang, r=R):
+            return C + r * np.array([np.cos(ang), np.sin(ang)])
+        cung = c.get("cung", True)
+        # dải cung tối + phần đã đi được tô màu theo chiều đang chạy (biên độ) + vạch hai đầu
+        bw = float(c.get("day_cung", 26))
+        angs = np.linspace(lo, lo + (hi - lo) * g, 60)
+        band = np.vstack([np.array([P(x, R + bw) for x in angs]), np.array([P(x, R - bw) for x in angs[::-1]])])
+        if cung:
+            fill_poly_alpha(fr, band, DARK, a * 0.62, blur=1)
+            draw_glow_poly(fr, band, WHITE, a * 0.55, 3, glow=0, closed=True)
+        thp = float(np.clip(D["th"][j], lo, hi))
+        if cung and dirn != 0 and g > 0.99:
+            a0, a1 = (lo, thp) if dirn > 0 else (thp, hi)
+            if a1 - a0 > 0.02:
+                pa = np.linspace(a0, a1, 40)
+                prog = np.vstack([np.array([P(x, R + bw - 5) for x in pa]), np.array([P(x, R - bw + 5) for x in pa[::-1]])])
+                fill_poly_alpha(fr, prog, col, a * 0.85, blur=1.5)
+        for ang, cc in (((hi, D["ct"]), (lo, D["cg"])) if cung else ()):
+            draw_glow_poly(fr, np.array([P(ang, R - 26), P(ang, R + 26)]), cc, a * g, 8, glow=0.6)
+        # đoạn đang đo: goc → dau (vd gót → mũi chân, gối → cổ chân), kéo dài thêm
+        if c.get("duong", True):
+            H0, F0 = self.pt_at(c["goc"], i), self.pt_at(c["dau"], i)
+            toe = F0 + (F0 - H0) * float(c.get("keo_dai", 0.45))
+            chain = [self.pt_at(k, i) for k in c["chuoi"]] if c.get("chuoi") else [H0]
+            draw_glow_poly(fr, np.array(chain + [F0, toe] if c.get("chuoi") else [H0, toe]), col, a * 0.9, 10, glow=1.0)
+        # kim
+        thc = float(np.clip(D["th"][j], lo - 0.12, hi + 0.12))
+        tip = P(thc)
+        if cung:
+            draw_glow_poly(fr, np.array([P(thc, 70), tip]), col, a, 6, glow=0.8)
+            fill_poly_alpha(fr, circle_pts(tip, 15, 28), col, a, blur=2)
+            fill_poly_alpha(fr, circle_pts(tip, 7, 20), WHITE, a, blur=1)
+        # mũi tên cong theo chiều chuyển động thật
+        v = D["v"][j]
+        if abs(v) > float(c.get("nguong", 0.25)):
+            end = hi + 0.05 if v > 0 else lo - 0.05
+            span = float(np.clip(end - thc, -0.45, 0.45))
+            if abs(span) > 0.06:
+                pts = np.array([P(x, R + 46) for x in np.linspace(thc, thc + span, 24)])
+                av = a * float(np.clip(abs(v) / 0.8, 0.3, 1))
+                draw_glow_poly(fr, pts, col, av, 9, glow=0.8)
+                d = pts[-1] - pts[-2]
+                d = d / (np.linalg.norm(d) + 1e-6)
+                pp = np.array([-d[1], d[0]])
+                head = np.array([pts[-1] - d * 26 + pp * 18, pts[-1] + d * 4, pts[-1] - d * 26 - pp * 18])
+                draw_glow_poly(fr, head, col, av, 9, glow=0.6)
+        # nhãn hai đầu
+        rl = R + float(c.get("nhan_r", 95))
+        for ang, end_id, lab, lab2 in ((hi, 1, D["lt"], D["lt2"]), (lo, -1, D["lg"], D["lg2"])):
+            reached = D["reach_end"][j] == end_id and t - D["reach"][j] < float(c.get("giu_het_muc", 1.8))
+            active = dirn == end_id
+            img = lab2 if reached else lab
+            if reached:
+                pop = ease_out_back((t - D["reach"][j]) / 0.35)
+                sc = 0.8 + 0.2 * pop
+                img = cv2.resize(img, (max(1, int(img.shape[1] * sc)), max(1, int(img.shape[0] * sc))),
+                                 interpolation=cv2.INTER_AREA)
+            Lc = P(ang, rl)
+            hw, hh = img.shape[1] / 2 + 10, img.shape[0] / 2 + 10
+            Lc = np.array([np.clip(Lc[0], hw, self.W - hw), np.clip(Lc[1], hh, self.H - hh)])
+            if "nhan_lech" in c:
+                Lc = Lc + np.array(c["nhan_lech"].get("tang" if end_id == 1 else "giam", [0, 0]), float)
+            paste_center(fr, img, Lc, a * g * (1.0 if (active or reached) else 0.5))
+
+    def fx_dem(self, fr, c, i, t, a):
+        """Bộ đếm: vòng N ô sáng dần + số lớn nhảy đúng các mốc 'moc' (vd lúc ngón tay giơ lên)."""
+        color = MAU.get(c.get("mau", "hoac_vang"), AMBER)
+        moc = c["moc"]
+        N = len(moc)
+        k = sum(1 for m in moc if t >= m)
+        C = np.array(c.get("xy", [650, 400]), float)
+        R = float(c.get("ban_kinh", 110))
+        pop_in = ease_out_back((t - c["tu"]) / 0.45)
+        rr = R * (0.6 + 0.4 * pop_in)
+        fill_poly_alpha(fr, circle_pts(C, rr + 8), DARK, a * 0.8, blur=0)
+        gap = 0.12
+        for q in range(N):
+            a0 = -np.pi / 2 + 2 * np.pi * q / N + gap / 2
+            a1 = -np.pi / 2 + 2 * np.pi * (q + 1) / N - gap / 2
+            arc = np.stack([C[0] + rr * np.cos(np.linspace(a0, a1, 12)), C[1] + rr * np.sin(np.linspace(a0, a1, 12))], 1)
+            if q < k:
+                draw_glow_poly(fr, arc, color, a, 11, glow=0.9 if q == k - 1 else 0.4)
+            else:
+                draw_glow_poly(fr, arc, (110, 110, 110), a * 0.8, 7, glow=0)
+        if k == 0:
+            return
+        key = ("dem", id(c), k)
+        if key not in self.labels:
+            self.labels[key] = count_img(k, color, c.get("tren", "ĐẾM"))
+        img = self.labels[key]
+        tk = moc[k - 1]
+        sc = (0.7 + 0.3 * ease_out_back((t - tk) / 0.3)) * rr / R
+        if abs(sc - 1) > 0.01:
+            img = cv2.resize(img, (max(1, int(img.shape[1] * sc)), max(1, int(img.shape[0] * sc))), interpolation=cv2.INTER_AREA)
+        paste_center(fr, img, C, a)
+        ph = (t - tk) / 0.6
+        if 0 <= ph <= 1:
+            draw_glow_poly(fr, circle_pts(C, rr * (1 + 0.35 * ph)), color, a * (1 - ph) * 0.8, 5, glow=0.4, closed=True)
+        if k == N and t - tk > 0.25 and c.get("xong"):
+            key2 = ("dem_xong", id(c))
+            if key2 not in self.labels:
+                self.labels[key2] = label_img(c["xong"], None, color)
+            paste_center(fr, self.labels[key2], C + np.array([0, rr + 55]), a * ease((t - tk - 0.25) / 0.3))
+
+    def fx_so_do_goc(self, fr, c, i, t, a):
+        img = self.labels[("sdg", id(c))]
+        x, y = [int(v) for v in c.get("xy", [40, 290])]
+        dy = int(30 * (1 - ease_out((t - c["tu"]) / 0.4)))
+        paste_rgba(fr, img, x, y + dy, a)
+
+    def fx_goc_vuong(self, fr, c, i, t, a):
+        """Dấu góc vuông tại 'tam' (vd cổ chân): một cạnh dọc theo hướng tới 'huong' (vd gối), cạnh kia vuông góc
+        về phía 'phia' (len = hướng lên trên ảnh), kèm nhãn 90°."""
+        color = MAU.get(c.get("mau", "vang"), YELLOW)
+        C = self.pt_at(c["tam"], i)
+        Hh = self.pt_at(c["huong"], i)
+        u = Hh - C
+        u = u / (np.linalg.norm(u) + 1e-6)
+        v = np.array([-u[1], u[0]])
+        if (v[1] > 0) == (c.get("phia", "len") == "len"):
+            v = -v
+        L = float(c.get("canh", 48)) * (0.6 + 0.4 * ease_out_back((t - c["tu"]) / 0.4))
+        corner = np.array([C + u * L, C + u * L + v * L, C + v * L])
+        draw_glow_poly(fr, np.array([C + u * L * 2.2, C, C + v * L * 2.2]), WHITE, a * 0.8, 5, glow=0.4)
+        draw_glow_poly(fr, corner, color, a, 7, glow=0.9)
+        lab = self.labels[("gv", id(c))]
+        Lc = C + (u + v) * L * 1.2 + np.array(c.get("nhan_lech", [0, -60]), float)
+        paste_center(fr, lab, Lc, a * ease((t - c["tu"] - 0.2) / 0.3))
+
+    def fx_tien_do(self, fr, c, i, t, a):
+        """Thanh tiến độ (vd 'đã đi hết một nửa chặng đường'): chạy từ 0 tới 'phan'."""
+        color = MAU.get(c.get("mau", "luc"), GREEN)
+        key = ("td", id(c))
+        if key not in self.labels:
+            self.labels[key] = label_img(c.get("nhan", ""), None, color) if c.get("nhan") else None
+        x0, y0 = [float(v) for v in c.get("xy", [60, 300])]
+        w, h = float(c.get("rong", 640)), float(c.get("cao", 44))
+        f = float(c.get("phan", 0.5)) * ease_out((t - c["tu"] - 0.3) / 1.2)
+        track = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]])
+        fill_poly_alpha(fr, track, DARK, a * 0.8, blur=0)
+        draw_glow_poly(fr, track, WHITE, a * 0.7, 3, glow=0, closed=True)
+        if f > 0.005:
+            bar = np.array([[x0 + 6, y0 + 6], [x0 + 6 + (w - 12) * f, y0 + 6], [x0 + 6 + (w - 12) * f, y0 + h - 6], [x0 + 6, y0 + h - 6]])
+            fill_poly_alpha(fr, bar, color, a, blur=1)
+            tip = np.array([x0 + 6 + (w - 12) * f, y0 + h / 2])
+            fill_poly_alpha(fr, circle_pts(tip, h * 0.55, 30), WHITE, a, blur=2)
+        pk = ("tdp", id(c), int(round(f * 100)))
+        if pk not in self.labels:
+            self.labels[pk] = label_img(f"{int(round(f * 100))}%", None, color)
+        paste_center(fr, self.labels[pk], (x0 + w + 70, y0 + h / 2), a)
+        if self.labels[key] is not None:
+            lab = self.labels[key]
+            paste_center(fr, lab, (x0 + lab.shape[1] / 2, y0 - lab.shape[0] / 2 - 12), a)
+
+    def fx_do_cao(self, fr, c, i, t, a):
+        """Thước khoảng hở: vạch đứt từ mặt giường (y = 'day') lên tới điểm (vd cổ chân) khi điểm nhấc cao hơn ngưỡng."""
+        color = MAU.get(c.get("mau", "vang"), YELLOW)
+        Pt = self.pt_at(c["diem"], i)
+        yb = float(c.get("day", 990))
+        hgap = yb - Pt[1] - float(c.get("lech_day", 25))
+        av = a * float(np.clip((hgap - float(c.get("nguong", 50))) / 70, 0, 1))
+        if av <= 0.01:
+            return
+        x = Pt[0] + float(c.get("lech_x", 0))
+        y0, y1 = yb, Pt[1] + float(c.get("lech_day", 25))
+        n = max(2, int((y0 - y1) / 22))
+        for k in range(n):
+            u0, u1 = k / n, (k + 0.55) / n
+            draw_glow_poly(fr, np.array([[x, y0 + (y1 - y0) * u0], [x, y0 + (y1 - y0) * u1]]), color, av, 5, glow=0.3)
+        for yy in (y0, y1):
+            draw_glow_poly(fr, np.array([[x - 22, yy], [x + 22, yy]]), color, av, 6, glow=0.4)
+        if c.get("nhan") and t <= float(c.get("nhan_den", 1e9)):
+            key = ("dc", id(c))
+            if key not in self.labels:
+                self.labels[key] = label_img(c["nhan"], None, color)
+            lab = self.labels[key]
+            if "nhan_xy" in c:
+                Lc = np.array(c["nhan_xy"], float)
+            else:
+                Lc = np.array([x, (y0 + y1) / 2]) + np.array(c.get("nhan_lech", [0, 0]), float)
+            hw = lab.shape[1] / 2 + 10
+            Lc[0] = np.clip(Lc[0], hw, self.W - hw)
+            paste_center(fr, lab, Lc, av * ease((float(c.get("nhan_den", 1e9)) - t) / 0.3))
+
     def fx_so_do_rong(self, fr, c, i, t, a):
         img = self.labels[("so_do", id(c))]
         x, y = c.get("xy", [715, 470])
@@ -943,8 +1267,8 @@ class Dung:
                 if c["tu"] <= 0.01:
                     a = ease((c["den"] - t + FADE / 2) / FADE)
                 dy = int(18 * (1 - ease((t - c["tu"] + FADE / 2) / (FADE * 1.5))))
-                x = int(c["x"]) if "x" in c else (self.W - img.shape[1]) // 2
-                paste_rgba(fr, img, x, int(c.get("y", 170)) + dy, a)
+                x = int(c.get("x", self.the_tren.get("x", (self.W - img.shape[1]) // 2)))
+                paste_rgba(fr, img, x, int(c.get("y", self.the_tren.get("y", 170))) + dy, a)
         return fr
 
 

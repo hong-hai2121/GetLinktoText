@@ -1,0 +1,30 @@
+{
+  "ghi_chu": "Gập duỗi cổ chân, ngồi duỗi thẳng chân. Video NGANG 1440x1080, có lời hướng dẫn trong video (không làm phụ đề). Mốc giờ theo lời (chep_loi.py) + góc bàn chân đo thật (bien_do: gót→mũi chân). Kéo về lúc 6–9, 14.5–19.5, 25.5–30 s; duỗi ra 9.5–14, 20–25, 30.5–hết.",
+  "the_tren": {"x": 30, "y": 30, "co": 0.75},
+  "buoc": [
+    {"tu": 0.0,  "den": 4.4,  "kieu": "tieu_de", "tren": "ĐỘNG TÁC 1", "chinh": "GẬP DUỖI CỔ CHÂN", "phu": "10 LẦN MỖI CHÂN"},
+    {"tu": 4.4,  "den": 6.8,  "so": 1, "chinh": "NGỒI DUỖI THẲNG CHÂN", "phu": "Hai chân duỗi thẳng trên giường"},
+    {"tu": 6.8,  "den": 9.5,  "so": 2, "chinh": "KÉO MŨI CHÂN VỀ", "phu": "Về phía người, hết mức"},
+    {"tu": 9.5,  "den": 18.3, "so": 3, "chinh": "DUỖI MŨI CHÂN RA XA", "phu": "Thật chậm, đi hết biên độ"},
+    {"tu": 18.3, "den": 21.4, "kieu": "thuong", "huy_hieu": "x10", "chinh": "LẶP LẠI", "phu": "Kéo về – duỗi ra, 10 lần mỗi chân"},
+    {"tu": 21.4, "den": 26.5, "kieu": "meo", "chinh": "KHỞI ĐỘNG", "phu": "Cho cả nhóm cơ từ cổ chân trở lên"},
+    {"tu": 26.5, "den": 99,   "kieu": "thuong", "huy_hieu": "x10", "chinh": "LẶP LẠI", "phu": "Kéo về – duỗi ra, thật chậm"}
+  ],
+  "hieu_ung": [
+    {"loai": "vong", "tu": 0.8, "den": 4.4, "diem": "ankle", "ban_kinh": 80, "mau": "vang",
+     "nhan": "CỔ CHÂN", "nhan_xy": [250, 640]},
+
+    {"loai": "duoi", "tu": 4.6, "den": 7.0, "diem": ["hip", "knee", "ankle"], "mau": "luc",
+     "nhan": "CHÂN DUỖI THẲNG", "nhan_xy": [730, 800], "nhan_tre": 0.3},
+
+    {"loai": "bien_do", "tu": 6.0, "den": 99, "tam": "ankle", "goc": "heel", "dau": "foot", "ban_kinh": 280,
+     "tang": {"nhan": "KÉO VỀ", "mau": "xanh"}, "giam": {"nhan": "DUỖI RA", "mau": "cam"},
+     "het_muc": "hết mức!", "nhan_r": 95, "nhan_lech": {"giam": [10, -75], "tang": [60, 0]}},
+
+    {"loai": "duoi", "tu": 21.4, "den": 26.5, "diem": ["ankle", "knee", "hip"], "mau": "vang",
+     "nhan": "TỪ CỔ CHÂN TRỞ LÊN", "nhan_xy": [730, 790], "nhan_tre": 0.4},
+
+    {"loai": "dong_ho", "tu": 4.4, "den": 99, "xy": [1320, 140], "ban_kinh": 88, "mau": "hoac_vang",
+     "tren": "MỖI CHÂN", "chinh": "10", "duoi": "LẦN", "chu_ky": 4.5}
+  ]
+}
