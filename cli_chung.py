@@ -16,6 +16,18 @@ import subprocess
 from pathlib import Path
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+MAU_COMMAND_MAC = r"""#!/bin/zsh -l
+printf "\033]0;@TIEU_DE@\007"
+export PATH="@PATH@:$PATH"
+cd ~
+if @LENH@; then
+  echo; echo "✓ Xong. Cửa sổ này tự đóng sau 3 giây."; sleep 3
+else
+  echo; echo "✗ Có lỗi (xem ở trên). Bấm Enter để đóng cửa sổ."; read -r _
+fi
+touch "@MOC@"
+exit 0
+"""
 DUOI = (".cmd", ".exe", ".bat", "")
 
 
@@ -89,14 +101,35 @@ def mo_cua_so_lenh(lenh_win: str, lenh_mac: str, tieu_de: str, env: dict | None 
                          creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0), env=env)
         return
     import tempfile
+    import threading
     them_path = ":".join(d for d in thu_muc_ung_vien() if d)
-    noi_dung = (f'#!/bin/zsh -l\nprintf "\\033]0;{tieu_de}\\007"\nexport PATH="{them_path}:$PATH"\n'
-                f'cd ~\n{lenh_mac}\necho\necho "Xong - có thể đóng cửa sổ này."\nexec $SHELL -l\n')
     fd, duong_dan = tempfile.mkstemp(prefix="ghep_video_", suffix=".command")
+    moc = duong_dan + ".xong"                                    # .command chạm file này khi xong -> app đóng cửa sổ Terminal
+    noi_dung = (MAU_COMMAND_MAC.replace("@TIEU_DE@", tieu_de).replace("@PATH@", them_path)
+                .replace("@LENH@", lenh_mac).replace("@MOC@", moc))
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(noi_dung)
     os.chmod(duong_dan, 0o755)
     subprocess.Popen(["open", "-a", "Terminal", duong_dan])
+
+    def _dong_cua_so():
+        """Chờ .command báo xong (tối đa 30 phút) rồi đóng cửa sổ Terminal có tiêu đề đó (shell đã thoát nên không hỏi gì)."""
+        import time
+        het = time.time() + 1800
+        while time.time() < het and not os.path.exists(moc):
+            time.sleep(0.5)
+        if os.path.exists(moc):
+            time.sleep(0.7)
+            q = tieu_de.replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(["osascript", "-e", f'tell application "Terminal" to close (every window whose name contains "{q}")'],
+                           capture_output=True, timeout=30)
+        for f_ in (moc, duong_dan):
+            try:
+                os.remove(f_)
+            except OSError:
+                pass
+
+    threading.Thread(target=_dong_cua_so, daemon=True, name="dong-terminal").start()
 
 
 def phien_ban(exe: str) -> tuple:

@@ -3,6 +3,10 @@
 (menu tab dọc bên trái: Ghép video · Chỉnh sửa · Kết nối AI · Nhật ký · Cài đặt).
 
 Chạy:  pythonw app_gui.py   (hoặc bấm đúp mo_gui.bat / shortcut "Ghép video Flow" trên Desktop)
+  macOS: shortcut là một .app tự tạo (Contents/Info.plist + Resources/ghep_video.icns + MacOS/<script> gồm một dòng
+  `exec /bin/zsh "<repo>/GoogleFlowGhepVideo/mo_gui_mac.sh"`); mo_gui_mac.sh exec python của venv ngay trong tiến trình
+  của .app nên Dock chỉ có một biểu tượng "Ghép video Flow", không cửa sổ Terminal/python thừa. Mở lần hai khi đang chạy
+  thì macOS chỉ đưa cửa sổ lên trước.
   - Server của app.py chạy trong tiến trình này (thread nền) ở http://127.0.0.1:8766; cửa sổ nạp URL đó.
     Vẫn mở được cùng giao diện bằng trình duyệt (nút "Mở trong trình duyệt" ở tab Cài đặt).
   - Mở lần hai khi server đang chạy: chỉ mở thêm cửa sổ nạp server có sẵn, không chạy server thứ hai.
