@@ -53,7 +53,9 @@ def _nap(log: Callable[[str], None] = print) -> bool:
         t0 = time.time()
         tok = AutoTokenizer.from_pretrained(MODEL)
         model = AutoModel.from_pretrained(MODEL).eval()
-        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        dev = ("cuda" if torch.cuda.is_available()
+               else "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()   # Mac Apple Silicon
+               else "cpu")
         model.to(dev)
         _st.update(model=model, tok=tok, dev=dev)
         log(f"  vector: nạp {MODEL.split('/')[-1]} ({dev}) {time.time() - t0:.1f}s")
