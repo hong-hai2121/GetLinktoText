@@ -1427,6 +1427,9 @@ def main():
     ap.add_argument("--minh-hoa-sfx-db", type=float, default=-4.0, metavar="DB",
                     help="tiếng chuyển cảnh nhỏ hơn giọng đọc bấy nhiêu dB (mặc định -4, user chốt 19/10/2026; âm = nhỏ hơn)")
     ap.add_argument("--khong-minh-hoa-sfx", action="store_true", help="không gắn tiếng khi chuyển cảnh")
+    ap.add_argument("--minh-hoa-xen-bac-si", type=float, default=0.0,
+                    help="có clip gốc: rút ngẫu nhiên (theo seed) bấy nhiêu %% câu để giữ hình bác sĩ thay cảnh kho (xen kẽ, câu ≥ 2,5s, "
+                         "không câu đầu/cuối; câu không có cảnh tính vào trước); 0 = tắt (mặc định). Không clip gốc thì bỏ qua")
     ap.add_argument("--chon-thu", action="store_true",
                     help="CHỌN THỬ: chỉ tải Drive, lấy mốc giọng đọc, AI chọn cảnh + soát lại, ghi Thiếu và file ghi chú; KHÔNG dựng video "
                          "(user 23/10: bổ sung kho xong rồi mới bấm Chạy thật)")
@@ -1658,7 +1661,8 @@ def main():
                                   seed=args.seed, ten_bo=ten, log=lambda s: print("  " + s), thu_muc=args.minh_hoa_thu_muc,
                                   luu_tho=tho_mh, che_do=args.minh_hoa_che_do, bo_nho=bo_nho_mh, hoi_lai=args.minh_hoa_hoi_lai,
                                   khong_clip_goc=khong_clip_goc, vec_nguong=args.minh_hoa_vec_nguong, vec_nhom=args.minh_hoa_vec_nhom,
-                                  toc_mh=args.minh_hoa_toc_do, soat=not args.khong_minh_hoa_soat)
+                                  toc_mh=args.minh_hoa_toc_do, soat=not args.khong_minh_hoa_soat,
+                                  xen_bac_si=max(0.0, min(0.9, args.minh_hoa_xen_bac_si / 100.0)))
         if tho_mh.get("text"):                       # trả lời thô vào nhật ký để soát lại trên GUI
             print(f"  {tho_mh.get('nha', 'AI')} trả lời"
                   + (f" (dùng lại trả lời lúc {tho_mh['dung_lai']})" if tho_mh.get("dung_lai") else "")

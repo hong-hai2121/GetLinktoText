@@ -365,6 +365,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
             <select id="tc_minh_hoa_chuyen_kieu" style="width:auto" onchange="tcChuyenKieu()"><option value="ngau_nhien">Ngẫu nhiên — rút 1 trong 56 kiểu xfade của ffmpeg mỗi lần đổi cảnh (bỏ fadeblack, fadewhite), thời gian gốc của hiệu ứng (1 giây)</option><option value="mo_chong">Mờ chồng (crossfade) cố định theo số giây</option></select>
             <input type="number" id="tc_minh_hoa_chuyen" min="0" max="2" step="0.1" style="width:64px"><span class="u" id="tc_minh_hoa_chuyen_u">giây (0 = cắt cụp)</span></div></div>
           <div class="fld"><label>Tiếng lúc chuyển cảnh (tab Âm thanh hiệu ứng của Sheet kho)</label><div class="row">
+            <label class="sw" title="Có clip gốc: rút ngẫu nhiên theo seed bấy nhiêu % câu để giữ hình bác sĩ thay cảnh kho — xen kẽ, chỉ câu dài từ 2,5s, không rút câu đầu sau hook và câu kêu gọi cuối; câu không có cảnh tính vào trước. KHÔNG dùng clip gốc thì ô này không có tác dụng."><input type="checkbox" id="tc_minh_hoa_xen_bs"> Xen clip gốc <input type="number" id="tc_minh_hoa_xen_bs_pct" min="10" max="90" step="5" style="width:58px;margin:0 4px"> % câu (ngẫu nhiên theo seed, xen kẽ)</label>
             <label class="sw" title="Sau khi chọn xong, đưa cả bộ cảnh cho AI soát: clip nào AI thấy chưa hợp câu thì ghi vào tab Thiếu của Sheet kho (kèm cảnh cần quay) để bổ sung cho lần sau; video vẫn dùng cảnh đã chọn. Tốn thêm một lượt hỏi AI mỗi tập."><input type="checkbox" id="tc_minh_hoa_soat"> AI soát lại cảnh đã chọn, ghi cảnh chưa hợp vào Thiếu</label>
             <label class="sw" title="Mỗi lần chuyển cảnh rút một tiếng có kiểu xfade đó ở cột K (một tiếng hợp nhiều kiểu), theo seed; mp3 tải về thư mục video mẫu"><input type="checkbox" id="tc_minh_hoa_sfx"> Gắn tiếng hợp kiểu xfade</label>
             <input type="number" id="tc_minh_hoa_sfx_db" min="-30" max="6" step="1" style="width:64px"><span class="u">dB so với giọng đọc (âm = nhỏ hơn)</span></div></div>
@@ -674,6 +675,7 @@ function renderKcg(tc){
   $('btnKcg').classList.toggle('on', on); $('cardGoc').classList.toggle('kcg-on', on);
   $('btnKcgTxt').textContent = on ? 'KHÔNG DÙNG CLIP GỐC — phần sau 100% cảnh kho (bấm để tắt)' : 'Đang dùng clip gốc (bấm để KHÔNG dùng)';
   $('kcgNote').style.display = on ? '' : 'none';
+  ['tc_minh_hoa_xen_bs', 'tc_minh_hoa_xen_bs_pct'].forEach(id => { const el = $(id); if (el) el.disabled = on; });   // xen clip gốc chỉ có nghĩa khi dùng clip gốc
 }
 
 /* ---------- thẻ 3: kho video minh họa ---------- */
@@ -795,7 +797,7 @@ function renderItems(s){
 
 /* ---------- tab Chỉnh sửa ---------- */
 const TC_IDS = ['tc_ti_le','tc_khoang_cach','tc_chinh_mau','tc_chuan_am','tc_lufs','tc_cua_so_khop','tc_lech_giong','tc_toc_do_giong','tc_sub','tc_sub_kieu','tc_sub_font','tc_sub_co','tc_sub_le_duoi','tc_model_sub','tc_seed',
-  'tc_minh_hoa','tc_minh_hoa_sheet','tc_minh_hoa_ai','tc_minh_hoa_model','tc_minh_hoa_giay','tc_minh_hoa_ti_le','tc_minh_hoa_che_do','tc_minh_hoa_chuyen','tc_minh_hoa_chuyen_kieu','tc_minh_hoa_anh_dong','tc_minh_hoa_sfx','tc_minh_hoa_sfx_db','tc_minh_hoa_vec_nguong','tc_minh_hoa_vec_nhom','tc_nghi_giua_tap','tc_minh_hoa_toc_do','tc_minh_hoa_soat',
+  'tc_minh_hoa','tc_minh_hoa_sheet','tc_minh_hoa_ai','tc_minh_hoa_model','tc_minh_hoa_giay','tc_minh_hoa_ti_le','tc_minh_hoa_che_do','tc_minh_hoa_chuyen','tc_minh_hoa_chuyen_kieu','tc_minh_hoa_anh_dong','tc_minh_hoa_sfx','tc_minh_hoa_sfx_db','tc_minh_hoa_vec_nguong','tc_minh_hoa_vec_nhom','tc_nghi_giua_tap','tc_minh_hoa_toc_do','tc_minh_hoa_soat','tc_minh_hoa_xen_bs','tc_minh_hoa_xen_bs_pct',
   'tc_lam_dep','tc_ld_trang','tc_ld_son','tc_ld_suc_song','tc_ld_sang','tc_ld_tuong_phan','tc_ld_nhiet'];
 const LD_IDS = ['tc_ld_trang','tc_ld_son','tc_ld_suc_song','tc_ld_sang','tc_ld_tuong_phan','tc_ld_nhiet'];
 function tcFill(tc){
@@ -812,6 +814,8 @@ function tcFill(tc){
   $('tc_minh_hoa_chuyen').value = tc.minh_hoa_chuyen ?? 0.5; $('tc_minh_hoa_anh_dong').checked = tc.minh_hoa_anh_dong !== false;
   $('tc_minh_hoa_sfx').checked = tc.minh_hoa_sfx !== false; $('tc_minh_hoa_sfx_db').value = tc.minh_hoa_sfx_db ?? -4;
   $('tc_minh_hoa_soat').checked = tc.minh_hoa_soat !== false;
+  $('tc_minh_hoa_xen_bs').checked = tc.minh_hoa_xen_bs !== false; $('tc_minh_hoa_xen_bs_pct').value = tc.minh_hoa_xen_bs_pct ?? 50;
+  ['tc_minh_hoa_xen_bs', 'tc_minh_hoa_xen_bs_pct'].forEach(id => { $(id).disabled = !!tc.khong_clip_goc; });   // không clip gốc -> không liên quan
   $('tc_minh_hoa_vec_nguong').value = tc.minh_hoa_vec_nguong ?? 0.7; $('tc_minh_hoa_vec_nhom').value = tc.minh_hoa_vec_nhom ?? 0.9;
   $('tc_minh_hoa_chuyen_kieu').value = tc.minh_hoa_chuyen_kieu || 'ngau_nhien'; tcChuyenKieu();
   document.querySelectorAll('input[name=tc_che_do]').forEach(r => r.checked = r.value === tc.che_do);
@@ -835,6 +839,7 @@ function tcLay(){
     minh_hoa_chuyen: v('tc_minh_hoa_chuyen') === '' ? 0.5 : +v('tc_minh_hoa_chuyen'), minh_hoa_chuyen_kieu: v('tc_minh_hoa_chuyen_kieu') || 'ngau_nhien', minh_hoa_anh_dong: $('tc_minh_hoa_anh_dong').checked,
     minh_hoa_sfx: $('tc_minh_hoa_sfx').checked, minh_hoa_sfx_db: v('tc_minh_hoa_sfx_db') === '' ? -4 : +v('tc_minh_hoa_sfx_db'),
     minh_hoa_soat: $('tc_minh_hoa_soat').checked,
+    minh_hoa_xen_bs: $('tc_minh_hoa_xen_bs').checked, minh_hoa_xen_bs_pct: +v('tc_minh_hoa_xen_bs_pct') || 50,
     minh_hoa_vec_nguong: +v('tc_minh_hoa_vec_nguong') || 0.7, minh_hoa_vec_nhom: +v('tc_minh_hoa_vec_nhom') || 0.9,
     lam_dep: $('tc_lam_dep').checked, ld_trang: +v('tc_ld_trang'), ld_son: +v('tc_ld_son'), ld_son_mau: rad('tc_ld_son_mau') || 'hong',
     ld_suc_song: +v('tc_ld_suc_song'), ld_sang: +v('tc_ld_sang'), ld_tuong_phan: +v('tc_ld_tuong_phan'), ld_nhiet: +v('tc_ld_nhiet') };
@@ -855,6 +860,7 @@ function tcCmd(){
     if (t.minh_hoa_chuyen_kieu === 'ngau_nhien') a.push(t.minh_hoa_sfx ? `--minh-hoa-sfx-db ${t.minh_hoa_sfx_db}` : '--khong-minh-hoa-sfx'); if (t.minh_hoa_model) a.push(`--minh-hoa-model ${t.minh_hoa_model}`);
     a.push(`--minh-hoa-vec-nguong ${t.minh_hoa_vec_nguong}`, `--minh-hoa-vec-nhom ${t.minh_hoa_vec_nhom}`, `--minh-hoa-toc-do ${t.minh_hoa_toc_do}`);
     if (!t.minh_hoa_soat) a.push('--khong-minh-hoa-soat');
+    if (t.minh_hoa_xen_bs && !(lastS && lastS.tuy_chon && lastS.tuy_chon.khong_clip_goc)) a.push(`--minh-hoa-xen-bac-si ${t.minh_hoa_xen_bs_pct}`);
     if (state.tuy_chon && state.tuy_chon.minh_hoa_hoi_lai) a.push('--minh-hoa-hoi-lai'); }
   if (t.lam_dep) a.push(`--lam-dep "${ldChuoi()}"`);
   if (state.tuy_chon && state.tuy_chon.khong_clip_goc) a.unshift('--khong-clip-goc');

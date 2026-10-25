@@ -1,0 +1,206 @@
+{
+ "ghi_chu": "Động tác 4 (bản quay xa): nằm nghiêng nâng chân dưới. Video NGANG 1440x1080, có lời hướng dẫn (không phụ đề). User dặn: KHÔNG đếm số lần nâng chân vì không đủ 10 lần (thực tế ~7 lần: 9.7, 16.2, 20.8, 26.0, 30.5, 36.6, 42.5 s). Chân nâng = ankle_l, trục hông cố định (830, 857); chân trên co hip_r/knee_r/ankle_r, gót trên heel_r ngang gối dưới knee_l.",
+ "the_tren": {
+  "x": 30,
+  "y": 30,
+  "co": 0.75
+ },
+ "buoc": [
+  {
+   "tu": 0.0,
+   "den": 2.2,
+   "kieu": "tieu_de",
+   "tren": "ĐỘNG TÁC 4",
+   "chinh": "NẰM NGHIÊNG NÂNG CHÂN",
+   "phu": "NÂNG LÊN – HẠ CHẬM"
+  },
+  {
+   "tu": 2.2,
+   "den": 5.7,
+   "so": 1,
+   "chinh": "NẰM NGHIÊNG",
+   "phu": "Co chân trên, gác ra trước làm điểm tựa"
+  },
+  {
+   "tu": 5.7,
+   "den": 8.7,
+   "so": 2,
+   "chinh": "GÓT TRÊN NGANG GỐI DƯỚI",
+   "phu": "Gót chân trên ngang gối chân dưới"
+  },
+  {
+   "tu": 8.7,
+   "den": 13.0,
+   "so": 3,
+   "chinh": "DUỖI THẲNG CHÂN DƯỚI",
+   "phu": "Nâng lên khỏi mặt giường"
+  },
+  {
+   "tu": 13.0,
+   "den": 19.0,
+   "so": 4,
+   "chinh": "HẠ CHẬM XUỐNG",
+   "phu": "Từ từ, thật chậm"
+  },
+  {
+   "tu": 19.0,
+   "den": 30.3,
+   "kieu": "thuong",
+   "huy_hieu": "»",
+   "chinh": "NÂNG LÊN – HẠ CHẬM",
+   "phu": "Khoảng 10 lần mỗi bên"
+  },
+  {
+   "tu": 30.3,
+   "den": 34.0,
+   "kieu": "thuong",
+   "mau": "luc",
+   "huy_hieu": "½",
+   "chinh": "CỐ LÊN!",
+   "phu": "Đã đi hết một nửa chặng đường"
+  },
+  {
+   "tu": 34.0,
+   "den": 99,
+   "kieu": "thuong",
+   "huy_hieu": "»",
+   "chinh": "NÂNG LÊN – HẠ CHẬM",
+   "phu": "Tập cả hai bên"
+  }
+ ],
+ "hieu_ung": [
+  {
+   "loai": "duoi",
+   "tu": 2.6,
+   "den": 5.8,
+   "diem": [
+    "hip_r",
+    "knee_r",
+    "ankle_r"
+   ],
+   "mau": "luc",
+   "vach": false,
+   "nhip": true,
+   "nhan": "CHÂN TRÊN CO, GÁC TRƯỚC",
+   "nhan_xy": [
+    900,
+    420
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "vong",
+   "tu": 4.4,
+   "den": 5.8,
+   "diem": "ankle_r",
+   "ban_kinh": 55,
+   "mau": "cam",
+   "nhan": "ĐIỂM TỰA",
+   "nhan_xy": [
+    560,
+    1030
+   ]
+  },
+  {
+   "loai": "vong",
+   "tu": 5.8,
+   "den": 8.6,
+   "diem": "heel_r",
+   "ban_kinh": 42,
+   "mau": "vang"
+  },
+  {
+   "loai": "vong",
+   "tu": 6.6,
+   "den": 8.6,
+   "diem": "knee_l",
+   "ban_kinh": 42,
+   "mau": "vang"
+  },
+  {
+   "loai": "duoi",
+   "tu": 6.8,
+   "den": 8.6,
+   "diem": [
+    "heel_r",
+    "knee_l"
+   ],
+   "mau": "vang",
+   "vach": false,
+   "nhan": "NGANG NHAU",
+   "nhan_xy": [
+    580,
+    1035
+   ],
+   "nhan_tre": 0.2
+  },
+  {
+   "loai": "bien_do",
+   "tu": 8.8,
+   "den": 99,
+   "tam": [
+    830,
+    857
+   ],
+   "goc": [
+    830,
+    857
+   ],
+   "dau": "ankle_l",
+   "chuoi": [
+    "hip_l",
+    "knee_l"
+   ],
+   "keo_dai": 0.15,
+   "cung": false,
+   "ban_kinh": 650,
+   "nhan_r": 110,
+   "tang": {
+    "nhan": "NÂNG LÊN",
+    "mau": "xanh",
+    "het_muc": ""
+   },
+   "giam": {
+    "nhan": "HẠ CHẬM",
+    "mau": "cam",
+    "het_muc": ""
+   },
+   "nhan_lech": {
+    "giam": [
+     15,
+     -370
+    ]
+   }
+  },
+  {
+   "loai": "do_cao",
+   "tu": 8.8,
+   "den": 99,
+   "diem": "ankle_l",
+   "day": 1012,
+   "lech_day": 25,
+   "nguong": 50,
+   "mau": "vang",
+   "nhan": "KHỎI MẶT GIƯỜNG",
+   "nhan_den": 13.0,
+   "nhan_xy": [
+    330,
+    1040
+   ]
+  },
+  {
+   "loai": "tien_do",
+   "tu": 30.4,
+   "den": 34.0,
+   "xy": [
+    60,
+    335
+   ],
+   "rong": 440,
+   "cao": 44,
+   "phan": 0.5,
+   "mau": "luc",
+   "nhan": "NỬA CHẶNG ĐƯỜNG"
+  }
+ ]
+}

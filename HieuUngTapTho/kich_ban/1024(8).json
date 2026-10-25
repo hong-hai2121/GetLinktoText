@@ -1,0 +1,30 @@
+{
+  "ghi_chu": "Động tác 5: nằm nghiêng nâng chân TRÊN (dạng hông). Video NGANG 1440x1080, có lời hướng dẫn (không phụ đề). Chân nâng = ankle_r, trục hông cố định (785, 725); 9 lần nâng trọn (8.3 … 42.1 s) < 10 → KHÔNG đếm. Chân bàn chân lên tới góc trái trên → thẻ trên cùng dời sang PHẢI. Ý chính: không xoay hông, nâng thấp cũng được.",
+  "the_tren": {"x": 715, "y": 30, "co": 0.75},
+  "buoc": [
+    {"tu": 0.0,  "den": 4.6,  "kieu": "tieu_de", "tren": "ĐỘNG TÁC 5", "chinh": "NẰM NGHIÊNG NÂNG CHÂN", "phu": "NÂNG LÊN – HẠ CHẬM"},
+    {"tu": 4.6,  "den": 8.4,  "so": 1, "chinh": "NẰM NGHIÊNG", "phu": "Chân dưới hơi co"},
+    {"tu": 8.4,  "den": 11.6, "so": 2, "chinh": "DUỖI THẲNG CHÂN TRÊN", "phu": "Rồi nâng lên"},
+    {"tu": 11.6, "den": 13.6, "so": 3, "chinh": "HẠ CHẬM XUỐNG", "phu": "Không xoay hông"},
+    {"tu": 13.6, "den": 18.2, "kieu": "nguy_hiem", "chinh": "LỖI HAY GẶP", "phu": ["Xoay cả hông ra sau", "để nâng chân cao hơn"]},
+    {"tu": 18.2, "den": 23.5, "kieu": "meo", "chinh": "GIỮ HÔNG THẲNG", "phu": ["Chân nâng thấp chút cũng không sao", "Miễn là hông không xoay theo"]},
+    {"tu": 23.5, "den": 99,   "kieu": "thuong", "huy_hieu": "»", "chinh": "NÂNG LÊN – HẠ CHẬM", "phu": "Giữ hông thẳng, không xoay"}
+  ],
+  "hieu_ung": [
+    {"loai": "duoi", "tu": 6.4, "den": 8.4, "diem": ["hip_l", "knee_l", "ankle_l"], "mau": "luc", "vach": false, "nhip": true,
+     "nhan": "CHÂN DƯỚI HƠI CO", "nhan_xy": [560, 1035], "nhan_tre": 0.2},
+
+    {"loai": "bien_do", "tu": 8.2, "den": 99, "tam": [785, 725], "goc": [785, 725], "dau": "ankle_r",
+     "chuoi": ["hip_r", "knee_r"], "keo_dai": 0.15, "cung": false, "ban_kinh": 650, "nhan_r": 110,
+     "tang": {"nhan": "NÂNG LÊN", "mau": "xanh", "het_muc": ""},
+     "giam": {"nhan": "HẠ CHẬM", "mau": "cam", "het_muc": ""}},
+
+    {"loai": "vong", "tu": 12.4, "den": 18.2, "diem": "hip_r", "ban_kinh": 70, "mau": "do",
+     "nhan": "KHÔNG XOAY HÔNG", "nhan_phu": "ra sau", "nhan_xy": [960, 980]},
+    {"loai": "vong", "tu": 18.2, "den": 23.5, "diem": "hip_r", "ban_kinh": 70, "mau": "luc"},
+    {"loai": "duoi", "tu": 18.3, "den": 99, "diem": ["shoulder", "hip_r"], "mau": "luc", "vach": false, "nhip": true,
+     "nhan": "HÔNG THẲNG", "nhan_xy": [960, 980], "nhan_tre": 0.2},
+    {"loai": "nhan", "tu": 19.8, "den": 23.5, "chu": "NÂNG THẤP CŨNG ĐƯỢC", "phu": "miễn hông không xoay", "mau": "vang",
+     "xy": [1050, 330]}
+  ]
+}

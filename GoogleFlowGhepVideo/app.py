@@ -109,6 +109,8 @@ TUY_CHON_MAC_DINH = {
     "minh_hoa_giay": 5.0,    # phủ kín: mỗi cảnh video ≈ bấy nhiêu giây thì đổi cảnh (user 23/10: 5s), ảnh giữ tối đa; điểm xuyết: mỗi cảnh tối đa
     "minh_hoa_toc_do": 1.2,  # phủ kín: tốc độ chiếu clip minh họa (1.2 = nhanh 20%); cần phủ dài hơn thì planner hạ dần tới 0.8 thay vì đứng hình
     "minh_hoa_soat": True,   # AI soát lại cảnh đã chọn: clip chưa hợp câu -> ghi tab Thiếu để bổ sung kho (user 23/10)
+    "minh_hoa_xen_bs": True, # có clip gốc: rút ngẫu nhiên theo seed một phần câu giữ hình bác sĩ thay cảnh kho (user 25/10)
+    "minh_hoa_xen_bs_pct": 50,   # tỉ lệ câu bác sĩ (%); không clip gốc thì ô này không có tác dụng
     "minh_hoa_ti_le": 0.45,  # tổng minh họa tối đa / thời lượng phần sau (chỉ điểm xuyết)
     "minh_hoa_che_do": "phu_kin",   # phu_kin = cảnh kho là nền chính, bác sĩ bù | diem_xuyet = vài cảnh ngắn (cũ)
     "minh_hoa_chuyen": 0.5,         # giây mờ chồng khi vào/ra mỗi cảnh minh họa, CHỈ dùng với kiểu mo_chong; 0 = cắt cụp
@@ -228,6 +230,8 @@ def chuan_hoa_tuy_chon(d: dict) -> dict:
         "minh_hoa_giay": round(_so(d.get("minh_hoa_giay"), float, m["minh_hoa_giay"], 2.5, 20.0), 1),
         "minh_hoa_toc_do": round(_so(d.get("minh_hoa_toc_do"), float, m["minh_hoa_toc_do"], 0.8, 1.5), 2),
         "minh_hoa_soat": bool(d.get("minh_hoa_soat", m["minh_hoa_soat"])),
+        "minh_hoa_xen_bs": bool(d.get("minh_hoa_xen_bs", m["minh_hoa_xen_bs"])),
+        "minh_hoa_xen_bs_pct": _so(d.get("minh_hoa_xen_bs_pct"), int, m["minh_hoa_xen_bs_pct"], 10, 90),
         "minh_hoa_ti_le": round(_so(d.get("minh_hoa_ti_le"), float, m["minh_hoa_ti_le"], 0.05, 0.9), 2),
         "minh_hoa_che_do": d.get("minh_hoa_che_do") if d.get("minh_hoa_che_do") in minh_hoa.CHE_DO_MINH_HOA else m["minh_hoa_che_do"],
         "minh_hoa_chuyen": round(_so(d.get("minh_hoa_chuyen"), float, m["minh_hoa_chuyen"], 0.0, 2.0), 2),
@@ -299,6 +303,8 @@ def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
             a.append("--khong-minh-hoa-sfx")
         if not tc.get("minh_hoa_soat", True):
             a.append("--khong-minh-hoa-soat")
+        if tc.get("minh_hoa_xen_bs", True) and not tc.get("khong_clip_goc"):
+            a += ["--minh-hoa-xen-bac-si", str(tc.get("minh_hoa_xen_bs_pct", 50))]
         a += ["--minh-hoa-vec-nguong", str(tc.get("minh_hoa_vec_nguong", 0.7)), "--minh-hoa-vec-nhom", str(tc.get("minh_hoa_vec_nhom", 0.9)),
               "--minh-hoa-toc-do", str(tc.get("minh_hoa_toc_do", 1.2))]
         if tc["minh_hoa_model"]:

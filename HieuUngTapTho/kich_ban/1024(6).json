@@ -1,0 +1,424 @@
+{
+ "ghi_chu": "Động tác 7 (giãn bắp chuối bằng dây + xoa bánh chè) và động tác 8 (giãn cơ sau đùi), cắt cảnh ở 36.4 s. Video NGANG 1440x1080, có lời hướng dẫn (không làm phụ đề). Whisper nghe nhầm: 'dãn bắp chuối', 'xoa sơn bánh chè' = xương bánh chè, 'cúi đăng sưng' = gối đang sưng, 'dãn cơ xoa đùi' = giãn cơ sau đùi, 'ngồi dưới chân' = ngồi duỗi chân. Dây quấn quanh bàn chân foot_l, giữ dây 14–33.2 s (thả dây 33.3 s). Đoạn xoa bánh chè chỉ có lời, không làm mẫu → chỉ minh họa bằng mũi tên dao động. Động tác 8 cúi giữ từ 44 s tới hết (~10 s).",
+ "the_tren": {
+  "x": 30,
+  "y": 30,
+  "co": 0.75
+ },
+ "buoc": [
+  {
+   "tu": 0.0,
+   "den": 7.4,
+   "kieu": "tieu_de",
+   "tren": "ĐỘNG TÁC 7",
+   "chinh": "GIÃN BẮP CHUỐI BẰNG DÂY",
+   "phu": "GIỮ 10 GIÂY"
+  },
+  {
+   "tu": 7.4,
+   "den": 9.4,
+   "so": 1,
+   "chinh": "NGỒI DUỖI THẲNG CHÂN",
+   "phu": "Trên giường"
+  },
+  {
+   "tu": 9.4,
+   "den": 12.1,
+   "so": 2,
+   "chinh": "VÒNG DÂY QUA LÒNG BÀN CHÂN",
+   "phu": "Dây hoặc khăn đều được"
+  },
+  {
+   "tu": 12.1,
+   "den": 15.7,
+   "so": 3,
+   "chinh": "KÉO VỀ ĐẾN KHI HƠI CĂNG",
+   "phu": "Rồi dừng, không cố thêm"
+  },
+  {
+   "tu": 15.7,
+   "den": 21.9,
+   "so": 4,
+   "chinh": "THẢ LỎNG ĐÙI",
+   "phu": "Tay đẩy nhẹ bánh chè lên xuống, qua lại"
+  },
+  {
+   "tu": 21.9,
+   "den": 24.7,
+   "kieu": "meo",
+   "chinh": "GỐI ĐANG SƯNG?",
+   "phu": "Cách này giúp đỡ đau hơn nhiều"
+  },
+  {
+   "tu": 24.7,
+   "den": 33.4,
+   "kieu": "thuong",
+   "huy_hieu": "10",
+   "chinh": "GIỮ 10 GIÂY",
+   "phu": "Kéo vừa hơi căng, không cố thêm"
+  },
+  {
+   "tu": 33.4,
+   "den": 36.3,
+   "kieu": "thuong",
+   "huy_hieu": "»",
+   "chinh": "TIẾP THEO",
+   "phu": "Động tác cuối cùng"
+  },
+  {
+   "tu": 36.3,
+   "den": 41.0,
+   "kieu": "tieu_de",
+   "tren": "ĐỘNG TÁC 8 · CUỐI CÙNG",
+   "chinh": "GIÃN CƠ SAU ĐÙI",
+   "phu": "GIỮ 15–20 GIÂY"
+  },
+  {
+   "tu": 41.0,
+   "den": 43.1,
+   "kieu": "thuong",
+   "huy_hieu": "1",
+   "chinh": "NGỒI DUỖI THẲNG CHÂN",
+   "phu": "Trên giường"
+  },
+  {
+   "tu": 43.1,
+   "den": 99,
+   "kieu": "thuong",
+   "huy_hieu": "2",
+   "chinh": "CÚI NGƯỜI VỀ TRƯỚC",
+   "phu": "Đến khi căng sau đùi"
+  }
+ ],
+ "hieu_ung": [
+  {
+   "loai": "nhan",
+   "tu": 3.0,
+   "den": 7.4,
+   "chu": "+ XOA BÁNH CHÈ",
+   "phu": "kết hợp cùng lúc",
+   "mau": "vang",
+   "xy": [
+    330,
+    390
+   ]
+  },
+  {
+   "loai": "duoi",
+   "tu": 7.5,
+   "den": 9.5,
+   "diem": [
+    "hip",
+    "knee_l",
+    "ankle_l"
+   ],
+   "mau": "luc",
+   "nhan": "DUỖI THẲNG CHÂN",
+   "nhan_xy": [
+    560,
+    760
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "vong",
+   "tu": 9.5,
+   "den": 12.2,
+   "diem": "foot_l",
+   "ban_kinh": 75,
+   "mau": "vang",
+   "nhan": "LÒNG BÀN CHÂN",
+   "nhan_xy": [
+    300,
+    700
+   ]
+  },
+  {
+   "loai": "mui_ten",
+   "tu": 12.2,
+   "den": 15.7,
+   "co_dinh": true,
+   "tu_diem": {
+    "diem": "foot_l",
+    "lech": [
+     70,
+     -95
+    ]
+   },
+   "vec": [
+    300,
+    -70
+   ],
+   "cong": -0.25,
+   "mau": "xanh",
+   "nhan": "KÉO VỀ",
+   "nhan_xy": [
+    330,
+    690
+   ]
+  },
+  {
+   "loai": "duoi",
+   "tu": 13.6,
+   "den": 18.5,
+   "diem": [
+    {
+     "diem": "knee_l",
+     "lech": [
+      -10,
+      8
+     ]
+    },
+    {
+     "diem": "ankle_l",
+     "lech": [
+      30,
+      -4
+     ]
+    }
+   ],
+   "mau": "do",
+   "day": 18,
+   "nhip": true,
+   "vach": false,
+   "nhan": "BẮP CHUỐI HƠI CĂNG",
+   "nhan_xy": [
+    560,
+    1035
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "duoi",
+   "tu": 18.4,
+   "den": 21.9,
+   "diem": [
+    {
+     "diem": "knee_l",
+     "lech": [
+      -10,
+      8
+     ]
+    },
+    {
+     "diem": "ankle_l",
+     "lech": [
+      30,
+      -4
+     ]
+    }
+   ],
+   "mau": "do",
+   "day": 18,
+   "nhip": true,
+   "vach": false
+  },
+  {
+   "loai": "duoi",
+   "tu": 15.8,
+   "den": 21.9,
+   "diem": [
+    {
+     "diem": "hip",
+     "lech": [
+      -20,
+      -45
+     ]
+    },
+    {
+     "diem": "knee_l",
+     "lech": [
+      25,
+      -45
+     ]
+    }
+   ],
+   "mau": "luc",
+   "vach": false,
+   "nhip": true
+  },
+  {
+   "loai": "vong",
+   "tu": 17.4,
+   "den": 21.9,
+   "diem": {
+    "diem": "knee_l",
+    "lech": [
+     -10,
+     -35
+    ]
+   },
+   "ban_kinh": 44,
+   "mau": "vang"
+  },
+  {
+   "loai": "lac",
+   "tu": 18.6,
+   "den": 21.9,
+   "diem": {
+    "diem": "knee_l",
+    "lech": [
+     -10,
+     -35
+    ]
+   },
+   "truc": [
+    [
+     1,
+     -0.28
+    ],
+    [
+     0.28,
+     1
+    ]
+   ],
+   "doi": 1.6,
+   "bien": 14,
+   "dai": 42,
+   "mau": "vang",
+   "nhan": "ĐẨY NHẸ BÁNH CHÈ",
+   "nhan_phu": "lên xuống, qua lại",
+   "nhan_xy": [
+    560,
+    720
+   ]
+  },
+  {
+   "loai": "duoi",
+   "tu": 23.0,
+   "den": 33.3,
+   "diem": [
+    {
+     "diem": "knee_l",
+     "lech": [
+      -10,
+      8
+     ]
+    },
+    {
+     "diem": "ankle_l",
+     "lech": [
+      30,
+      -4
+     ]
+    }
+   ],
+   "mau": "do",
+   "day": 18,
+   "nhip": true,
+   "vach": false
+  },
+  {
+   "loai": "dem",
+   "tu": 23.0,
+   "den": 34.0,
+   "xy": [
+    1310,
+    190
+   ],
+   "ban_kinh": 100,
+   "mau": "hoac_vang",
+   "tren": "GIÂY",
+   "moc": [
+    23.3,
+    24.3,
+    25.3,
+    26.3,
+    27.3,
+    28.3,
+    29.3,
+    30.3,
+    31.3,
+    32.3
+   ],
+   "xong": "THẢ RA"
+  },
+  {
+   "loai": "duoi",
+   "tu": 41.1,
+   "den": 43.4,
+   "diem": [
+    "hip",
+    "knee_l",
+    "ankle_l"
+   ],
+   "mau": "luc",
+   "nhan": "DUỖI THẲNG CHÂN",
+   "nhan_xy": [
+    560,
+    770
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "mui_ten",
+   "tu": 43.2,
+   "den": 46.5,
+   "co_dinh": true,
+   "tu_diem": {
+    "diem": "shoulder",
+    "lech": [
+     40,
+     -120
+    ]
+   },
+   "vec": [
+    -300,
+    160
+   ],
+   "cong": 0.35,
+   "mau": "cam",
+   "nhan": "CÚI VỀ TRƯỚC",
+   "nhan_xy": [
+    560,
+    330
+   ]
+  },
+  {
+   "loai": "duoi",
+   "tu": 44.6,
+   "den": 99,
+   "diem": [
+    {
+     "diem": "hip",
+     "lech": [
+      -20,
+      48
+     ]
+    },
+    {
+     "diem": "knee_l",
+     "lech": [
+      30,
+      42
+     ]
+    }
+   ],
+   "mau": "do",
+   "day": 18,
+   "nhip": true,
+   "vach": false,
+   "nhan": "CĂNG SAU ĐÙI",
+   "nhan_xy": [
+    760,
+    1030
+   ],
+   "nhan_tre": 0.3
+  },
+  {
+   "loai": "dong_ho",
+   "tu": 44.6,
+   "den": 99,
+   "xy": [
+    1320,
+    160
+   ],
+   "ban_kinh": 100,
+   "mau": "hoac_vang",
+   "tren": "GIỮ",
+   "chinh": "15–20",
+   "duoi": "GIÂY",
+   "chu_ky": 20
+  }
+ ]
+}

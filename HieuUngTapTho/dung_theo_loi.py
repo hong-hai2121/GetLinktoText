@@ -19,14 +19,16 @@ Loại hiệu ứng trong kịch bản (mọi điểm là tên điểm mốc, {"
     so_do_rong : thẻ sơ đồ nhìn từ trên xuống "gối rộng bằng hông"
     dong_ho    : đồng hồ giữ tư thế (tren / chinh / duoi, vd GIỮ / 3–5 / PHÚT), chu_ky vòng chạy
     chen_lai   : khung nhỏ phát lại đoạn nguon_tu→nguon_den, vong = vòng đánh dấu một điểm trong khung
-    the_canh_bao: các dòng cảnh báo có biểu tượng (mat / tim), hiện lần lượt
-    danh_sach  : thẻ danh sách, từng dòng được tích vào lúc 'tu' của dòng
+    the_canh_bao: các dòng cảnh báo có biểu tượng (mat / tim / lua / dung), hiện lần lượt
+    danh_sach  : thẻ danh sách, từng dòng được tích vào lúc 'tu' của dòng (co = phóng to, dùng cho video dọc)
     tho_bung   : thở bụng theo tín hiệu đo thật (do_bung.py → tin_hieu), pha = [[t0, t1, hit1|hit2|tho]],
                  bong bóng to/nhỏ theo bụng, vùng bụng phồng, thanh nhịp [HÍT][HÍT][THỞ RA DÀI]
     zzz        : chữ Z bay lên từ một điểm (ngủ quên)
     so_do_goc  : thẻ sơ đồ chân duỗi gối cong nhẹ + 2 tay đan dưới khoeo + góc (goc, chu, tieu_de)
     goc_vuong  : dấu góc vuông tại tam, một cạnh hướng về 'huong', nhãn chu (mặc định 90°)
     do_cao     : thước khoảng hở từ mặt giường (day) lên tới một điểm khi điểm được nhấc (vd "khỏi mặt giường")
+    lac        : mũi tên hai đầu dao động quanh một điểm, đổi trục theo 'truc' mỗi 'doi' giây (vd đẩy bánh chè)
+    nhan       : nhãn đứng riêng (chu, phu, mau, xy, co) bật lên — cho đoạn nói chuyện không có động tác
     tien_do    : thanh tiến độ chạy tới 'phan' (0..1), nhãn phía trên + phần trăm
     dem        : bộ đếm vòng N ô, moc = [t1, t2, ...] lúc nhảy số; xong = nhãn khi đếm hết
     bien_do    : biên độ khớp — cung tại 'tam', kim theo hướng goc→dau đo thật (vd tam=ankle, goc=heel, dau=foot;
@@ -268,6 +270,21 @@ def icon_glyph(d, kind, cx, cy, s):
         zz = [(cx - s * 0.75, cy), (cx - s * 0.3, cy), (cx - s * 0.12, cy - s * 0.45), (cx + s * 0.1, cy + s * 0.4),
               (cx + s * 0.28, cy - s * 0.1), (cx + s * 0.75, cy - s * 0.1)]
         d.line(zz, fill=RED + (255,), width=6, joint="curve")
+    elif kind == "lua":
+        t = np.linspace(0, 2 * np.pi, 90)
+        r = 1 - 0.55 * (np.sin(t / 2) ** 6)                  # giọt lửa nhọn phía trên
+        x = cx + s * 0.62 * np.sin(t) * r
+        y = cy + s * 0.25 - s * 0.95 * np.cos(t) * (0.55 + 0.45 * (np.cos(t) > 0))
+        d.polygon(list(zip(x, y)), fill=w)
+        d.ellipse([cx - s * 0.28, cy + s * 0.05, cx + s * 0.28, cy + s * 0.62], fill=RED + (255,))
+    elif kind == "dung":
+        d.ellipse([cx - s * 0.2, cy - s * 0.95, cx + s * 0.2, cy - s * 0.55], fill=w)
+        d.line([(cx, cy - s * 0.5), (cx, cy + s * 0.25)], fill=w, width=8)
+        d.line([(cx - s * 0.5, cy - s * 0.25), (cx + s * 0.5, cy - s * 0.25)], fill=w, width=7)
+        d.line([(cx, cy + s * 0.2), (cx - s * 0.35, cy + s * 0.9)], fill=w, width=8)
+        d.line([(cx, cy + s * 0.2), (cx + s * 0.35, cy + s * 0.9)], fill=w, width=8)
+        d.line([(cx + s * 0.25, cy + s * 0.35), (cx + s * 0.75, cy + s * 0.85)], fill=RED + (255,), width=7)
+        d.line([(cx + s * 0.75, cy + s * 0.35), (cx + s * 0.25, cy + s * 0.85)], fill=RED + (255,), width=7)
 
 
 def checklist_imgs(c):
@@ -643,7 +660,12 @@ class Dung:
             if c["loai"] == "dong_ho":
                 self.labels[("dh", id(c))] = timer_img(c)
             if c["loai"] == "danh_sach":
-                self.labels[("ds", id(c))] = checklist_imgs(c)
+                base, overs = checklist_imgs(c)
+                co = float(c.get("co", 1.0))
+                if abs(co - 1) > 1e-3:
+                    rz = lambda im: cv2.resize(im, (int(im.shape[1] * co), int(im.shape[0] * co)), interpolation=cv2.INTER_AREA)
+                    base, overs = rz(base), [rz(o) for o in overs]
+                self.labels[("ds", id(c))] = (base, overs)
             if c["loai"] == "tho_bung":
                 sig = np.load(c["tin_hieu"])
                 self.labels[("tb", id(c))] = {"bung": np.asarray(sig["bung"], float), "v": np.asarray(sig["v"], float)}
@@ -657,7 +679,12 @@ class Dung:
                 self.labels[("gv", id(c))] = label_img(c.get("chu", "90°"), None, MAU.get(c.get("mau", "vang"), YELLOW))
             if c["loai"] == "the_canh_bao":
                 col = MAU.get(c.get("mau", "do"), RED)
-                self.labels[("cb", id(c))] = [warn_row_img(r, int(c.get("rong", 590)), col) for r in c["dong"]]
+                rows = [warn_row_img(r, int(c.get("rong", 590)), col) for r in c["dong"]]
+                co = float(c.get("co", 1.0))
+                if abs(co - 1) > 1e-3:
+                    rows = [cv2.resize(im, (int(im.shape[1] * co), int(im.shape[0] * co)), interpolation=cv2.INTER_AREA)
+                            for im in rows]
+                self.labels[("cb", id(c))] = rows
         self.breath_cache = {}
         self.frozen = {}
 
@@ -1245,6 +1272,51 @@ class Dung:
             hw = lab.shape[1] / 2 + 10
             Lc[0] = np.clip(Lc[0], hw, self.W - hw)
             paste_center(fr, lab, Lc, av * ease((float(c.get("nhan_den", 1e9)) - t) / 0.3))
+
+    def fx_nhan(self, fr, c, i, t, a):
+        """Nhãn đứng riêng: chữ + dòng phụ, bật lên tại xy (dùng cho đoạn nói chuyện, không có động tác)."""
+        key = ("nh", id(c))
+        if key not in self.labels:
+            img = label_img(c["chu"], c.get("phu"), MAU.get(c.get("mau", "vang"), YELLOW))
+            co = float(c.get("co", 1.0))
+            if abs(co - 1) > 1e-3:
+                img = cv2.resize(img, (int(img.shape[1] * co), int(img.shape[0] * co)), interpolation=cv2.INTER_AREA)
+            self.labels[key] = img
+        img = self.labels[key]
+        pop = ease_out_back((t - c["tu"]) / 0.4)
+        sc = 0.75 + 0.25 * pop
+        if abs(sc - 1) > 0.01:
+            img = cv2.resize(img, (max(1, int(img.shape[1] * sc)), max(1, int(img.shape[0] * sc))), interpolation=cv2.INTER_AREA)
+        C = np.array(c.get("xy", [self.W / 2, self.H * 0.72]), float)
+        C = C + np.array([0, 6 * np.sin(2 * np.pi * (t - c["tu"]) / 3.0)])
+        paste_center(fr, img, C, a)
+
+    def fx_lac(self, fr, c, i, t, a):
+        """Mũi tên hai đầu dao động quanh một điểm (vd đẩy bánh chè lên xuống / qua lại).
+        truc = danh sách vector hướng, đổi trục mỗi 'doi' giây; bien = biên độ dao động (px)."""
+        color = MAU.get(c.get("mau", "vang"), YELLOW)
+        C = self.pt_at(c["diem"], i)
+        truc = c.get("truc", [[1, 0]])
+        k = int((t - c["tu"]) / float(c.get("doi", 2.5))) % len(truc)
+        u = np.array(truc[k], float)
+        u = u / (np.linalg.norm(u) + 1e-6)
+        L = float(c.get("dai", 46))
+        off = u * float(c.get("bien", 16)) * np.sin(2 * np.pi * (t - c["tu"]) / float(c.get("chu_ky", 0.9)))
+        P0, P1 = C + off - u * L, C + off + u * L
+        draw_glow_poly(fr, np.array([P0, P1]), color, a, 8, glow=0.8)
+        pp = np.array([-u[1], u[0]])
+        for tip, d in ((P1, u), (P0, -u)):
+            head = np.array([tip - d * 22 + pp * 16, tip + d * 3, tip - d * 22 - pp * 16])
+            draw_glow_poly(fr, head, color, a, 8, glow=0.6)
+        fill_poly_alpha(fr, circle_pts(C + off, 9, 20), WHITE, a, blur=1)
+        if c.get("nhan"):
+            key = ("lac", id(c))
+            if key not in self.labels:
+                self.labels[key] = label_img(c["nhan"], c.get("nhan_phu"), color)
+            lab = self.labels[key]
+            Lc = np.array(c["nhan_xy"], float) if "nhan_xy" in c else C + np.array(c.get("nhan_lech", [0, -110]), float)
+            leader(fr, C, L + 10, Lc, (lab.shape[1], lab.shape[0]), color, a)
+            paste_center(fr, lab, Lc, a * ease((t - c["tu"] - 0.2) / 0.3))
 
     def fx_so_do_rong(self, fr, c, i, t, a):
         img = self.labels[("so_do", id(c))]

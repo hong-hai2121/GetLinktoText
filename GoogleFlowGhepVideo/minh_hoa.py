@@ -1004,6 +1004,7 @@ def len_ke_hoach(cau: list[Cau], chon: list[dict], kho: list[Clip], *, tong_giay
 ANH_GIU_GIAY = 5.0            # phủ kín: ảnh tĩnh giữ tối đa bấy nhiêu giây mỗi lần
 TOI_DA_LAP = 1                # (không còn chặn) phủ kín: hết clip khác nhau thì chiếu lại — thà lặp còn hơn hở bác sĩ 1-2 giây
 DOAN_TOI_THIEU = 3.0          # phủ kín: không đoạn cảnh nào ngắn hơn bấy nhiêu giây (user: "dưới 3s thì bỏ, kéo 2 clip bên cho chạm")
+BS_XEN_TOI_THIEU = 2.5        # xen clip gốc: chỉ rút câu dài từ bấy nhiêu giây làm câu bác sĩ (ngắn hơn chỉ lóe lên giữa hai xfade)
 CHAM_TOI_DA = 0.8             # phủ kín: clip được chiếu chậm tới tốc độ này (0.8 = dài thêm 25%) để vừa câu thay vì cắt/lặp
 TOC_MH = 1.2                  # phủ kín: tốc độ chiếu clip video minh họa (user 23/10: 1,2× — clip 6s hiện 5s); khi cần phủ dài hơn thì
                               # HẠ tốc độ dần tới CHAM_TOI_DA cho vừa chỗ trống, không đứng hình kéo dài
@@ -1049,7 +1050,7 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
                          log: Callable[[str], None] = print, kin_het: bool = False,
                          seed: int | None = None, vec_nguong: float | None = None,
                          dem_kenh: dict | None = None, toc_mh: float = TOC_MH, canh_giay: float = CANH_GIAY,
-                         duoi_giay: float = DUOI_CHUYEN) -> tuple[list[Canh], list[dict], dict]:
+                         duoi_giay: float = DUOI_CHUYEN, xen_bac_si: float = 0.0) -> tuple[list[Canh], list[dict], dict]:
     """PHỦ KÍN: cảnh kho là nền chính của phần sau. Mỗi câu được phủ bằng chuỗi clip khớp theo thứ tự AI đề xuất,
     thời gian câu CHIA ĐỀU cho các clip — không có đoạn nào dưới DOAN_TOI_THIEU (3s) gây nhấp nháy, không hở hình
     bác sĩ giữa hai cảnh:
@@ -1100,11 +1101,66 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
         hiệu ứng chuyển; ảnh giữ anh_giay."""
         return anh_giay if cl.loai == "anh" else max(1.0, cap(cl) / CHAM_TOI_DA - duoi_giay)
 
+    # XEN CLIP GỐC (user 25/10, chỉ khi có clip gốc): rút ngẫu nhiên theo seed một phần câu để giữ hình bác sĩ thay cảnh kho.
+    # Chỉ tiêu = N câu × tỉ lệ (lẻ làm tròn xuống); câu không có cảnh tính vào trước; rút trong các câu không phải câu đầu
+    # (sau hook đã là mặt bác sĩ) / câu cuối (kêu gọi giữ cảnh nhắn tin), dài ≥ BS_XEN_TOI_THIEU; lượt 1 không kề câu bác sĩ
+    # khác (xen kẽ), thiếu mới cho kề ở lượt 2.
+    xen: set[int] = set()
+    if xen_bac_si > 0 and not kin_het:
+        hop_le = [c for c in cau if c.end - c.start >= 0.3]
+        n_cau = len(hop_le)
+        chi_tieu = int(n_cau * xen_bac_si + 1e-9)
+        bat_buoc = {c.so for c in hop_le if not ((theo_cau.get(c.so) or {}).get("clips") or [])}
+        can = max(0, chi_tieu - len(bat_buoc))
+        vi_tri = {c.so: i for i, c in enumerate(hop_le)}
+        ung = [c for i, c in enumerate(hop_le) if 0 < i < n_cau - 1 and c.so not in bat_buoc and c.end - c.start >= BS_XEN_TOI_THIEU]
+        def ke_cua(c: Cau) -> list[int]:
+            i = vi_tri[c.so]
+            return [x.so for x in hop_le[max(0, i - 1):i] + hop_le[i + 1:i + 2]]
+
+        def diem(bo: set[int]) -> tuple[int, int]:
+            """(chuỗi bác sĩ liền nhau dài nhất, số cặp kề nhau) của bộ câu bác sĩ = bắt buộc + bo — càng nhỏ càng xen kẽ."""
+            vt = sorted(vi_tri[so] for so in (bat_buoc | bo))
+            dai_nhat = run = 1 if vt else 0
+            cap_ke = 0
+            for a, b in zip(vt, vt[1:]):
+                run = run + 1 if b == a + 1 else 1
+                cap_ke += b == a + 1
+                dai_nhat = max(dai_nhat, run)
+            return dai_nhat, cap_ke
+
+        tot, tot_diem = set(), (99, 99)
+        for _ in range(12):                                   # thử 12 thứ tự rút (theo seed), giữ bộ xen kẽ đều nhất
+            rng.shuffle(ung)
+            thu, da = set(), set(bat_buoc)
+            for c in ung:                                     # lượt 1: không kề câu bác sĩ nào
+                if len(thu) >= can:
+                    break
+                if not any(so in da for so in ke_cua(c)):
+                    thu.add(c.so)
+                    da.add(c.so)
+            for c in ung:                                     # lượt 2: không đủ chỗ xen kẽ -> cho kề nhau cho đủ chỉ tiêu
+                if len(thu) >= can:
+                    break
+                thu.add(c.so)
+            d = diem(thu)
+            if d < tot_diem:
+                tot, tot_diem = thu, d
+        xen = set(tot)
+        phu["cau_xen"], phu["xen_ti_le"] = sorted(xen), xen_bac_si
+        log(f"  xen clip gốc {xen_bac_si:.0%}: {n_cau} câu -> chỉ tiêu {chi_tieu} câu bác sĩ ({len(bat_buoc)} câu không có cảnh"
+            + (f"; rút thêm câu {', '.join(map(str, sorted(xen)))}" if xen else "; không rút thêm") + ")")
+
     for i_c, c in enumerate(cau):
         T = c.end - c.start
         if T < 0.3:                                               # câu rỗng (đuôi tiêu đề không có audio) -> bỏ
             continue
         phu["tong"] += T
+        if c.so in xen:                                           # xen clip gốc: câu này giữ hình bác sĩ, không chọn cảnh kho
+            phu["cau_bac_si"].append(c.so)
+            phu["bac_si"] += T
+            phu["khoang_bac_si"].append((round(c.start, 3), round(c.end, 3)))
+            continue
         # cảnh của câu phủ luôn quãng nghỉ tới câu kế (render vẫn kéo cho chạm nhau, nhưng tính ở đây thì tốc độ/số clip đã
         # gồm cả quãng nghỉ -> không đứng hình); câu cuối giữ c.end (render kéo nốt tới hết giọng đọc)
         het = cau[i_c + 1].start if i_c + 1 < len(cau) and 0 < cau[i_c + 1].start - c.end <= 3.0 else c.end
@@ -1421,7 +1477,7 @@ def chuan_bi(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, nha:
              thu_muc: str | Path | None = None, luu_tho: dict | None = None, che_do: str = "phu_kin",
              bo_nho: str | Path | None = None, hoi_lai: bool = False, khong_clip_goc: bool = False,
              vec_nguong: float | None = None, vec_nhom: float | None = None, toc_mh: float = TOC_MH,
-             soat: bool = True) -> dict:
+             soat: bool = True, xen_bac_si: float = 0.0) -> dict:
     """Một phát từ danh sách từ đã có mốc -> cảnh đã tải sẵn. -> {canh, thieu, so_cau, tu_khoa_kho, kho, cau, da_co, phu, loi}.
     khong_clip_goc=True: phần sau KHÔNG có clip bác sĩ -> ép phủ kín và không câu nào được hở (len_ke_hoach_phu_kin kin_het).
     che_do: "phu_kin" (mặc định) = cảnh kho phủ kín phần sau, bác sĩ chỉ bù chỗ không có cảnh; "diem_xuyet" = cách cũ,
@@ -1475,7 +1531,8 @@ def chuan_bi(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, nha:
         ok, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=do_dai, kho=kho,
                                               anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
                                               kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=doc_da_dung(),
-                                              toc_mh=toc_mh, canh_giay=toi_da_giay)
+                                              toc_mh=toc_mh, canh_giay=toi_da_giay,
+                                              xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
     else:
         canh, thieu = len_ke_hoach(cau, chon, kho, tong_giay=tong_giay, toi_da_giay=toi_da_giay,
@@ -1562,8 +1619,12 @@ def bao_cao_da_dung(kq: dict, *, ten_bo: str = "", video_ra: str = "", kho_nguon
               f"    “{cn.cau.text}”"]
     if not canh:
         L.append("  (không có)")
-    if phu and phu.get("cau_bac_si"):
-        L += ["", "Câu giữ hình bác sĩ (không có cảnh): " + ", ".join(map(str, phu["cau_bac_si"]))]
+    xen = set((phu or {}).get("cau_xen") or [])
+    khong = [so for so in ((phu or {}).get("cau_bac_si") or []) if so not in xen]
+    if khong:
+        L += ["", "Câu giữ hình bác sĩ (không có cảnh): " + ", ".join(map(str, khong))]
+    if xen:
+        L += ["", f"Câu xen clip gốc (rút ngẫu nhiên theo seed, tỉ lệ {phu.get('xen_ti_le', 0):.0%}): " + ", ".join(map(str, sorted(xen)))]
     if phu and phu.get("cau_thay"):
         L += ["", "Câu không khớp kho, lấy clip có từ khóa GẦN NHẤT / ít dùng nhất (không clip gốc): "
               + ", ".join(map(str, phu["cau_thay"])) + " — xem cột “từ khóa” của cảnh để kiểm tra, bổ sung kho nếu lệch"]
@@ -1589,7 +1650,7 @@ def lap_ke_hoach(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, 
                  log: Callable[[str], None] = print, luu_tho: dict | None = None, ten_bo: str = "",
                  che_do: str = "phu_kin", bo_nho: str | Path | None = None, hoi_lai: bool = False,
                  khong_clip_goc: bool = False, vec_nguong: float | None = None, vec_nhom: float | None = None,
-                 toc_mh: float = TOC_MH) -> dict:
+                 toc_mh: float = TOC_MH, xen_bac_si: float = 0.0) -> dict:
     """Như chuan_bi nhưng đưa cho AI CẢ dòng kho chưa có video, không tải clip, không render (độ dài clip theo Sheet).
     bo_nho / hoi_lai / khong_clip_goc: như chuan_bi (cùng file gpt_minh_hoa.json, nên kế hoạch và ghép thật dùng chung trả lời AI).
     -> {canh, thieu, cau, so_cau, kho, tu_khoa_kho, can_quay (clip kế hoạch cần mà chưa có video), da_co, phu, loi, ai}"""
@@ -1625,7 +1686,8 @@ def lap_ke_hoach(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, 
         canh, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=lambda cl: cl.thoi_luong or toi_da_giay, kho=kho,
                                                 anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
                                                 kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=doc_da_dung(),
-                                              toc_mh=toc_mh, canh_giay=toi_da_giay)
+                                              toc_mh=toc_mh, canh_giay=toi_da_giay,
+                                              xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
     else:
         canh, thieu = len_ke_hoach(cau, chon, kho, tong_giay=tong_giay, toi_da_giay=toi_da_giay,

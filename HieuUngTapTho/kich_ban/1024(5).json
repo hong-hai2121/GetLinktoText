@@ -1,0 +1,185 @@
+{
+ "ghi_chu": "Phần MỞ ĐẦU (nói chuyện, không có động tác), video DỌC 1080x1920. User: hiệu ứng đơn giản, không phụ đề lời nói. Mặt người nói ở y 580–1040, x 340–650 → thẻ trên cùng y=170 (hết ở ~450), thẻ/nhãn dưới ở y 1300–1700. Mốc theo lời (chep_loi.py).",
+ "buoc": [
+  {
+   "tu": 0.0,
+   "den": 3.1,
+   "kieu": "tieu_de",
+   "tren": "THẠC SĨ ĐỨC HƯỚNG DẪN",
+   "chinh": "BÀI TẬP ĐẦU GỐI",
+   "phu": "8 ĐỘNG TÁC"
+  },
+  {
+   "tu": 3.1,
+   "den": 6.7,
+   "kieu": "meo",
+   "chinh": "ĐIỀU QUAN TRỌNG",
+   "phu": "Nhớ trước khi vào bài tập"
+  },
+  {
+   "tu": 6.7,
+   "den": 12.7,
+   "kieu": "thuong",
+   "huy_hieu": "2",
+   "chinh": "TẬP ĐỀU CẢ 2 CHÂN",
+   "phu": "Kể cả chân không đau"
+  },
+  {
+   "tu": 12.7,
+   "den": 18.3,
+   "kieu": "thuong",
+   "huy_hieu": "3",
+   "chinh": "3 ĐỘNG TÁC ĐẦU TIÊN",
+   "phu": [
+    "Ngồi ngay trên giường",
+    "Duỗi chân ra là tập được luôn"
+   ]
+  },
+  {
+   "tu": 18.3,
+   "den": 28.0,
+   "kieu": "thuong",
+   "mau": "luc",
+   "huy_hieu": "↑",
+   "chinh": "KIÊN TRÌ MỖI NGÀY",
+   "phu": [
+    "Nhiều cô bác đau gối lâu năm",
+    "tập đều mỗi ngày đã thấy:"
+   ]
+  },
+  {
+   "tu": 28.0,
+   "den": 34.0,
+   "kieu": "nguy_hiem",
+   "chinh": "LƯU Ý QUAN TRỌNG",
+   "phu": "Nếu đầu gối đang:"
+  },
+  {
+   "tu": 34.0,
+   "den": 38.1,
+   "kieu": "nguy_hiem",
+   "chinh": "DỪNG TẬP NGAY",
+   "phu": [
+    "Và đi khám ngay",
+    "Đừng cố tập để qua cơn đau"
+   ]
+  },
+  {
+   "tu": 38.1,
+   "den": 99,
+   "kieu": "thuong",
+   "huy_hieu": "»",
+   "chinh": "BẮT ĐẦU NÀO!",
+   "phu": "Ngồi duỗi chân trên giường"
+  }
+ ],
+ "hieu_ung": [
+  {
+   "loai": "nhan",
+   "tu": 7.6,
+   "den": 10.0,
+   "chu": "CẢ 2 CHÂN ĐỀU TẬP",
+   "phu": "chân đau + chân không đau",
+   "mau": "cam",
+   "xy": [
+    540,
+    1480
+   ],
+   "co": 1.3
+  },
+  {
+   "loai": "nhan",
+   "tu": 10.1,
+   "den": 12.7,
+   "chu": "CHÂN KHỎE",
+   "phu": "là chỗ dựa cho chân đau",
+   "mau": "luc",
+   "xy": [
+    540,
+    1480
+   ],
+   "co": 1.35
+  },
+  {
+   "loai": "nhan",
+   "tu": 13.3,
+   "den": 18.2,
+   "chu": "NGỒI TRÊN GIƯỜNG",
+   "phu": "duỗi chân ra là tập",
+   "mau": "xanh",
+   "xy": [
+    540,
+    1480
+   ],
+   "co": 1.25
+  },
+  {
+   "loai": "danh_sach",
+   "tu": 21.0,
+   "den": 28.0,
+   "xy": [
+    55,
+    1260
+   ],
+   "rong": 660,
+   "mau": "luc",
+   "tieu_de": "KẾT QUẢ",
+   "dong": [
+    {
+     "chu": "Tập đều 2 chân mỗi ngày",
+     "tu": 22.4
+    },
+    {
+     "chu": "Đi lại nhẹ nhàng hơn",
+     "tu": 24.8
+    },
+    {
+     "chu": "Leo cầu thang đỡ run gối",
+     "tu": 26.3
+    }
+   ],
+   "co": 1.45
+  },
+  {
+   "loai": "the_canh_bao",
+   "tu": 30.3,
+   "den": 38.1,
+   "xy": [
+    70,
+    1250
+   ],
+   "rong": 680,
+   "mau": "do",
+   "tre": 2.0,
+   "dong": [
+    {
+     "bieu_tuong": "lua",
+     "chu": [
+      "Sưng, nóng, đỏ"
+     ]
+    },
+    {
+     "bieu_tuong": "dung",
+     "chu": [
+      "Không đứng",
+      "chịu lực được"
+     ]
+    }
+   ],
+   "co": 1.4
+  },
+  {
+   "loai": "nhan",
+   "tu": 40.0,
+   "den": 99,
+   "chu": "ĐỘNG TÁC 1",
+   "phu": "bắt đầu cùng Đức nhé!",
+   "mau": "vang",
+   "xy": [
+    540,
+    1480
+   ],
+   "co": 1.35
+  }
+ ]
+}
