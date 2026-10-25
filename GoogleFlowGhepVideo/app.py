@@ -316,8 +316,21 @@ def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
     return a
 
 
+def _osascript_chon(lenh: str, tieu_de: str, bat_dau: str) -> str:
+    """macOS: hộp thoại chọn của Finder qua AppleScript (tkinter không chạy được ngoài main thread trên Mac,
+    mà main thread đã thuộc cửa sổ pywebview). `lenh` = 'choose folder' / 'choose file ...'; '' nếu hủy."""
+    def _q(x: str) -> str:
+        return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    vi_tri = f" default location (POSIX file {_q(bat_dau)})" if bat_dau and Path(bat_dau).is_dir() else ""
+    r = subprocess.run(["osascript", "-e", f"POSIX path of ({lenh} with prompt {_q(tieu_de)}{vi_tri})"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
     """Hộp thoại chọn thư mục của Windows (tkinter), nổi lên trên cùng; '' nếu hủy."""
+    if sys.platform == "darwin":
+        return _osascript_chon("choose folder", tieu_de, bat_dau).rstrip("/")
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -330,6 +343,8 @@ def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
 
 def _chon_anh_dialog(tieu_de: str, bat_dau: str) -> str:
     """Hộp thoại chọn một file ảnh (jpg/png); '' nếu hủy."""
+    if sys.platform == "darwin":
+        return _osascript_chon('choose file of type {"public.image"}', tieu_de, bat_dau)
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -372,12 +387,34 @@ def python_exe() -> str:
     return str(p)
 
 
+# macOS/Linux: tiến trình con chạy trong nhóm riêng -> _giet_cay dừng được cả ffmpeg/CLI AI nó gọi
+NHOM_RIENG = {} if os.name == "nt" else {"start_new_session": True}
+
+
 def _giet_cay(p: subprocess.Popen):
     """Dừng tiến trình con + ffmpeg nó đang chạy."""
     try:
-        subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        else:
+            import signal
+            os.killpg(p.pid, signal.SIGKILL)
     except Exception:
         p.kill()
+
+
+def _mo(path, chon: bool = False):
+    """Mở file/thư mục bằng ứng dụng mặc định (Explorer / Finder); chon=True: mở thư mục chứa và chọn sẵn file."""
+    path = str(path)
+    if os.name == "nt":
+        if chon:
+            subprocess.Popen(["explorer", "/select,", path])
+        else:
+            os.startfile(path)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", path] if chon else ["open", path])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent) if chon else path])
 
 
 # ------------------------------------------------------------------ trạng thái
@@ -764,7 +801,7 @@ def _xem_truoc_job(item_id):
         with S.lock:
             S.xem_truoc["buoc"] = "Nhận diện mặt"
         p = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW,
+                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW, **NHOM_RIENG,
                              text=True, encoding="utf-8", errors="replace", bufsize=1)
         with S.lock:
             S.xem_truoc_proc = p
@@ -845,14 +882,18 @@ def api_google_chon_client(_data):
     if not _DIALOG.acquire(blocking=False):
         return {"ok": False, "msg": "Hộp thoại chọn file đang mở."}
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        p = filedialog.askopenfilename(parent=root, title="Chọn file client_secret*.json (OAuth client loại Desktop app)",
-                                       initialdir=str(downloads_dir()), filetypes=[("JSON", "*.json"), ("Mọi file", "*.*")])
-        root.destroy()
+        if sys.platform == "darwin":
+            p = _osascript_chon('choose file of type {"public.json"}',
+                                "Chọn file client_secret*.json (OAuth client loại Desktop app)", str(downloads_dir()))
+        else:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            p = filedialog.askopenfilename(parent=root, title="Chọn file client_secret*.json (OAuth client loại Desktop app)",
+                                           initialdir=str(downloads_dir()), filetypes=[("JSON", "*.json"), ("Mọi file", "*.*")])
+            root.destroy()
     finally:
         _DIALOG.release()
     if not p:
@@ -1479,20 +1520,20 @@ def api_tiep_ngay(_data):
 
 
 def api_mo(data):
-    """Mở file kết quả / thư mục của một mục bằng ứng dụng mặc định của Windows."""
+    """Mở file kết quả / thư mục của một mục bằng ứng dụng mặc định (Explorer / Finder)."""
     loai = data.get("loai")
     if loai in ("downloads", "thu_muc_ra"):
-        os.startfile(thu_muc_ra())
+        _mo(thu_muc_ra())
         return {"ok": True}
     if loai == "done":                             # <thư mục kết quả>\done\ — mỗi tập một thư mục con
         d = thu_muc_done()
         d.mkdir(parents=True, exist_ok=True)
-        os.startfile(d)
+        _mo(d)
         return {"ok": True}
     if loai == "goc":
         if not S.goc_dir or not Path(S.goc_dir).is_dir():
             return {"ok": False, "msg": "Chưa có thư mục clip gốc."}
-        os.startfile(S.goc_dir)
+        _mo(S.goc_dir)
         return {"ok": True}
     if loai == "minh_hoa":                         # thư mục video mẫu (mặc định chưa có thì tạo)
         d = Path(S.minh_hoa_dir)
@@ -1500,7 +1541,7 @@ def api_mo(data):
             d.mkdir(parents=True, exist_ok=True)
         if not d.is_dir():
             return {"ok": False, "msg": f"Không thấy thư mục video mẫu: {d}"}
-        os.startfile(d)
+        _mo(d)
         return {"ok": True}
     if loai == "url":                              # mở link ở trình duyệt mặc định (cửa sổ desktop không có tab)
         url = str(data.get("url") or "")
@@ -1512,7 +1553,7 @@ def api_mo(data):
         p = Path(str(data.get("path") or ""))
         if not _duoc_phep(p):
             return {"ok": False, "msg": "Không mở được đường dẫn này."}
-        os.startfile(p)
+        _mo(p)
         return {"ok": True}
     with S.lock:
         it = S.find(data.get("id"))
@@ -1521,10 +1562,7 @@ def api_mo(data):
         path = it and khoa and it.get(khoa)
     if not path or not Path(path).exists():
         return {"ok": False, "msg": "File không còn (đã xoá/di chuyển?)."}
-    if loai == "thu_muc_video":
-        subprocess.Popen(["explorer", "/select,", str(path)])
-    else:
-        os.startfile(path)
+    _mo(path, chon=loai == "thu_muc_video")
     return {"ok": True}
 
 
@@ -1649,7 +1687,7 @@ def _chay_muc(it):
     cuoi: list[str] = []
     try:
         p = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW,
+                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW, **NHOM_RIENG,
                              text=True, encoding="utf-8", errors="replace", bufsize=1)
     except Exception as e:
         return _ket_thuc(it, LOI, f"Không chạy được ghep_tieude.py: {e}", t0)

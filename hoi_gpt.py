@@ -40,7 +40,6 @@ LENH_DANG_NHAP = "codex login"              # mở trình duyệt, chọn "Conti
 LENH_DANG_XUAT = "codex logout"
 THOI_GIAN_CHO = 600
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
 
 class GptLoi(RuntimeError):
@@ -217,8 +216,7 @@ def trang_thai() -> dict:
 
 def dang_nhap() -> None:
     """Mở cửa sổ lệnh chạy `codex login`: trình duyệt hiện trang đăng nhập ChatGPT -> chọn Google."""
-    subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title Ket noi GPT (Codex) & {LENH_DANG_NHAP}"],
-                     creationflags=NEW_CONSOLE)
+    cli_chung.mo_cua_so_lenh(LENH_DANG_NHAP, LENH_DANG_NHAP, "Ket noi GPT (Codex)")
 
 
 def dang_xuat() -> str:
@@ -228,7 +226,7 @@ def dang_xuat() -> str:
 
 
 def cai_dat() -> None:
-    subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title Cai Codex CLI & {LENH_CAI}"], creationflags=NEW_CONSOLE)
+    cli_chung.mo_cua_so_lenh(LENH_CAI, LENH_CAI, "Cai Codex CLI")
 
 
 def main():

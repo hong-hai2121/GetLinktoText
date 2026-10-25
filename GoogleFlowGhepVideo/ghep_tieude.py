@@ -177,13 +177,14 @@ def ensure_model() -> Path:
 def need_ffmpeg() -> str:
     exe = shutil.which("ffmpeg")
     if not exe:
-        sys.exit("Không tìm thấy ffmpeg trên PATH. Cài: choco install ffmpeg (hoặc winget).")
+        sys.exit("Không tìm thấy ffmpeg trên PATH. Cài: " +
+                 ("brew install ffmpeg" if sys.platform == "darwin" else "choco install ffmpeg (hoặc winget)."))
     return exe
 
 
 # ----- bộ mã hóa & chế độ render (đầy đủ / máy yếu) -----
-ENCODER_FFMPEG = dict(nvenc="h264_nvenc", qsv="h264_qsv", amf="h264_amf", x264="libx264")
-TEN_MA_HOA = dict(nvenc="GPU NVENC", qsv="GPU Intel Quick Sync (h264_qsv)",
+ENCODER_FFMPEG = dict(nvenc="h264_nvenc", vt="h264_videotoolbox", qsv="h264_qsv", amf="h264_amf", x264="libx264")
+TEN_MA_HOA = dict(nvenc="GPU NVENC", vt="Mac VideoToolbox (h264_videotoolbox)", qsv="GPU Intel Quick Sync (h264_qsv)",
                   amf="GPU AMD AMF (h264_amf)", x264="CPU libx264")
 _ENC_CACHE: dict = {}
 
@@ -227,9 +228,13 @@ def gpu_encoder(ffmpeg: str, force_cpu: bool = False) -> dict | None:
 
 
 def chon_bo_ma_hoa(ffmpeg: str, force_cpu: bool = False) -> dict:
-    """Bộ chọn mã hóa chung, thử theo thứ tự NVENC (NVIDIA) -> QSV (Intel) -> AMF (AMD) -> libx264.
-    Trả về {'loai': nvenc|qsv|amf|x264, 'name': mô tả}."""
+    """Bộ chọn mã hóa chung, thử theo thứ tự NVENC (NVIDIA) -> VideoToolbox (Mac) -> QSV (Intel) -> AMF (AMD)
+    -> libx264. Trả về {'loai': nvenc|vt|qsv|amf|x264, 'name': mô tả}."""
     if not force_cpu:
+        if sys.platform == "darwin":                 # Mac: không có NVIDIA/Intel QSV/AMF, chỉ thử VideoToolbox
+            if thu_ma_hoa(ffmpeg, "vt"):
+                return dict(loai="vt", name=TEN_MA_HOA["vt"])
+            return dict(loai="x264", name=TEN_MA_HOA["x264"])
         gpu = gpu_encoder(ffmpeg)
         if gpu:
             return gpu
@@ -250,6 +255,8 @@ def chon_che_do(ffmpeg: str, nhe: bool = False, manh: bool = False, force_cpu: b
         return dict(nhe=False, ly_do="ép bằng --manh", enc=enc)
     if enc["loai"] == "nvenc":
         return dict(nhe=False, ly_do="có NVIDIA NVENC", enc=enc)
+    if enc["loai"] == "vt":                          # Apple Silicon: mã hóa phần cứng + CPU đủ mạnh cho làm nét
+        return dict(nhe=False, ly_do="Mac có VideoToolbox", enc=enc)
     return dict(nhe=True, ly_do="ép CPU bằng --cpu" if force_cpu else "không dò thấy NVIDIA NVENC dùng được",
                 enc=enc)
 
@@ -283,6 +290,8 @@ def video_codec_args(enc: dict, nhe: bool = False, pixels: int = 1080 * 1920) ->
         return ["-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-rc", "vbr", "-cq", "24",
                 "-b:v", "0", "-maxrate", "10M", "-bufsize", "20M", "-spatial-aq", "1",
                 "-temporal-aq", "1", "-profile:v", "high"]
+    if loai == "vt":                                 # chất lượng cố định q 65 (~ x264 crf 18-20 ở 1080x1920)
+        return ["-c:v", "h264_videotoolbox", "-q:v", "65", "-profile:v", "high"]
     if loai in ("qsv", "amf"):
         mbps = max(4.0, 7.0 * pixels / (1080 * 1920))
         rate = ["-b:v", f"{mbps:.1f}M", "-maxrate", f"{mbps * 1.3:.1f}M", "-bufsize", f"{mbps * 2:.1f}M",

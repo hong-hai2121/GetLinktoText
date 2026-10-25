@@ -36,12 +36,29 @@ def thu_muc_ung_vien() -> list[str]:
         them += [str(p) for p in sorted(Path(nvm_home).glob("v*"), reverse=True) if p.is_dir()]
     except OSError:
         pass
+    if os.name != "nt":                                          # macOS/Linux: Homebrew, npm global, nvm
+        them += ["/opt/homebrew/bin", "/usr/local/bin", str(home / ".npm-global" / "bin")]
+        for mau in (home / ".nvm" / "versions" / "node", Path("/opt/homebrew/Cellar/node")):
+            try:
+                them += [str(p / "bin") for p in sorted(mau.glob("*"), reverse=True) if (p / "bin").is_dir()]
+            except OSError:
+                pass
     thay = {d.lower() for d in ds}
     for t in them:
         if t and t.lower() not in thay:
             ds.append(t)
             thay.add(t.lower())
     return ds
+
+
+def _bo_sung_path() -> None:
+    """macOS/Linux: claude/codex/gemini là script `#!/usr/bin/env node` -> app mở từ Finder (PATH tối giản) vẫn
+    phải thấy node, nên thêm các thư mục quen thuộc vào PATH của tiến trình (và mọi lệnh con)."""
+    if os.name != "nt":
+        os.environ["PATH"] = os.pathsep.join(thu_muc_ung_vien())
+
+
+_bo_sung_path()
 
 
 def tim_lenh(ten: str) -> list[str]:
@@ -61,6 +78,25 @@ def tim_lenh(ten: str) -> list[str]:
                 kq.append(str(p))
             break
     return kq
+
+
+def mo_cua_so_lenh(lenh_win: str, lenh_mac: str, tieu_de: str, env: dict | None = None) -> None:
+    """Mở một cửa sổ lệnh để người dùng nhìn thấy (đăng nhập / cài CLI).
+    Windows: cmd /k `lenh_win` trong console mới. macOS: ghi `lenh_mac` vào file .command rồi mở bằng Terminal
+    (Terminal mở shell mới nên `env` không truyền sang; biến cần thiết đặt ngay trong `lenh_mac`)."""
+    if os.name == "nt":
+        subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title {tieu_de} & {lenh_win}"],
+                         creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0), env=env)
+        return
+    import tempfile
+    them_path = ":".join(d for d in thu_muc_ung_vien() if d)
+    noi_dung = (f'#!/bin/zsh -l\nprintf "\\033]0;{tieu_de}\\007"\nexport PATH="{them_path}:$PATH"\n'
+                f'cd ~\n{lenh_mac}\necho\necho "Xong - có thể đóng cửa sổ này."\nexec $SHELL -l\n')
+    fd, duong_dan = tempfile.mkstemp(prefix="ghep_video_", suffix=".command")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(noi_dung)
+    os.chmod(duong_dan, 0o755)
+    subprocess.Popen(["open", "-a", "Terminal", duong_dan])
 
 
 def phien_ban(exe: str) -> tuple:

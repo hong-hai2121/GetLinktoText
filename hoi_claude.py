@@ -43,7 +43,6 @@ LENH_CAI = "npm install -g @anthropic-ai/claude-code"
 LENH_DANG_NHAP = "claude auth login"        # mở trình duyệt -> trang đăng nhập Claude (chọn Google hoặc email)
 THOI_GIAN_CHO = 600            # giây chờ tối đa một câu trả lời
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # không bật cửa sổ console khi gọi từ pythonw/GUI
-NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 # gọi từ bên trong một phiên Claude Code khác thì CLI từ chối lồng nhau -> bỏ các biến này đi
 _ENV_BO = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
 
@@ -185,8 +184,7 @@ def trang_thai() -> dict:
 def dang_nhap() -> None:
     """Mở cửa sổ lệnh chạy `claude auth login`: trình duyệt hiện trang đăng nhập Claude -> chọn Google."""
     env = {k: v for k, v in os.environ.items() if k not in _ENV_BO}
-    subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title Ket noi Claude & {LENH_DANG_NHAP}"],
-                     creationflags=NEW_CONSOLE, env=env)
+    cli_chung.mo_cua_so_lenh(LENH_DANG_NHAP, LENH_DANG_NHAP, "Ket noi Claude", env=env)
 
 
 def dang_xuat() -> str:
@@ -197,7 +195,7 @@ def dang_xuat() -> str:
 
 
 def cai_dat() -> None:
-    subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title Cai Claude Code & {LENH_CAI}"], creationflags=NEW_CONSOLE)
+    cli_chung.mo_cua_so_lenh(LENH_CAI, LENH_CAI, "Cai Claude Code")
 
 
 def main():

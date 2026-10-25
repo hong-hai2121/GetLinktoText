@@ -35,7 +35,7 @@ _HTTPD = None
 
 def _dat_icon(tieu_de: str, ico: Path, cho: float = 20.0):
     """Gắn icon cho cửa sổ (tìm theo tiêu đề) — chạy ở thread nền sau khi cửa sổ hiện."""
-    if not ico.exists():
+    if not ico.exists() or os.name != "nt":       # macOS: icon lấy từ app launcher, không cần WM_SETICON
         return
     u32 = ctypes.windll.user32
     het = time.time() + cho
@@ -56,10 +56,10 @@ def _dat_icon(tieu_de: str, ico: Path, cho: float = 20.0):
 def _chup_man_hinh(win, duong_dan: str, cho: float = 6.0):
     time.sleep(cho)
     try:
-        from ctypes import wintypes
         from PIL import ImageGrab
-        hwnd = ctypes.windll.user32.FindWindowW(None, TIEU_DE)
+        hwnd = ctypes.windll.user32.FindWindowW(None, TIEU_DE) if os.name == "nt" else 0
         if hwnd:
+            from ctypes import wintypes
             r = wintypes.RECT()
             ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(r))
             bbox = (r.left, r.top, r.right, r.bottom)
