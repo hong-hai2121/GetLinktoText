@@ -32,10 +32,12 @@ Server chỉ nghe trên 127.0.0.1.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
 import random
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -435,6 +437,7 @@ class State:
         self.drive_dich = [x for x in (dd if isinstance(dd, list) else DRIVE_DICH_MAC_DINH) if isinstance(x, dict) and x.get("id")]
         self.drive_dich_chon = str(d.get("drive_dich_chon") or (self.drive_dich[0]["id"] if self.drive_dich else ""))
         self.tu_tai_len = bool(d.get("tu_tai_len", True))
+        self.tu_don_rac = bool(d.get("tu_don_rac", True))   # tải Drive + ghi Sheet xong thì đưa file tập vào Thùng rác (user 26/10)
         self.google = {"dang": False, "loi": ""}      # đang chờ user đăng nhập trên trình duyệt
         self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
         self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
@@ -556,7 +559,8 @@ class State:
         with self.lock:
             data = {"goc_dir": self.goc_dir, "items": self.items, "tuy_chon": self.tuy_chon,
                     "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh,
-                    "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len}
+                    "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len,
+                    "tu_don_rac": self.tu_don_rac}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -614,6 +618,7 @@ def state_payload(after: int) -> dict:
             "mau_giong": mau_giong(),
             "google": google,
             "drive_dich": list(S.drive_dich), "drive_dich_chon": S.drive_dich_chon, "tu_tai_len": S.tu_tai_len,
+            "tu_don_rac": S.tu_don_rac,
             "lam_dep": {"anh": S.lam_dep_anh, "ton_tai": bool(S.lam_dep_anh) and Path(S.lam_dep_anh).is_file(),
                         "san_sang": _LD_SAN_SANG[0], "ly_do": "" if _LD_SAN_SANG[0] else _LD_SAN_SANG[1]},
             "xem_truoc": dict(S.xem_truoc),
@@ -921,6 +926,71 @@ def api_set_tu_tai_len(data):
     return {"ok": True, "bat": bat}
 
 
+def api_set_tu_don_rac(data):
+    bat = bool(data.get("bat"))
+    with S.lock:
+        S.tu_don_rac = bat
+        S.save()
+    S.log("Dọn file sau khi tải lên: " + ("BẬT (tải Drive + ghi Sheet xong thì đưa file của tập vào Thùng rác)" if bat else "TẮT"))
+    return {"ok": True, "bat": bat}
+
+
+def _vao_thung_rac(p: Path) -> None:
+    """Đưa file/thư mục vào Thùng rác (lấy lại được), không xoá vĩnh viễn."""
+    if sys.platform == "darwin":
+        rac = Path.home() / ".Trash"
+        dich = rac / p.name
+        i = 1
+        while dich.exists():
+            dich = rac / f"{p.stem} {datetime.now():%H.%M.%S}{'' if i == 1 else f' {i}'}{p.suffix}"
+            i += 1
+        try:
+            shutil.move(str(p), str(dich))
+        except OSError:                            # không có quyền ghi ~/.Trash -> nhờ Finder (hỏi quyền một lần)
+            q = str(p).replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(["osascript", "-e", f'tell application "Finder" to delete (POSIX file "{q}")'],
+                           check=True, capture_output=True, timeout=60)
+    elif os.name == "nt":
+        ham = "DeleteDirectory" if p.is_dir() else "DeleteFile"
+        lenh = ("Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::"
+                f"{ham}($env:DUONG_DAN, 'OnlyErrorDialogs', 'SendToRecycleBin')")
+        subprocess.run(["powershell", "-NoProfile", "-Command", lenh], check=True, capture_output=True, timeout=120,
+                       env={**os.environ, "DUONG_DAN": str(p)}, creationflags=NO_WINDOW)
+    else:
+        raise OSError("chưa hỗ trợ Thùng rác trên hệ điều hành này")
+
+
+def _don_rac_muc(it) -> None:
+    """Sau khi video (+ file txt minh họa) đã lên Drive và link đã ghi vào Sheet: đưa vào Thùng rác thư mục Drive tải về
+    (<thư mục kết quả>/<tên tập>), thư mục kết quả done/<tên tập> và bản hook đã làm đẹp trong cache "Làm đẹp".
+    Chỉ đụng tới đường dẫn nằm trong thư mục kết quả; không bao giờ đụng video gốc, kho minh họa, cài đặt."""
+    goc = thu_muc_ra().resolve()
+    tm = Path(it.get("thu_muc") or "")
+    out = Path(it.get("out") or "")
+    ds: list[Path] = []
+    if it.get("thu_muc") and tm.is_dir():
+        ld = goc / "Làm đẹp"
+        for hook in tm.glob("Hook*"):
+            ds += sorted(ld.glob(f"{glob.escape(hook.stem)} - lam dep *.mp4"))
+        ds.append(tm)
+    if it.get("out") and out.parent.is_dir() and out.parent != thu_muc_done():
+        ds.append(out.parent)
+    cam = {Path(S.goc_dir or "/").resolve(), Path(S.minh_hoa_dir or "/").resolve(), APP_DIR.resolve(), goc}
+    for p in ds:
+        try:
+            r = p.resolve()
+            if r in cam or goc not in r.parents:
+                S.log(f"   bỏ qua (ngoài thư mục kết quả): {p}")
+                continue
+            _vao_thung_rac(p)
+            S.log(f"🗑 [{it['id']}] đã đưa vào Thùng rác: {p}")
+        except Exception as e:                     # noqa: BLE001
+            S.log(f"✗ [{it['id']}] dọn {p} lỗi: {e}")
+    with S.lock:
+        it["da_don"] = True
+        S.save()
+
+
 def api_set_drive_dich(data):
     i = str(data.get("id") or "")
     with S.lock:
@@ -1060,6 +1130,12 @@ def _tai_len_muc(it, ep: bool = False) -> None:
         except Exception as e:                     # noqa: BLE001
             S.log(f"✗ [{it['id']}] ghi Sheet lỗi: {e}")
             tt(g="loi", loi=f"ghi Sheet: {e}")
+            return
+    if S.tu_don_rac:
+        if txt and not (it.get("tai_len") or {}).get("txt_link"):
+            S.log(f"   [{it['id']}] không dọn file: file txt minh họa chưa lên Drive")
+        else:
+            _don_rac_muc(it)
 
 
 def api_set_dich_muc(data):
@@ -1882,6 +1958,7 @@ ROUTES = {
     "/api/google_dang_xuat": api_google_dang_xuat,
     "/api/google_chon_client": api_google_chon_client,
     "/api/set_tu_tai_len": api_set_tu_tai_len,
+    "/api/set_tu_don_rac": api_set_tu_don_rac,
     "/api/set_drive_dich": api_set_drive_dich,
     "/api/drive_dich_them": api_drive_dich_them,
     "/api/drive_dich_xoa": api_drive_dich_xoa,
