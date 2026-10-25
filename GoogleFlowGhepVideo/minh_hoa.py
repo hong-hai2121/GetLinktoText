@@ -638,6 +638,19 @@ def _nha(ten: str):
     return importlib.import_module({"gpt": "hoi_gpt", "claude": "hoi_claude", "gemini": "hoi_gemini"}[ten])
 
 
+def nha_da_ket_noi(ten: str) -> str:
+    """AI `ten` nếu đã đăng nhập; chưa thì AI đầu tiên đã đăng nhập (claude -> gpt -> gemini); không AI nào -> giữ `ten`
+    (để lỗi đăng nhập hiện rõ như cũ)."""
+    def _ok(t):
+        try:
+            return bool(_nha(t).trang_thai().get("ket_noi"))
+        except Exception:   # noqa: BLE001
+            return False
+    if _ok(ten):
+        return ten
+    return next((t for t in ("claude", "gpt", "gemini") if t != ten and _ok(t)), ten)
+
+
 def _json_trong_tra_loi(text: str):
     a, b = text.find("["), text.rfind("]")
     if a < 0 or b <= a:

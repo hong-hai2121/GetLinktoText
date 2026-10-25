@@ -1660,6 +1660,10 @@ def main():
         sys.exit("CHỌN THỬ cần bật minh họa và có kịch bản + giọng đọc để lấy mốc câu.")
     if lam_minh_hoa and tu_khop:
         import minh_hoa
+        nha_moi = minh_hoa.nha_da_ket_noi(args.minh_hoa_ai)
+        if nha_moi != args.minh_hoa_ai:
+            print(f"Minh họa : {args.minh_hoa_ai} chưa đăng nhập -> dùng {nha_moi} (đã đăng nhập) thay")
+            args.minh_hoa_ai, args.minh_hoa_model = nha_moi, None      # model cũ là của AI kia
         print(f"Minh họa : {args.minh_hoa_ai} đề xuất từ khóa từng câu, khớp kho {args.minh_hoa} "
               f"({'phủ kín' if args.minh_hoa_che_do == 'phu_kin' else 'điểm xuyết'}) ...")
         tho_mh: dict = {}
