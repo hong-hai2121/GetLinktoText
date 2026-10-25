@@ -32,10 +32,12 @@ Server chỉ nghe trên 127.0.0.1.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
 import random
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -316,8 +318,21 @@ def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
     return a
 
 
+def _osascript_chon(lenh: str, tieu_de: str, bat_dau: str) -> str:
+    """macOS: hộp thoại chọn của Finder qua AppleScript (tkinter không chạy được ngoài main thread trên Mac,
+    mà main thread đã thuộc cửa sổ pywebview). `lenh` = 'choose folder' / 'choose file ...'; '' nếu hủy."""
+    def _q(x: str) -> str:
+        return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    vi_tri = f" default location (POSIX file {_q(bat_dau)})" if bat_dau and Path(bat_dau).is_dir() else ""
+    r = subprocess.run(["osascript", "-e", f"POSIX path of ({lenh} with prompt {_q(tieu_de)}{vi_tri})"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
     """Hộp thoại chọn thư mục của Windows (tkinter), nổi lên trên cùng; '' nếu hủy."""
+    if sys.platform == "darwin":
+        return _osascript_chon("choose folder", tieu_de, bat_dau).rstrip("/")
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -330,6 +345,8 @@ def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
 
 def _chon_anh_dialog(tieu_de: str, bat_dau: str) -> str:
     """Hộp thoại chọn một file ảnh (jpg/png); '' nếu hủy."""
+    if sys.platform == "darwin":
+        return _osascript_chon('choose file of type {"public.image"}', tieu_de, bat_dau)
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -372,12 +389,34 @@ def python_exe() -> str:
     return str(p)
 
 
+# macOS/Linux: tiến trình con chạy trong nhóm riêng -> _giet_cay dừng được cả ffmpeg/CLI AI nó gọi
+NHOM_RIENG = {} if os.name == "nt" else {"start_new_session": True}
+
+
 def _giet_cay(p: subprocess.Popen):
     """Dừng tiến trình con + ffmpeg nó đang chạy."""
     try:
-        subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        else:
+            import signal
+            os.killpg(p.pid, signal.SIGKILL)
     except Exception:
         p.kill()
+
+
+def _mo(path, chon: bool = False):
+    """Mở file/thư mục bằng ứng dụng mặc định (Explorer / Finder); chon=True: mở thư mục chứa và chọn sẵn file."""
+    path = str(path)
+    if os.name == "nt":
+        if chon:
+            subprocess.Popen(["explorer", "/select,", path])
+        else:
+            os.startfile(path)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", path] if chon else ["open", path])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent) if chon else path])
 
 
 # ------------------------------------------------------------------ trạng thái
@@ -398,6 +437,7 @@ class State:
         self.drive_dich = [x for x in (dd if isinstance(dd, list) else DRIVE_DICH_MAC_DINH) if isinstance(x, dict) and x.get("id")]
         self.drive_dich_chon = str(d.get("drive_dich_chon") or (self.drive_dich[0]["id"] if self.drive_dich else ""))
         self.tu_tai_len = bool(d.get("tu_tai_len", True))
+        self.tu_don_rac = bool(d.get("tu_don_rac", True))   # bấm "Bỏ mục đã xong" thì tập đã lên Drive + ghi Sheet được đưa file vào Thùng rác (user 26/10)
         self.google = {"dang": False, "loi": ""}      # đang chờ user đăng nhập trên trình duyệt
         self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
         self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
@@ -519,7 +559,8 @@ class State:
         with self.lock:
             data = {"goc_dir": self.goc_dir, "items": self.items, "tuy_chon": self.tuy_chon,
                     "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh,
-                    "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len}
+                    "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len,
+                    "tu_don_rac": self.tu_don_rac}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -577,6 +618,7 @@ def state_payload(after: int) -> dict:
             "mau_giong": mau_giong(),
             "google": google,
             "drive_dich": list(S.drive_dich), "drive_dich_chon": S.drive_dich_chon, "tu_tai_len": S.tu_tai_len,
+            "tu_don_rac": S.tu_don_rac,
             "lam_dep": {"anh": S.lam_dep_anh, "ton_tai": bool(S.lam_dep_anh) and Path(S.lam_dep_anh).is_file(),
                         "san_sang": _LD_SAN_SANG[0], "ly_do": "" if _LD_SAN_SANG[0] else _LD_SAN_SANG[1]},
             "xem_truoc": dict(S.xem_truoc),
@@ -764,7 +806,7 @@ def _xem_truoc_job(item_id):
         with S.lock:
             S.xem_truoc["buoc"] = "Nhận diện mặt"
         p = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW,
+                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW, **NHOM_RIENG,
                              text=True, encoding="utf-8", errors="replace", bufsize=1)
         with S.lock:
             S.xem_truoc_proc = p
@@ -845,14 +887,18 @@ def api_google_chon_client(_data):
     if not _DIALOG.acquire(blocking=False):
         return {"ok": False, "msg": "Hộp thoại chọn file đang mở."}
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        p = filedialog.askopenfilename(parent=root, title="Chọn file client_secret*.json (OAuth client loại Desktop app)",
-                                       initialdir=str(downloads_dir()), filetypes=[("JSON", "*.json"), ("Mọi file", "*.*")])
-        root.destroy()
+        if sys.platform == "darwin":
+            p = _osascript_chon('choose file of type {"public.json"}',
+                                "Chọn file client_secret*.json (OAuth client loại Desktop app)", str(downloads_dir()))
+        else:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            p = filedialog.askopenfilename(parent=root, title="Chọn file client_secret*.json (OAuth client loại Desktop app)",
+                                           initialdir=str(downloads_dir()), filetypes=[("JSON", "*.json"), ("Mọi file", "*.*")])
+            root.destroy()
     finally:
         _DIALOG.release()
     if not p:
@@ -878,6 +924,68 @@ def api_set_tu_tai_len(data):
         S.save()
     S.log("Tải lên Drive sau khi ghép: " + ("BẬT (tập lấy từ Sheet, có thư mục đích)" if bat else "TẮT — bấm Tải lên ở từng tập khi cần"))
     return {"ok": True, "bat": bat}
+
+
+def api_set_tu_don_rac(data):
+    bat = bool(data.get("bat"))
+    with S.lock:
+        S.tu_don_rac = bat
+        S.save()
+    S.log("Dọn file sau khi tải lên: " + ("BẬT (bấm Bỏ mục đã xong thì tập đã lên Drive + ghi Sheet xong được đưa file vào Thùng rác)" if bat else "TẮT"))
+    return {"ok": True, "bat": bat}
+
+
+def _vao_thung_rac(p: Path) -> None:
+    """Đưa file/thư mục vào Thùng rác (lấy lại được), không xoá vĩnh viễn."""
+    if sys.platform == "darwin":
+        rac = Path.home() / ".Trash"
+        dich = rac / p.name
+        i = 1
+        while dich.exists():
+            dich = rac / f"{p.stem} {datetime.now():%H.%M.%S}{'' if i == 1 else f' {i}'}{p.suffix}"
+            i += 1
+        try:
+            shutil.move(str(p), str(dich))
+        except OSError:                            # không có quyền ghi ~/.Trash -> nhờ Finder (hỏi quyền một lần)
+            q = str(p).replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(["osascript", "-e", f'tell application "Finder" to delete (POSIX file "{q}")'],
+                           check=True, capture_output=True, timeout=60)
+    elif os.name == "nt":
+        ham = "DeleteDirectory" if p.is_dir() else "DeleteFile"
+        lenh = ("Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::"
+                f"{ham}($env:DUONG_DAN, 'OnlyErrorDialogs', 'SendToRecycleBin')")
+        subprocess.run(["powershell", "-NoProfile", "-Command", lenh], check=True, capture_output=True, timeout=120,
+                       env={**os.environ, "DUONG_DAN": str(p)}, creationflags=NO_WINDOW)
+    else:
+        raise OSError("chưa hỗ trợ Thùng rác trên hệ điều hành này")
+
+
+def _don_rac_muc(it) -> None:
+    """Sau khi video (+ file txt minh họa) đã lên Drive và link đã ghi vào Sheet: đưa vào Thùng rác thư mục Drive tải về
+    (<thư mục kết quả>/<tên tập>), thư mục kết quả done/<tên tập> và bản hook đã làm đẹp trong cache "Làm đẹp".
+    Chỉ đụng tới đường dẫn nằm trong thư mục kết quả; không bao giờ đụng video gốc, kho minh họa, cài đặt."""
+    goc = thu_muc_ra().resolve()
+    tm = Path(it.get("thu_muc") or "")
+    out = Path(it.get("out") or "")
+    ds: list[Path] = []
+    if it.get("thu_muc") and tm.is_dir():
+        ld = goc / "Làm đẹp"
+        for hook in tm.glob("Hook*"):
+            ds += sorted(ld.glob(f"{glob.escape(hook.stem)} - lam dep *.mp4"))
+        ds.append(tm)
+    if it.get("out") and out.parent.is_dir() and out.parent != thu_muc_done():
+        ds.append(out.parent)
+    cam = {Path(S.goc_dir or "/").resolve(), Path(S.minh_hoa_dir or "/").resolve(), APP_DIR.resolve(), goc}
+    for p in ds:
+        try:
+            r = p.resolve()
+            if r in cam or goc not in r.parents:
+                S.log(f"   bỏ qua (ngoài thư mục kết quả): {p}")
+                continue
+            _vao_thung_rac(p)
+            S.log(f"🗑 [{it['id']}] đã đưa vào Thùng rác: {p}")
+        except Exception as e:                     # noqa: BLE001
+            S.log(f"✗ [{it['id']}] dọn {p} lỗi: {e}")
 
 
 def api_set_drive_dich(data):
@@ -1019,6 +1127,7 @@ def _tai_len_muc(it, ep: bool = False) -> None:
         except Exception as e:                     # noqa: BLE001
             S.log(f"✗ [{it['id']}] ghi Sheet lỗi: {e}")
             tt(g="loi", loi=f"ghi Sheet: {e}")
+            return
 
 
 def api_set_dich_muc(data):
@@ -1413,12 +1522,33 @@ def api_retry(data):
     return {"ok": True, "msg": f"Đưa {n} mục về chờ."}
 
 
+def _da_len_het(it) -> bool:
+    """Tập đã xong trọn: video lên Drive, file txt minh họa (nếu có) lên Drive, link đã ghi Sheet (nếu tập lấy từ Sheet)."""
+    tl = it.get("tai_len") or {}
+    if tl.get("tt") != "xong":
+        return False
+    if it.get("minh_hoa_file") and not tl.get("txt_link"):
+        return False
+    sh = it.get("sheet") or {}
+    return not (sh.get("id") and sh.get("dong")) or tl.get("g") == "xong"
+
+
 def api_clear_done(_data):
+    """Nút "Bỏ mục đã xong" (thẻ Hàng đợi). Bật dọn file (Cài đặt) thì tập nào đã lên Drive + ghi Sheet xong được đưa file
+    trên máy vào Thùng rác ngay lúc bỏ (user 26/10: không dọn lúc vừa chạy xong, chỉ dọn khi bấm nút này)."""
     with S.lock:
         n = len(S.items)
+        bo = [it for it in S.items if it.get("status") == XONG]
         S.items = [it for it in S.items if it.get("status") != XONG]
         S.save()
-        return {"ok": True, "msg": f"Đã bỏ {n - len(S.items)} mục xong khỏi danh sách (video vẫn ở Downloads)."}
+        don = [it for it in bo if S.tu_don_rac and _da_len_het(it)]
+    for it in bo:
+        if S.tu_don_rac and it not in don:
+            S.log(f"   [{it['id']}] không dọn file: chưa tải lên Drive / ghi Sheet xong")
+    if don:
+        threading.Thread(target=lambda: [_don_rac_muc(it) for it in don], daemon=True, name="don-rac").start()
+    return {"ok": True, "msg": f"Đã bỏ {len(bo)} mục xong khỏi danh sách"
+            + (f"; đưa file của {len(don)} tập đã lên Drive vào Thùng rác." if don else " (video vẫn ở Downloads).")}
 
 
 def api_start(_data):
@@ -1478,21 +1608,47 @@ def api_tiep_ngay(_data):
     return {"ok": True}
 
 
+def api_clipboard(data):
+    """Đọc / ghi clipboard của máy cho nút Dán, Cmd+V/C/X trong cửa sổ desktop (WebView trên Mac không có menu Edit nên
+    phím tắt dán/chép không chạy; trình duyệt cũng hay chặn navigator.clipboard)."""
+    ghi = data.get("ghi")
+    try:
+        if sys.platform == "darwin":
+            if ghi is not None:
+                subprocess.run(["pbcopy"], input=str(ghi), text=True, encoding="utf-8", timeout=10, check=True)
+                return {"ok": True}
+            r = subprocess.run(["pbpaste"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
+            return {"ok": True, "text": r.stdout}
+        if os.name == "nt":
+            if ghi is not None:
+                subprocess.run(["clip"], input=str(ghi), text=True, encoding="utf-16le", timeout=10, check=True,
+                               creationflags=NO_WINDOW)
+                return {"ok": True}
+            r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+                               creationflags=NO_WINDOW)
+            return {"ok": True, "text": r.stdout.rstrip("\r\n")}
+        return {"ok": False, "msg": "Chưa hỗ trợ clipboard trên hệ điều hành này."}
+    except Exception as e:   # noqa: BLE001
+        return {"ok": False, "msg": f"Không đọc/ghi được clipboard: {e}"}
+
+
 def api_mo(data):
-    """Mở file kết quả / thư mục của một mục bằng ứng dụng mặc định của Windows."""
+    """Mở file kết quả / thư mục của một mục bằng ứng dụng mặc định (Explorer / Finder)."""
     loai = data.get("loai")
     if loai in ("downloads", "thu_muc_ra"):
-        os.startfile(thu_muc_ra())
+        _mo(thu_muc_ra())
         return {"ok": True}
     if loai == "done":                             # <thư mục kết quả>\done\ — mỗi tập một thư mục con
         d = thu_muc_done()
         d.mkdir(parents=True, exist_ok=True)
-        os.startfile(d)
+        _mo(d)
         return {"ok": True}
     if loai == "goc":
         if not S.goc_dir or not Path(S.goc_dir).is_dir():
             return {"ok": False, "msg": "Chưa có thư mục clip gốc."}
-        os.startfile(S.goc_dir)
+        _mo(S.goc_dir)
         return {"ok": True}
     if loai == "minh_hoa":                         # thư mục video mẫu (mặc định chưa có thì tạo)
         d = Path(S.minh_hoa_dir)
@@ -1500,7 +1656,7 @@ def api_mo(data):
             d.mkdir(parents=True, exist_ok=True)
         if not d.is_dir():
             return {"ok": False, "msg": f"Không thấy thư mục video mẫu: {d}"}
-        os.startfile(d)
+        _mo(d)
         return {"ok": True}
     if loai == "url":                              # mở link ở trình duyệt mặc định (cửa sổ desktop không có tab)
         url = str(data.get("url") or "")
@@ -1512,7 +1668,7 @@ def api_mo(data):
         p = Path(str(data.get("path") or ""))
         if not _duoc_phep(p):
             return {"ok": False, "msg": "Không mở được đường dẫn này."}
-        os.startfile(p)
+        _mo(p)
         return {"ok": True}
     with S.lock:
         it = S.find(data.get("id"))
@@ -1521,10 +1677,7 @@ def api_mo(data):
         path = it and khoa and it.get(khoa)
     if not path or not Path(path).exists():
         return {"ok": False, "msg": "File không còn (đã xoá/di chuyển?)."}
-    if loai == "thu_muc_video":
-        subprocess.Popen(["explorer", "/select,", str(path)])
-    else:
-        os.startfile(path)
+    _mo(path, chon=loai == "thu_muc_video")
     return {"ok": True}
 
 
@@ -1649,7 +1802,7 @@ def _chay_muc(it):
     cuoi: list[str] = []
     try:
         p = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW,
+                             stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW, **NHOM_RIENG,
                              text=True, encoding="utf-8", errors="replace", bufsize=1)
     except Exception as e:
         return _ket_thuc(it, LOI, f"Không chạy được ghep_tieude.py: {e}", t0)
@@ -1818,6 +1971,7 @@ ROUTES = {
     "/api/google_dang_xuat": api_google_dang_xuat,
     "/api/google_chon_client": api_google_chon_client,
     "/api/set_tu_tai_len": api_set_tu_tai_len,
+    "/api/set_tu_don_rac": api_set_tu_don_rac,
     "/api/set_drive_dich": api_set_drive_dich,
     "/api/drive_dich_them": api_drive_dich_them,
     "/api/drive_dich_xoa": api_drive_dich_xoa,
@@ -1835,6 +1989,7 @@ ROUTES = {
     "/api/stop_sau": api_stop_sau,
     "/api/tiep_ngay": api_tiep_ngay,
     "/api/mo": api_mo,
+    "/api/clipboard": api_clipboard,
     "/api/save_tuy_chon": api_save_tuy_chon,
     "/api/mac_dinh_tuy_chon": api_mac_dinh_tuy_chon,
     "/api/lam_dep_xem_thu": api_lam_dep_xem_thu,

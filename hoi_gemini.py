@@ -44,7 +44,6 @@ FILE_SETTINGS = THU_MUC_GEMINI / "settings.json"
 GIOI_HAN_DONG_LENH = 6000      # ký tự; dài hơn thì đưa câu hỏi qua stdin
 THOI_GIAN_CHO = 600
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
 
 class GeminiLoi(RuntimeError):
@@ -229,10 +228,11 @@ def dang_nhap() -> None:
     đăng nhập xong nó trả lời rồi cửa sổ giữ lại để xem. Không được thì chạy gemini tương tác."""
     chon_dang_nhap_google()
     exe = _exe()
-    lenh = (f'chcp 65001>nul & title Ket noi Gemini (dang nhap Google) & set GEMINI_CLI_TRUST_WORKSPACE=true & '
-            f'"{exe}" -p "Xin chao! Toi da ket noi Gemini CLI thanh cong chua? Tra loi mot cau." || "{exe}"')
+    cau = "Xin chao! Toi da ket noi Gemini CLI thanh cong chua? Tra loi mot cau."
+    lenh_win = f'set GEMINI_CLI_TRUST_WORKSPACE=true & "{exe}" -p "{cau}" || "{exe}"'
+    lenh_mac = f'export GEMINI_CLI_TRUST_WORKSPACE=true; unset NO_BROWSER; "{exe}" -p "{cau}" || "{exe}"'
     env = {k: v for k, v in os.environ.items() if k != "NO_BROWSER"}
-    subprocess.Popen(["cmd", "/k", lenh], creationflags=NEW_CONSOLE, env=env)
+    cli_chung.mo_cua_so_lenh(lenh_win, lenh_mac, "Ket noi Gemini (dang nhap Google)", env=env)
 
 
 def dang_xuat() -> str:
@@ -243,7 +243,7 @@ def dang_xuat() -> str:
 
 
 def cai_dat() -> None:
-    subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title Cai Gemini CLI & {LENH_CAI}"], creationflags=NEW_CONSOLE)
+    cli_chung.mo_cua_so_lenh(LENH_CAI, LENH_CAI, "Cai Gemini CLI")
 
 
 def main():

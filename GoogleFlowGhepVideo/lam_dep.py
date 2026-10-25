@@ -39,7 +39,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 MODEL = HERE / "face_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-VENV_PY = HERE.parent / "venv_lamdep" / "Scripts" / "python.exe"     # python có mediapipe
+VENV_PY = (HERE.parent / "venv_lamdep" / "Scripts" / "python.exe" if os.name == "nt"   # python có mediapipe
+           else HERE.parent / "venv_lamdep" / "bin" / "python")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 ENV_IM = {"PYTHONUTF8": "1", "GLOG_minloglevel": "2", "TF_CPP_MIN_LOG_LEVEL": "2"}   # bớt log rác của mediapipe
 
@@ -421,8 +422,9 @@ def san_sang() -> tuple[bool, str]:
     """(có chạy được không, python hoặc lý do)."""
     py = python_lam_dep()
     if not py:
+        pip = "venv_lamdep\\Scripts\\pip" if os.name == "nt" else "venv_lamdep/bin/pip"
         return False, ("Chưa có venv_lamdep (mediapipe). Tạo bằng: python -m venv venv_lamdep && "
-                       "venv_lamdep\\Scripts\\pip install mediapipe (cạnh thư mục GoogleFlowGhepVideo)")
+                       f"{pip} install mediapipe (cạnh thư mục GoogleFlowGhepVideo)")
     if not shutil.which("ffmpeg"):
         return False, "Không thấy ffmpeg trên PATH."
     return True, py

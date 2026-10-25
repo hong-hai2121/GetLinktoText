@@ -189,6 +189,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <textarea id="links" placeholder="https://drive.google.com/drive/folders/…&#10;hoặc link Google Sheet lịch đăng (tab có cột D tiêu đề · F link nguyên liệu · G link video)" spellcheck="false"></textarea>
           <div class="row" style="margin-top:8px">
             <span class="muted grow">Mỗi thư mục là một tập có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet: tool đọc các dòng cột F, ghép xong tải video lên Drive và điền link vào cột G.</span>
+            <button class="btn" onclick="danVao($('links'))" title="Dán link đã sao chép vào ô trên">📋 Dán</button>
             <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
           </div>
           <div class="row" style="margin-top:8px">
@@ -501,6 +502,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <button class="btn sm" onclick="api('/api/google_chon_client')">Chọn file client_secret.json…</button>
           <span class="muted">(tải từ Google Cloud Console của Gmail chủ thư mục, loại Desktop app)</span></div>
         <label class="sw" style="margin-top:10px"><input type="checkbox" id="cdTuTaiLen" onchange="api('/api/set_tu_tai_len',{bat:this.checked})"> Ghép xong <b>tự tải video lên</b> thư mục Drive của tập (tập lấy từ Sheet thì điền thêm link vào cột G)</label>
+        <label class="sw" style="margin-top:6px" title="Chạy khi bấm Bỏ mục đã xong, chỉ với tập có video (và file txt minh họa) đã lên Drive và link đã ghi vào Sheet. Đưa vào Thùng rác (lấy lại được): thư mục Drive tải về của tập, thư mục done/&lt;tên tập&gt; và bản hook đã làm đẹp. Không đụng video gốc, kho minh họa, cài đặt."><input type="checkbox" id="cdTuDonRac" onchange="api('/api/set_tu_don_rac',{bat:this.checked})"> Bấm <b>Bỏ mục đã xong</b> (thẻ Hàng đợi) thì <b>dọn file</b> của các tập đã tải lên + ghi Sheet xong (đưa vào Thùng rác)</label>
         <h4 style="margin:12px 0 6px;font-size:13px">Danh sách thư mục Drive nhận video <small class="muted">(chọn thư mục đang dùng ở tab Ghép video, dưới ô số 2)</small></h4>
         <div id="ddList"></div>
         <div class="row" style="margin-top:8px">
@@ -587,7 +589,37 @@ async function api(path, body){
     const j = await r.json(); if (j.msg) toast(j.msg, !j.ok); tick(); return j;
   }catch(e){ toast('Mất kết nối server: ' + e, true); return {ok:false}; }
 }
-function saoChep(t){ try{ navigator.clipboard.writeText(t); toast('Đã sao chép.'); } catch(e){ toast('Không sao chép được: ' + e, true); } }
+function saoChep(t){ fetch('/api/clipboard', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ghi: t})})
+  .then(r => r.json()).then(j => toast(j.ok ? 'Đã sao chép.' : j.msg, !j.ok)).catch(e => toast('Không sao chép được: ' + e, true)); }
+/* Dán clipboard vào ô (thay phần đang chọn, đặt con trỏ sau chữ dán). Đọc qua server: WebView trên Mac không có menu Edit
+   nên Cmd+V không chạy, navigator.clipboard thì hay bị chặn. Ô nhiều dòng (links) chưa trống thì xuống dòng trước. */
+async function danVao(el){
+  if (!el) return;
+  let j; try{ j = await (await fetch('/api/clipboard', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})).json(); }
+  catch(e){ toast('Không đọc được clipboard: ' + e, true); return; }
+  if (!j.ok){ toast(j.msg, true); return; }
+  let t = j.text || ''; if (!t){ toast('Clipboard đang trống.', true); return; }
+  if (el.tagName !== 'TEXTAREA') t = t.replace(/\s*[\r\n]+\s*/g, ' ');
+  el.focus();
+  const a = el.selectionStart ?? el.value.length, b = el.selectionEnd ?? a;
+  if (el.id === 'links' && a === b && a === el.value.length && el.value && !el.value.endsWith('\n')) t = '\n' + t;
+  el.setRangeText(t, a, b, 'end');
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+}
+/* Mac: Cmd/Ctrl + V/C/X/A trong ô nhập (cửa sổ desktop không có menu Edit nên phím tắt mặc định không chạy) */
+if (/Mac/i.test(navigator.platform || navigator.userAgent)){
+  document.addEventListener('keydown', e => {
+    const el = e.target, k = (e.key || '').toLowerCase();
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || !el || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || !'vcxa'.includes(k) || k.length !== 1) return;
+    if (el.type && !/^(text|search|url|textarea|password|)$/.test(el.type) && el.tagName === 'INPUT' && k !== 'a') return;
+    e.preventDefault();
+    if (k === 'a'){ el.select(); return; }
+    if (k === 'v'){ danVao(el); return; }
+    const a = el.selectionStart, b = el.selectionEnd; if (a == null || a === b) return;
+    saoChep(el.value.slice(a, b));
+    if (k === 'x'){ el.setRangeText('', a, b, 'end'); el.dispatchEvent(new Event('input', {bubbles: true})); }
+  }, true);
+}
 /* checkbox "Hỏi GPT mới khi chạy" (thẻ Hàng đợi) = tùy chọn minh_hoa_hoi_lai; đang gửi thì tick() không ghi đè */
 let hoiLaiDangGui = false;
 async function datHoiLai(el){ hoiLaiDangGui = true; try{ const j = await api('/api/set_minh_hoa_hoi_lai', {bat: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hoiLaiDangGui = false; } }
@@ -1020,7 +1052,7 @@ function renderCaiDat(c){
 /* ---------- Google Drive & Sheet (tab Cài đặt) ---------- */
 let ggKey = '';
 function renderGoogle(s){
-  const g = s.google || {}, k = JSON.stringify([g, s.drive_dich, s.drive_dich_chon, s.tu_tai_len]);
+  const g = s.google || {}, k = JSON.stringify([g, s.drive_dich, s.drive_dich_chon, s.tu_tai_len, s.tu_don_rac]);
   if (k === ggKey) return; ggKey = k;
   const tt = $('ggTt');
   if (g.dang){ tt.className = 'chip run'; tt.innerHTML = '<span class="spin"></span> đang chờ bạn đăng nhập trên trình duyệt…'; }
@@ -1028,7 +1060,7 @@ function renderGoogle(s){
   else { tt.className = 'chip warn'; tt.textContent = g.co_client ? 'chưa đăng nhập Google' : 'thiếu client_secret.json cạnh app'; }
   $('btnGgDn').disabled = !!g.dang || !g.co_client; $('btnGgDx').disabled = !g.da_dang_nhap; $('ggLoi').textContent = g.loi || ''; $('ggToken').textContent = g.token || '';
   const cl = g.client || {}; $('ggClient').textContent = cl.co ? `dự án ${cl.project || '?'}` : 'chưa có';
-  $('cdTuTaiLen').checked = !!s.tu_tai_len;
+  $('cdTuTaiLen').checked = !!s.tu_tai_len; $('cdTuDonRac').checked = s.tu_don_rac !== false;
   const dd = s.drive_dich || [];
   // LƯU Ý: trong thuộc tính onclick="…" không dùng JSON.stringify (sinh dấu " làm đứt thuộc tính) — dùng '${esc(x)}'
   $('ddList').innerHTML = dd.length ? dd.map(d => `<div class="row" style="margin:3px 0">${d.id === s.drive_dich_chon ? '<span class="chip ok">đang chọn</span>' : '<span class="chip" style="visibility:hidden">đang chọn</span>'}<b>${esc(d.ten)}</b><a class="muted" style="font-size:12px;cursor:pointer" onclick="api('/api/mo',{loai:'url',url:'${esc(d.link)}'})">${esc(d.link)}</a><span class="spacer"></span><button class="btn link sm danger" onclick="if(confirm('Bỏ thư mục ${esc(d.ten)} khỏi danh sách?'))api('/api/drive_dich_xoa',{id:'${esc(d.id)}'})">bỏ</button></div>`).join('') : '<span class="muted">chưa có thư mục nào — dán link ở dưới</span>';
