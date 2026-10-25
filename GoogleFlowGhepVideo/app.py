@@ -1519,6 +1519,32 @@ def api_tiep_ngay(_data):
     return {"ok": True}
 
 
+def api_clipboard(data):
+    """Đọc / ghi clipboard của máy cho nút Dán, Cmd+V/C/X trong cửa sổ desktop (WebView trên Mac không có menu Edit nên
+    phím tắt dán/chép không chạy; trình duyệt cũng hay chặn navigator.clipboard)."""
+    ghi = data.get("ghi")
+    try:
+        if sys.platform == "darwin":
+            if ghi is not None:
+                subprocess.run(["pbcopy"], input=str(ghi), text=True, encoding="utf-8", timeout=10, check=True)
+                return {"ok": True}
+            r = subprocess.run(["pbpaste"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
+            return {"ok": True, "text": r.stdout}
+        if os.name == "nt":
+            if ghi is not None:
+                subprocess.run(["clip"], input=str(ghi), text=True, encoding="utf-16le", timeout=10, check=True,
+                               creationflags=NO_WINDOW)
+                return {"ok": True}
+            r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+                               creationflags=NO_WINDOW)
+            return {"ok": True, "text": r.stdout.rstrip("\r\n")}
+        return {"ok": False, "msg": "Chưa hỗ trợ clipboard trên hệ điều hành này."}
+    except Exception as e:   # noqa: BLE001
+        return {"ok": False, "msg": f"Không đọc/ghi được clipboard: {e}"}
+
+
 def api_mo(data):
     """Mở file kết quả / thư mục của một mục bằng ứng dụng mặc định (Explorer / Finder)."""
     loai = data.get("loai")
@@ -1873,6 +1899,7 @@ ROUTES = {
     "/api/stop_sau": api_stop_sau,
     "/api/tiep_ngay": api_tiep_ngay,
     "/api/mo": api_mo,
+    "/api/clipboard": api_clipboard,
     "/api/save_tuy_chon": api_save_tuy_chon,
     "/api/mac_dinh_tuy_chon": api_mac_dinh_tuy_chon,
     "/api/lam_dep_xem_thu": api_lam_dep_xem_thu,

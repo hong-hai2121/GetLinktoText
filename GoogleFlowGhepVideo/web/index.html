@@ -189,6 +189,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <textarea id="links" placeholder="https://drive.google.com/drive/folders/…&#10;hoặc link Google Sheet lịch đăng (tab có cột D tiêu đề · F link nguyên liệu · G link video)" spellcheck="false"></textarea>
           <div class="row" style="margin-top:8px">
             <span class="muted grow">Mỗi thư mục là một tập có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet: tool đọc các dòng cột F, ghép xong tải video lên Drive và điền link vào cột G.</span>
+            <button class="btn" onclick="danVao($('links'))" title="Dán link đã sao chép vào ô trên">📋 Dán</button>
             <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
           </div>
           <div class="row" style="margin-top:8px">
@@ -587,7 +588,37 @@ async function api(path, body){
     const j = await r.json(); if (j.msg) toast(j.msg, !j.ok); tick(); return j;
   }catch(e){ toast('Mất kết nối server: ' + e, true); return {ok:false}; }
 }
-function saoChep(t){ try{ navigator.clipboard.writeText(t); toast('Đã sao chép.'); } catch(e){ toast('Không sao chép được: ' + e, true); } }
+function saoChep(t){ fetch('/api/clipboard', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ghi: t})})
+  .then(r => r.json()).then(j => toast(j.ok ? 'Đã sao chép.' : j.msg, !j.ok)).catch(e => toast('Không sao chép được: ' + e, true)); }
+/* Dán clipboard vào ô (thay phần đang chọn, đặt con trỏ sau chữ dán). Đọc qua server: WebView trên Mac không có menu Edit
+   nên Cmd+V không chạy, navigator.clipboard thì hay bị chặn. Ô nhiều dòng (links) chưa trống thì xuống dòng trước. */
+async function danVao(el){
+  if (!el) return;
+  let j; try{ j = await (await fetch('/api/clipboard', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})).json(); }
+  catch(e){ toast('Không đọc được clipboard: ' + e, true); return; }
+  if (!j.ok){ toast(j.msg, true); return; }
+  let t = j.text || ''; if (!t){ toast('Clipboard đang trống.', true); return; }
+  if (el.tagName !== 'TEXTAREA') t = t.replace(/\s*[\r\n]+\s*/g, ' ');
+  el.focus();
+  const a = el.selectionStart ?? el.value.length, b = el.selectionEnd ?? a;
+  if (el.id === 'links' && a === b && a === el.value.length && el.value && !el.value.endsWith('\n')) t = '\n' + t;
+  el.setRangeText(t, a, b, 'end');
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+}
+/* Mac: Cmd/Ctrl + V/C/X/A trong ô nhập (cửa sổ desktop không có menu Edit nên phím tắt mặc định không chạy) */
+if (/Mac/i.test(navigator.platform || navigator.userAgent)){
+  document.addEventListener('keydown', e => {
+    const el = e.target, k = (e.key || '').toLowerCase();
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || !el || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || !'vcxa'.includes(k) || k.length !== 1) return;
+    if (el.type && !/^(text|search|url|textarea|password|)$/.test(el.type) && el.tagName === 'INPUT' && k !== 'a') return;
+    e.preventDefault();
+    if (k === 'a'){ el.select(); return; }
+    if (k === 'v'){ danVao(el); return; }
+    const a = el.selectionStart, b = el.selectionEnd; if (a == null || a === b) return;
+    saoChep(el.value.slice(a, b));
+    if (k === 'x'){ el.setRangeText('', a, b, 'end'); el.dispatchEvent(new Event('input', {bubbles: true})); }
+  }, true);
+}
 /* checkbox "Hỏi GPT mới khi chạy" (thẻ Hàng đợi) = tùy chọn minh_hoa_hoi_lai; đang gửi thì tick() không ghi đè */
 let hoiLaiDangGui = false;
 async function datHoiLai(el){ hoiLaiDangGui = true; try{ const j = await api('/api/set_minh_hoa_hoi_lai', {bat: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hoiLaiDangGui = false; } }
