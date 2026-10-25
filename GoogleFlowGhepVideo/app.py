@@ -437,7 +437,7 @@ class State:
         self.drive_dich = [x for x in (dd if isinstance(dd, list) else DRIVE_DICH_MAC_DINH) if isinstance(x, dict) and x.get("id")]
         self.drive_dich_chon = str(d.get("drive_dich_chon") or (self.drive_dich[0]["id"] if self.drive_dich else ""))
         self.tu_tai_len = bool(d.get("tu_tai_len", True))
-        self.tu_don_rac = bool(d.get("tu_don_rac", True))   # tải Drive + ghi Sheet xong thì đưa file tập vào Thùng rác (user 26/10)
+        self.tu_don_rac = bool(d.get("tu_don_rac", True))   # bấm "Bỏ mục đã xong" thì tập đã lên Drive + ghi Sheet được đưa file vào Thùng rác (user 26/10)
         self.google = {"dang": False, "loi": ""}      # đang chờ user đăng nhập trên trình duyệt
         self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
         self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
@@ -931,7 +931,7 @@ def api_set_tu_don_rac(data):
     with S.lock:
         S.tu_don_rac = bat
         S.save()
-    S.log("Dọn file sau khi tải lên: " + ("BẬT (tải Drive + ghi Sheet xong thì đưa file của tập vào Thùng rác)" if bat else "TẮT"))
+    S.log("Dọn file sau khi tải lên: " + ("BẬT (bấm Bỏ mục đã xong thì tập đã lên Drive + ghi Sheet xong được đưa file vào Thùng rác)" if bat else "TẮT"))
     return {"ok": True, "bat": bat}
 
 
@@ -986,9 +986,6 @@ def _don_rac_muc(it) -> None:
             S.log(f"🗑 [{it['id']}] đã đưa vào Thùng rác: {p}")
         except Exception as e:                     # noqa: BLE001
             S.log(f"✗ [{it['id']}] dọn {p} lỗi: {e}")
-    with S.lock:
-        it["da_don"] = True
-        S.save()
 
 
 def api_set_drive_dich(data):
@@ -1131,11 +1128,6 @@ def _tai_len_muc(it, ep: bool = False) -> None:
             S.log(f"✗ [{it['id']}] ghi Sheet lỗi: {e}")
             tt(g="loi", loi=f"ghi Sheet: {e}")
             return
-    if S.tu_don_rac:
-        if txt and not (it.get("tai_len") or {}).get("txt_link"):
-            S.log(f"   [{it['id']}] không dọn file: file txt minh họa chưa lên Drive")
-        else:
-            _don_rac_muc(it)
 
 
 def api_set_dich_muc(data):
@@ -1530,12 +1522,33 @@ def api_retry(data):
     return {"ok": True, "msg": f"Đưa {n} mục về chờ."}
 
 
+def _da_len_het(it) -> bool:
+    """Tập đã xong trọn: video lên Drive, file txt minh họa (nếu có) lên Drive, link đã ghi Sheet (nếu tập lấy từ Sheet)."""
+    tl = it.get("tai_len") or {}
+    if tl.get("tt") != "xong":
+        return False
+    if it.get("minh_hoa_file") and not tl.get("txt_link"):
+        return False
+    sh = it.get("sheet") or {}
+    return not (sh.get("id") and sh.get("dong")) or tl.get("g") == "xong"
+
+
 def api_clear_done(_data):
+    """Nút "Bỏ mục đã xong" (thẻ Hàng đợi). Bật dọn file (Cài đặt) thì tập nào đã lên Drive + ghi Sheet xong được đưa file
+    trên máy vào Thùng rác ngay lúc bỏ (user 26/10: không dọn lúc vừa chạy xong, chỉ dọn khi bấm nút này)."""
     with S.lock:
         n = len(S.items)
+        bo = [it for it in S.items if it.get("status") == XONG]
         S.items = [it for it in S.items if it.get("status") != XONG]
         S.save()
-        return {"ok": True, "msg": f"Đã bỏ {n - len(S.items)} mục xong khỏi danh sách (video vẫn ở Downloads)."}
+        don = [it for it in bo if S.tu_don_rac and _da_len_het(it)]
+    for it in bo:
+        if S.tu_don_rac and it not in don:
+            S.log(f"   [{it['id']}] không dọn file: chưa tải lên Drive / ghi Sheet xong")
+    if don:
+        threading.Thread(target=lambda: [_don_rac_muc(it) for it in don], daemon=True, name="don-rac").start()
+    return {"ok": True, "msg": f"Đã bỏ {len(bo)} mục xong khỏi danh sách"
+            + (f"; đưa file của {len(don)} tập đã lên Drive vào Thùng rác." if don else " (video vẫn ở Downloads).")}
 
 
 def api_start(_data):
