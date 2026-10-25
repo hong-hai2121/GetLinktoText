@@ -53,6 +53,23 @@ def _dat_icon(tieu_de: str, ico: Path, cho: float = 20.0):
             u32.SendMessageW(hwnd, WM_SETICON, loai, h)
 
 
+def _icon_dock_mac(ico: Path):
+    """macOS: Dock hiện tên + icon của app thay cho "Python" + tên lửa (chạy bằng python của venv, không phải .app)."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication, NSBundle, NSImage
+        info = NSBundle.mainBundle().localizedInfoDictionary() or NSBundle.mainBundle().infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = TIEU_DE
+        if ico.exists():
+            img = NSImage.alloc().initWithContentsOfFile_(str(ico))
+            if img is not None:
+                NSApplication.sharedApplication().setApplicationIconImage_(img)
+    except Exception:   # noqa: BLE001
+        pass
+
+
 def _chup_man_hinh(win, duong_dan: str, cho: float = 6.0):
     time.sleep(cho)
     try:
@@ -85,6 +102,7 @@ def main():
     ap.add_argument("--chup", help="(kiểm thử) chụp cửa sổ ra file PNG sau 6s rồi thoát")
     ap.add_argument("--tab", help="mở sẵn tab: ghep | chinh-sua | ai | nhat-ky | cai-dat")
     args = ap.parse_args()
+    _icon_dock_mac(ICO)                           # trước khi AppKit khởi tạo (webview.screens) để Dock nhận tên
 
     url = app.dang_chay_san()
     if not url:                                   # chưa có server -> chạy trong tiến trình này
