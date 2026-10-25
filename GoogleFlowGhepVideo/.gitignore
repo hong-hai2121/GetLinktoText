@@ -12,3 +12,8 @@ cong.txt
 # OAuth client Google (tải Drive / ghi Sheet) + token — không đưa lên git
 client_secret*.json
 token*.json
+
+# khóa tài khoản dịch vụ Google (đặt tay vào máy, không đưa lên git)
+service_account*.json
+# file rác của Finder trên Mac
+.DS_Store
