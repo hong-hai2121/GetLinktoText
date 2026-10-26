@@ -1565,8 +1565,16 @@ def api_start(_data):
         S.bo_nghi.clear()
         S.dung_sau_tap, S.nghi_den = False, 0.0
         S.chon_thu = bool(_data.get("chon_thu")) if isinstance(_data, dict) else False
+        chua = [it for it in cho if not it.get("chon_thu")]       # chọn thử: tiếp các tập CHƯA chọn thử (user 26/10)
+        chon_thu = S.chon_thu
     threading.Thread(target=_worker, daemon=True, name="worker").start()
-    return {"ok": True, "msg": (f"Chọn thử {len(cho)} tập (không dựng video)." if S.chon_thu else f"Bắt đầu {len(cho)} tập.")}
+    if chon_thu:
+        if chua and len(chua) < len(cho):
+            return {"ok": True, "msg": f"Chọn thử tiếp {len(chua)} tập chưa chọn thử ({len(cho) - len(chua)} tập đã chọn thử trước đó, bỏ qua)."}
+        if not chua:
+            return {"ok": True, "msg": f"Cả {len(cho)} tập đều đã chọn thử -> chọn thử lại từ đầu (không dựng video)."}
+        return {"ok": True, "msg": f"Chọn thử {len(cho)} tập (không dựng video)."}
+    return {"ok": True, "msg": f"Bắt đầu {len(cho)} tập."}
 
 
 def api_chon_thu(_data):
@@ -1890,11 +1898,19 @@ def _cap_nhat_kho_dau_luot() -> None:
 def _worker():
     xong = loi = thu = 0
     da_thu: set = set()                            # chọn thử: mục đã làm trong lượt này (về lại chờ nên không được lấy lại)
+    with S.lock:                                   # chọn thử: bỏ qua tập đã chọn thử xong (dừng rồi bấm lại thì chạy TIẾP, không
+        lam_lai = S.chon_thu and all(x.get("chon_thu") for x in S.items if x.get("status") == CHO)   # từ đầu); tất cả đã
+                                                   # chọn thử thì mới chọn lại cả lượt (user 26/10)
+
+    def _cho(x) -> bool:
+        return (x.get("status") == CHO and x.get("id") not in da_thu
+                and (not S.chon_thu or lam_lai or not x.get("chon_thu")))
+
     try:
         _cap_nhat_kho_dau_luot()
         while not S.stop_flag.is_set():
             with S.lock:
-                it = next((x for x in S.items if x.get("status") == CHO and x.get("id") not in da_thu), None)
+                it = next((x for x in S.items if _cho(x)), None)
             if it is None:
                 break
             if S.chon_thu:
@@ -1902,7 +1918,7 @@ def _worker():
             _chay_muc(it)
             with S.lock:
                 st = it.get("status")
-                con = any(x.get("status") == CHO and x.get("id") not in da_thu for x in S.items)
+                con = any(_cho(x) for x in S.items)
                 nghi = float(S.tuy_chon.get("nghi_giua_tap_phut") or 0)
             xong += st == XONG
             loi += st == LOI
@@ -1912,7 +1928,7 @@ def _worker():
             if nghi > 0 and not S.chon_thu and not _nghi_giua_tap(nghi):   # nghỉ giữa hai tập (chọn thử thì không); dừng -> thoát
                 break
         with S.lock:
-            con = sum(1 for x in S.items if x.get("status") == CHO and x.get("id") not in da_thu)
+            con = sum(1 for x in S.items if _cho(x))
         if S.stop_flag.is_set():
             S.log(f"⏹ Đã dừng ngay theo yêu cầu. {xong} xong, {loi} lỗi.")
         elif S.chon_thu:
