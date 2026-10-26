@@ -206,8 +206,76 @@ def _set_schedule(page, when, log):
         raise RuntimeError("không thấy lựa chọn 'Lên lịch'")
     radios.nth(muc).evaluate("e => (e.closest('label') || e).click()")
     page.wait_for_timeout(1500)
-    _chon_ngay(page, when, log)
-    _chon_gio(page, when, log)
+    if page.locator('[role="combobox"][aria-label="Select date"]').count():
+        _chon_ngay_gio_moi(page, when, log)      # giao diện 3 ô thả xuống (TikTok đổi ~26/10/2026)
+    else:
+        _chon_ngay(page, when, log)              # giao diện cũ: 2 ô nhập readonly
+        _chon_gio(page, when, log)
+
+
+THANG_VN_MOI = ["Một", "Hai", "Ba", "Bốn", "Năm", "Sáu", "Bảy", "Tám", "Chín", "Mười", "Mười Một", "Mười Hai"]
+
+
+def _so_trong(s):
+    return [int(x) for x in re.findall(r"\d+", s or "")]
+
+
+def _chon_ngay_gio_moi(page, when, log):
+    """Giao diện TikTok Studio mới (dò thật 26/10/2026): ô ngày [role=combobox][aria-label="Select date"] (chữ
+    '27 tháng 10, 2026') mở hộp .DatePicker__panel: tiêu đề .DatePicker__titleMonth 'Tháng Mười' +
+    .DatePicker__titleYear, nút [aria-label="Previous month"/"Next month"], ngày = button.DatePicker__day có
+    aria-label 'Thứ Ba, ngày 27 tháng 10 năm 2026' (data-outside/disabled cho ngày ngoài tháng, đã qua, quá 10
+    ngày). Ô giờ [aria-label="Select time"] ('08:00') mở .TimePicker__panel: 2 listbox 'Hours'/'Minutes' (bước 5
+    phút), bấm button.TimePicker__item[aria-label='Hours 08'] / 'Minutes 00'. Đóng hộp bằng cách bấm tiêu đề
+    'Thời điểm đăng' (.scheduled-title-container). Cuối cùng đọc lại chữ 2 ô để xác minh."""
+    o_ngay = page.locator('[role="combobox"][aria-label="Select date"]').first
+    o_gio = page.locator('[role="combobox"][aria-label="Select time"]').first
+    muon = [when.day, when.month, when.year]
+    if _so_trong(o_ngay.inner_text()) != muon:
+        o_ngay.scroll_into_view_if_needed()
+        o_ngay.click()
+        page.wait_for_timeout(800)
+        panel = page.locator(".DatePicker__panel").filter(visible=True).first
+        panel.wait_for(state="visible", timeout=5000)
+        for _ in range(13):
+            th = norm_space(panel.locator(".DatePicker__titleMonth").first.inner_text()).lower()
+            nam = (_so_trong(panel.locator(".DatePicker__titleYear").first.inner_text()) or [0])[0]
+            thang = next((i + 1 for i, t in enumerate(THANG_VN_MOI) if th == f"tháng {t}".lower()), None)
+            if thang is None or (nam, thang) == (when.year, when.month):
+                break
+            nut = '[aria-label="Next month"]' if (nam, thang) < (when.year, when.month) else '[aria-label="Previous month"]'
+            panel.locator(nut).first.click()
+            page.wait_for_timeout(500)
+        ngay = panel.locator(f'button.DatePicker__day[aria-label*="ngày {when.day} tháng {when.month:02d} năm {when.year}"]'
+                             f':not([data-outside="true"])').first
+        try:
+            ngay.wait_for(state="visible", timeout=5000)
+        except Exception:
+            raise RuntimeError(f"không thấy ngày {when:%d/%m/%Y} trong lịch TikTok (lịch đang ở {th} {nam})") from None
+        if ngay.get_attribute("disabled") is not None or ngay.get_attribute("data-disabled") == "true":
+            raise RuntimeError(f"TikTok không cho chọn ngày {when:%d/%m/%Y} (đã qua hoặc quá 10 ngày tới)")
+        ngay.click()
+        page.wait_for_timeout(800)
+    o_gio.scroll_into_view_if_needed()
+    o_gio.click()
+    page.wait_for_timeout(800)
+    tp = page.locator(".TimePicker__panel").filter(visible=True).first
+    tp.wait_for(state="visible", timeout=5000)
+    for cot, gt in (("Hours", when.strftime("%H")), ("Minutes", when.strftime("%M"))):
+        b = tp.locator(f'[role="listbox"][aria-label="{cot}"] button.TimePicker__item[aria-label="{cot} {gt}"]').first
+        b.wait_for(state="attached", timeout=5000)
+        b.scroll_into_view_if_needed()
+        b.click()
+        page.wait_for_timeout(500)
+    try:
+        page.locator(".scheduled-title-container").first.click()      # đóng hộp giờ
+    except Exception:
+        page.keyboard.press("Escape")
+    page.wait_for_timeout(600)
+    ngay_hien, gio_hien = norm_space(o_ngay.inner_text()), norm_space(o_gio.inner_text())
+    if _so_trong(ngay_hien) != muon or _so_trong(gio_hien) != [when.hour, when.minute]:
+        raise RuntimeError(f"Không đặt được lịch TikTok: ô hiện '{ngay_hien} {gio_hien}', cần {when:%d/%m/%Y %H:%M}")
+    log(f"  ✓ Lịch TikTok: {ngay_hien} {gio_hien}")
 
 
 def upload_video(page, video_path, caption, hashtags=(), schedule_at=None, log=print, dry_run=False):

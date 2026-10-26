@@ -190,6 +190,12 @@ textarea{resize:vertical}
 .jobs ul{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto}
 .jobs li{display:flex;gap:8px;align-items:center;padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12.5px}
 .jobs li:first-child{border-top:0}
+.jobs li{flex-wrap:wrap}
+.jerr{flex-basis:100%;font-size:12px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:6px 8px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
+.jerr b{font-weight:600}
+.jerr details{margin-top:4px;color:var(--dim)}
+.jerr pre{white-space:pre-wrap;font:11px/1.4 Consolas,monospace;max-height:160px;overflow:auto;margin:4px 0 0;background:#fff;border:1px solid #fecaca;border-radius:6px;padding:6px;color:#7f1d1d}
+.jerr .cp{margin-top:6px}
 .jobs li.run{background:#f5f3ff}
 .jobs .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jobs .sub{color:var(--dim);font-size:11.5px;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -280,7 +286,7 @@ td.kq .er{color:#b91c1c}
     <button data-page="tiktok"><span class="ic ic-tt">♪</span>TikTok<span class="cnt" id="cnt-tiktok"></span></button>
     <button data-page="zalo"><span class="ic ic-za">Z</span>Zalo<span class="cnt" id="cnt-zalo"></span></button>
   </nav>
-  <button class="ai-jump" id="aiJump" title="Về thẻ Tạo nội dung bằng AI"><span class="sp">✨</span><div><b>Tạo nội dung AI</b><small>bóc băng + Gemini</small></div></button>
+  <button class="ai-jump" id="aiJump" title="Về thẻ Tạo nội dung bằng AI"><span class="sp">✨</span><div><b>Tạo nội dung AI</b><small>nhận diện giọng nói + AI viết</small></div></button>
   <div class="side-foot">Server cục bộ · điều khiển trình duyệt đang mở qua Playwright Extension · mỗi nền tảng một profile</div>
 </aside>
 
@@ -304,9 +310,9 @@ td.kq .er{color:#b91c1c}
         <div class="ai-logo">✨</div>
         <div>
           <h3>Tạo nội dung bằng AI</h3>
-          <p>Chọn video → bóc băng <b>large-v3-turbo</b> → Gemini viết tiêu đề, mô tả, thẻ, hashtag → thêm vào hàng đợi</p>
+          <p>Chọn video → nhận diện giọng nói <b>large-v3-turbo</b> → Gemini hoặc ChatGPT viết tiêu đề, mô tả, thẻ, hashtag → thêm vào hàng đợi</p>
         </div>
-        <div class="ai-badges"><span>🎙 large-v3-turbo</span><span>♊ Gemini</span><span>3 nền tảng · 1 mục hàng đợi</span></div>
+        <div class="ai-badges"><span>🎙 large-v3-turbo</span><span>♊ Gemini · 🤖 ChatGPT</span><span>3 nền tảng · 1 mục hàng đợi</span></div>
       </div>
       <div class="ai-body">
         <div class="ai-steps">
@@ -326,7 +332,14 @@ td.kq .er{color:#b91c1c}
           </section>
 
           <section class="step s2">
-            <header><span class="num">2</span><h4>Bóc băng &amp; Gemini</h4><small>mỗi video ~10 giây bóc băng + 3-6 phút Gemini, chạy lần lượt</small></header>
+            <header><span class="num">2</span><h4>Nhận diện giọng nói &amp; AI viết</h4><small>mỗi video ~10 giây nhận diện + 1-6 phút AI viết, chạy lần lượt</small></header>
+            <div class="pfchecks" style="margin-bottom:8px">
+              <span class="lbl">AI viết:</span>
+              <label class="check"><input type="radio" name="aiBackend" value="gemini" checked>Gemini (trình duyệt)</label>
+              <label class="check"><input type="radio" name="aiBackend" value="chatgpt">ChatGPT (CLI)</label>
+              <span class="chip" id="gptChip">CLI: chưa kiểm tra</span>
+              <button class="btn mini" id="btnCheckGpt" title="Kiểm tra Codex CLI và đăng nhập ChatGPT trên máy">Kiểm tra</button>
+            </div>
             <div class="pfchecks" style="margin-bottom:8px">
               <span class="lbl">Đăng lên:</span>
               <label class="check"><input type="checkbox" class="pfsel" value="youtube" checked>YouTube</label>
@@ -336,7 +349,7 @@ td.kq .er{color:#b91c1c}
             <label class="check auto"><input type="checkbox" id="seoAuto" checked>Tự thêm vào hàng đợi khi xong rồi tự ▶ Bắt đầu đăng (không cần duyệt từng video — xoá hết hàng đợi cũ trước)</label>
             <button class="ai-run" id="btnSeoRun">✨ Tạo nội dung</button>
             <ol class="pipe" id="seoPipe">
-              <li data-k="tai">Video</li><li data-k="boc">Bóc băng</li><li data-k="gem">Gemini</li><li data-k="xong">Xong</li>
+              <li data-k="tai">Video</li><li data-k="boc">Nhận diện giọng nói</li><li data-k="gem">AI viết</li><li data-k="xong">Xong</li>
             </ol>
             <div class="ai-status" id="seoStatus">Chưa chạy.</div>
             <div class="jobs" id="seoJobsWrap" style="display:none">
@@ -540,9 +553,11 @@ function platformPage(n) {
         <div class="row">
           <div class="grow"><label>Hashtag mặc định (dùng chung TikTok &amp; Zalo; mục có hashtag AI riêng thì dùng hashtag đó; trống = lấy dòng cuối của Mô tả ở tab YouTube)</label>
             <input type="text" id="${n}-hashtags" placeholder="#daday #traonguoc #bacsihoi"></div>
+          <div><label title="AI thường viết 8-12 hashtag; TikTok/Zalo chỉ lấy N hashtag đầu tiên (4 thẻ kênh đứng trước)">Tối đa (TikTok &amp; Zalo)</label>
+            <input type="number" id="${n}-soHashtag" min="1" max="30" style="width:90px"></div>
           <button class="btn" id="${n}-saveHashtags">Lưu hashtag</button>
         </div>
-        <p class="hint">Sẽ đăng: <b>&lt;tiêu đề của từng video&gt;</b> <b id="${n}-preview">…</b></p>
+        <p class="hint">Sẽ đăng: <b>&lt;tiêu đề của từng video&gt;</b> <b id="${n}-preview">…</b> <span id="${n}-gh"></span></p>
       </div>
     </div>
 
@@ -673,7 +688,8 @@ function renderPlatformCards(st) {
     const acc = $(n + "-acc");
     acc.textContent = "Tài khoản: " + (info.account ? `${info.account}${info.checked_at ? " (kiểm tra " + info.checked_at + ")" : ""}` : "(chưa kiểm tra)");
     acc.className = "chip " + (info.account ? (info.account.startsWith("đã") ? "ok" : "bad") : "");
-    $(n + "-preview").textContent = st.hashtags || "(không có hashtag)";
+    $(n + "-preview").textContent = st.hashtags || "(hashtag của nội dung AI)";
+    $(n + "-gh").textContent = `— tối đa ${st.so_hashtag} hashtag đầu tiên`;
     $(n + "-start").disabled = st.running;
     $(n + "-check").disabled = st.running;
   });
@@ -688,6 +704,7 @@ function render(st) {
     ["tiktok", "zalo"].forEach(n => {
       $(n + "-token").value = st.platforms[n].token;
       $(n + "-hashtags").value = st.hashtags_raw;
+      $(n + "-soHashtag").value = st.so_hashtag;
     });
     formLoaded = true;
   }
@@ -798,18 +815,20 @@ $("btnSeoRun").onclick = async () => {
     const n = (lastState?.items || []).length;
     if (n && !confirm(`Tự thêm vào hàng đợi: sẽ XOÁ ${n} mục đang có trong hàng đợi (cả đã xong lẫn đang chờ) để nhận loạt mới.\nTiếp tục?`)) return;
   }
-  const j = await post("/api/tao_noi_dung", {sources, auto_add: auto, clear_queue: auto, platforms: pf,
+  const backend = (document.querySelector("input[name=aiBackend]:checked") || {}).value || "gemini";
+  const j = await post("/api/tao_noi_dung", {sources, auto_add: auto, clear_queue: auto, platforms: pf, backend,
                                             times: $("times").value, start: $("start").value});
   if (j.ok) { seoPicked.clear(); $("seoDrive").value = ""; renderFiles(); updatePick(); }
 };
 $("btnSeoStop").onclick = () => post("/api/seo_stop");
+$("btnCheckGpt").onclick = () => post("/api/check_gpt");
 $("btnSeoClear").onclick = () => post("/api/seo_clear", {});
 
 // bước đang chạy suy từ chữ `buoc` của server: tải Drive → bóc băng → nối/viết Gemini → xong
 function stageOf(buoc) {
   const b = (buoc || "").toLowerCase();
-  if (b.includes("gemini")) return "gem";
-  if (b.includes("bóc băng") || b.includes("3 phút")) return "boc";
+  if (b.includes("gemini") || b.includes("chatgpt")) return "gem";
+  if (b.includes("nhận diện") || b.includes("bóc băng")) return "boc";
   return "tai";
 }
 function renderPipe(cur, last) {
@@ -829,17 +848,38 @@ function renderJobs(jobs, running) {
   jobs.forEach(j => n[j.status] = (n[j.status] || 0) + 1);
   $("seoJobsCnt").textContent = Object.entries(n).map(([k, v]) => `${v} ${k}`).join(" · ");
   $("btnSeoStop").disabled = !running;
+  jobs.forEach(j => jobById[j.id] = j);
   $("seoJobs").innerHTML = jobs.map(j => {
-    const sub = j.loi || (j.status === "đang chạy" ? j.buoc : j.status === "xong" ? (j.ket_qua?.tieu_de || "") : "");
+    const sub = j.loi ? "" : (j.status === "đang chạy" ? j.buoc : j.status === "xong" ? (j.ket_qua?.tieu_de || "") : "");
+    const ai = j.backend === "chatgpt" ? "🤖" : "♊";
+    // lỗi: hiện ĐẦY ĐỦ (không cắt) + chi tiết kỹ thuật + nút sao chép bản nhận diện giọng nói (xem máy nghe được gì)
+    const err = j.loi ? `
+      <div class="jerr"><b>✗ ${esc(j.loi)}</b>
+        ${j.loi_chi_tiet ? `<details><summary>Chi tiết kỹ thuật</summary><pre>${esc(j.loi_chi_tiet)}</pre></details>` : ""}
+        <button class="btn mini cp" data-id="${j.id}" ${j.nhan_dien ? "" : "disabled"}>📋 Sao chép bản nhận diện giọng nói${j.nhan_dien ? ` (${j.nhan_dien.length} ký tự)` : " (trống — máy không nghe được gì)"}</button>
+      </div>` : "";
     return `
     <li class="${j.status === "đang chạy" ? "run" : ""}">
       <span class="st ${JOB_ST[j.status] || "st-wait"}">${esc(j.status)}</span>
-      <span class="nm" title="${esc(j.nguon)}">${esc(j.ten)}</span>
+      <span class="nm" title="${esc(j.nguon)}">${ai} ${esc(j.ten)}</span>
       ${j.da_them ? '<span class="added">✓ đã vào hàng đợi</span>' : ""}
-      <span class="sub ${j.loi ? "er" : ""}" title="${esc(sub)}">${esc(sub)}</span>
+      <span class="sub" title="${esc(sub)}">${esc(sub)}</span>
       ${j.status !== "đang chạy" ? `<button class="x" data-id="${j.id}" title="Bỏ khỏi danh sách">✕</button>` : ""}
+      ${err}
     </li>`; }).join("");
   $("seoJobs").querySelectorAll(".x").forEach(b => b.onclick = () => post("/api/seo_clear", {ids: [b.dataset.id]}));
+  $("seoJobs").querySelectorAll(".cp").forEach(b => b.onclick = () => copyText((jobById[b.dataset.id] || {}).nhan_dien || "", b));
+}
+const jobById = {};
+async function copyText(text, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {} ta.remove();
+  }
+  toast(ok ? `Đã sao chép ${text.length} ký tự.` : "Không sao chép được.", ok);
+  if (btn) { const cu = btn.textContent; btn.textContent = ok ? "✓ Đã sao chép" : "✗ Lỗi"; setTimeout(() => btn.textContent = cu, 1500); }
 }
 // thẻ kết quả dựng MỘT lần cho mỗi job (không dựng lại mỗi nhịp poll, khỏi mất chữ đang sửa)
 function resultCard(j) {
@@ -852,10 +892,10 @@ function resultCard(j) {
       <div class="fgrid">
         <label>Tiêu đề</label><input type="text" class="f-title">
         <label>Thẻ YouTube</label><input type="text" class="f-tags">
-        <label>Hashtag</label><input type="text" class="f-hashtags" placeholder="TikTok/Zalo: tiêu đề + các hashtag này">
+        <label>Hashtag</label><input type="text" class="f-hashtags" placeholder="YouTube: cả dãy ở cuối mô tả; TikTok/Zalo: tiêu đề + N hashtag đầu (N đặt ở tab TikTok/Zalo)">
         <label class="top">Mô tả YouTube</label><textarea rows="7" class="f-desc"></textarea>
       </div>
-      <details class="trans"><summary>Xem bản bóc băng</summary><pre></pre></details>
+      <details class="trans"><summary>Xem bản nhận diện giọng nói <button class="btn mini cp-res" style="margin-left:8px">📋 Sao chép</button></summary><pre></pre></details>
       <div class="row" style="margin-top:10px;justify-content:flex-end">
         <span class="hint" style="margin:0">Sửa trực tiếp nếu cần, rồi</span>
         <button class="ai-add f-add">➕ Thêm vào hàng đợi</button>
@@ -866,7 +906,15 @@ function resultCard(j) {
   d.querySelector(".f-hashtags").value = (k.hashtags || []).join(" ");
   d.querySelector(".f-desc").value = k.mo_ta_youtube || ((k.tieu_de ? k.tieu_de + "\n\n" : "") + (k.mo_ta || ""));
   d.querySelector(".trans pre").textContent = k.boc_bang || "(không có)";
+  d.querySelector(".cp-res").onclick = ev => { ev.preventDefault(); ev.stopPropagation(); copyText(k.boc_bang || "", ev.currentTarget); };
   d.querySelector(".f-add").onclick = () => addResult(d);
+  // chữ sửa tay trong thẻ -> lưu về server (ai_jobs.json) sau 0,8 s ngừng gõ: tải lại trang / khởi động lại vẫn giữ
+  let timer = null;
+  const luuSua = () => fetch("/api/seo_edit", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({job_id: j.id, tieu_de: d.querySelector(".f-title").value, tags: d.querySelector(".f-tags").value,
+      hashtags: d.querySelector(".f-hashtags").value, mo_ta_youtube: d.querySelector(".f-desc").value})}).catch(() => {});
+  d.querySelectorAll(".f-title, .f-tags, .f-hashtags, .f-desc").forEach(el =>
+    el.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(luuSua, 800); }));
   return d;
 }
 async function addResult(d) {
@@ -899,7 +947,18 @@ function renderResults(jobs) {
   $("seoResult").style.display = done.length ? "" : "none";
   $("btnSeoAddAll").style.display = done.some(j => !j.da_them) ? "" : "none";
 }
+let backendInit = false;
 function renderSeo(st) {
+  const g = st.gpt || {}, chip = $("gptChip");
+  if (g.cli || g.ghi_chu) {
+    chip.textContent = g.ket_noi ? "CLI: đã đăng nhập" + (g.email ? " · " + g.email : "") : "CLI: " + (g.ghi_chu || "chưa đăng nhập");
+    chip.className = "chip " + (g.ket_noi ? "ok" : "bad"); chip.title = g.ghi_chu || "";
+  }
+  if (!backendInit && st.ai_backend) {      // chọn theo lần dùng trước (config), chỉ lần đầu tải trang
+    const r = document.querySelector(`input[name=aiBackend][value=${st.ai_backend}]`);
+    if (r) r.checked = true;
+    backendInit = true;
+  }
   const jobs = st.seo_jobs || [], running = !!st.seo_running;
   const cur = jobs.find(j => j.status === "đang chạy");
   const het = jobs.filter(j => j.status === "xong" || j.status === "lỗi");
@@ -945,8 +1004,8 @@ $("selAll").onchange = e => {
   $(n + "-saveToken").onclick = () => post("/api/save_token", {platform: n, token: $(n + "-token").value});
   $(n + "-check").onclick = () => post("/api/check_connection", {platform: n, token: $(n + "-token").value});
   $(n + "-saveHashtags").onclick = async () => {
-    const j = await post("/api/save_hashtags", {hashtags: $(n + "-hashtags").value});
-    if (j.ok) ["tiktok", "zalo"].forEach(m => $(m + "-hashtags").value = $(n + "-hashtags").value);
+    const j = await post("/api/save_hashtags", {hashtags: $(n + "-hashtags").value, so_hashtag: $(n + "-soHashtag").value});
+    if (j.ok) ["tiktok", "zalo"].forEach(m => { $(m + "-hashtags").value = $(n + "-hashtags").value; $(m + "-soHashtag").value = j.so_hashtag; });
   };
   $(n + "-start").onclick = () => startRun(n);
   $(n + "-stop").onclick = () => post("/api/stop");

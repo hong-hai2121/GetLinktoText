@@ -90,6 +90,11 @@ def _fill_textbox(page, container_ids, text, log):
     # Studio tự điền tên file vào tiêu đề -> xoá sạch và KIỂM TRA trống trước khi gõ (dang_common.clear_field)
     from dang_common import clear_field
     clear_field(page, box, log, "ô " + container_ids[0])
+    # Mô tả kết thúc bằng dãy hashtag -> con trỏ đứng ngay sau "#tag" làm Studio bật popup gợi ý hashtag che
+    # các ô bên dưới (lỗi 26/10/2026: không bấm được playlist/đối tượng). Thêm xuống dòng cuối để con trỏ
+    # không còn dính hashtag; sau khi điền vẫn còn popup thì bấm Space (như làm tay).
+    if text.rstrip().rsplit("\n", 1)[-1].lstrip().startswith("#") and not text.endswith("\n"):
+        text = text.rstrip() + "\n"
     box.fill(text)
     page.wait_for_timeout(300)
     got = " ".join(box.inner_text().split())
@@ -97,6 +102,30 @@ def _fill_textbox(page, container_ids, text, log):
         # fill không ăn (hiếm) -> gõ lại bằng insert_text
         clear_field(page, box, log, "ô " + container_ids[0])
         page.keyboard.insert_text(text)
+    _dong_goi_y_hashtag(page, log)
+
+
+def _dong_goi_y_hashtag(page, log):
+    """Popup gợi ý hashtag của ô tiêu đề/mô tả (danh sách '#tieuhoa 7,2 N video...') còn mở -> bấm Space rồi
+    kiểm tra lại; vẫn còn thì bấm vào nhãn 'Tiêu đề' để mất tiêu điểm."""
+    def mo():
+        try:
+            lb = page.locator('ytcp-uploads-dialog [role="listbox"], ytcp-uploads-dialog tp-yt-paper-listbox, '
+                              'ytcp-uploads-dialog ytcp-social-suggestions-textbox tp-yt-iron-dropdown').filter(visible=True)
+            return lb.count() > 0 and "#" in " ".join(lb.first.inner_text(timeout=1500).split())[:200]
+        except Exception:
+            return False
+    if not mo():
+        return
+    page.keyboard.press("Space")
+    page.wait_for_timeout(400)
+    if mo():
+        try:
+            page.locator('ytcp-uploads-dialog #title-textarea, ytcp-uploads-dialog #title-textbox').first.click(position={"x": 5, "y": 5})
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+    log("  (đã đóng popup gợi ý hashtag" + ("" if not mo() else " — VẪN CÒN, có thể che ô bên dưới") + ")")
 
 
 def _norm(s):

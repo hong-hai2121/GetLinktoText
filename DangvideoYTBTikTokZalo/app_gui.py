@@ -4,7 +4,7 @@
 Chạy:  pythonw app_gui.py   (hoặc bấm đúp mo_gui.bat)  -> KHÔNG còn cửa sổ console.
   - Server của app.py chạy ngay trong tiến trình này (thread nền), giao diện web vẫn mở ở trình
     duyệt như trước (bỏ --khong-mo nếu không muốn tự mở).
-  - Cửa sổ nhỏ 440x600 hiện: đèn "SERVER ĐANG CHẠY" + giờ, URL/cổng + nút Sao chép, hàng đợi
+  - Cửa sổ NGANG 980x560 (26/10/2026) hiện: đèn "SERVER ĐANG CHẠY" + giờ, URL/cổng + nút Sao chép, hàng đợi
     (chờ/đang đăng/xong/lỗi), worker đang chạy hay dừng, Chrome đã nối extension chưa, 40 dòng
     nhật ký cuối. Nút: Mở giao diện (trình duyệt), Dừng server & thoát.
   - Đóng cửa sổ (X) cũng dừng server.
@@ -29,7 +29,7 @@ import app                      # server + State dùng chung
 import post_queue as pq
 
 APP_DIR = Path(__file__).resolve().parent
-W, H = 440, 600
+W, H = 980, 560                 # cửa sổ NGANG (user 26/10/2026): cột trái trạng thái, cột phải nhật ký
 TIEU_DE = "Đăng video tự động — server"
 
 _WINDOW = None                  # giữ ở module, không để trong Api (xem bẫy ở docstring)
@@ -63,8 +63,9 @@ class Api:
         app.S.stop_flag.set()                       # worker đang đăng thì dừng sau video hiện tại
         if self._httpd:
             threading.Thread(target=self._httpd.shutdown, daemon=True).start()
-        # tắt server = lúc duy nhất ngắt kết nối trình duyệt (đóng 3 tab điều khiển)
-        threading.Thread(target=app.chrome_cdp.disconnect_all, daemon=True).start()
+        # tắt server = lúc duy nhất ngắt kết nối trình duyệt (đóng 3 tab điều khiển); main() chờ thread này
+        self._ngat = threading.Thread(target=app.chrome_cdp.disconnect_all, daemon=True)
+        self._ngat.start()
 
     # ---- JS gọi
     def trang_thai(self):
@@ -73,13 +74,32 @@ class Api:
             items = list(S.items)
             dem = {st: sum(1 for it in items if it.get("status") == st)
                    for st in (pq.STATUS_WAIT, pq.STATUS_RUNNING, pq.STATUS_DONE, pq.STATUS_ERROR)}
-            logs = [t for _, t in S.logs[-40:]]
+            logs = [t for _, t in S.logs[-60:]]
             worker = S.running
             # ext_ok giờ là dict theo nền tảng {youtube, tiktok, zalo}; đèn "Chrome" lấy YouTube
             chrome = bool(S.ext_ok.get("youtube")) if isinstance(S.ext_ok, dict) else bool(S.ext_ok)
+            # kết nối trình duyệt giữ suốt phiên (chrome_cdp.sessions_info: [(profile_dir, còn nối?)])
+            ss = {p: ok for p, ok in app.chrome_cdp.sessions_info()}
+            trinh_duyet = []
+            for n in pq.PLATFORMS:
+                pc = app.platform_cfg(n)
+                trinh_duyet.append({"ten": pq.PLATFORM_LABEL[n] + (" · Gemini" if n == "zalo" else ""),
+                                    "profile": f"{app.browser_name(pc)} {pc.get('profile_dir', '')}",
+                                    "ok": bool(ss.get(pc.get("profile_dir", "")))})
+            gpt = S.gpt_status or {}
+            ai = {"backend": S.cfg.get("ai_backend") or "gemini", "gpt_da_kiem_tra": bool(gpt),
+                  "gpt_ok": bool(gpt.get("ket_noi")), "gpt_ghi_chu": gpt.get("ghi_chu") or "", "gpt_email": gpt.get("email") or ""}
+            seo = {"running": S.seo_running,
+                   "cho": sum(1 for j in S.seo_jobs if j["status"] == "chờ"),
+                   "dang": sum(1 for j in S.seo_jobs if j["status"] == "đang chạy"),
+                   "xong": sum(1 for j in S.seo_jobs if j["status"] == "xong"),
+                   "loi": sum(1 for j in S.seo_jobs if j["status"] == "lỗi"),
+                   "buoc": next((j["buoc"] for j in S.seo_jobs if j["status"] == "đang chạy"), "")}
+            current = S.current
         song = bool(self._thread and self._thread.is_alive()) and not self._dung_roi
         giay = int(time.time() - self._t0)
         return {
+            "trinh_duyet": trinh_duyet, "ai": ai, "seo": seo, "current": current,
             "server": song,
             "url": self._url,
             "port": self._url.rsplit(":", 1)[-1].strip("/") if self._url else "",
@@ -123,19 +143,19 @@ HTML = r"""<!doctype html>
         --green:#16a34a;--red:#dc2626;--blue:#2563eb;--amber:#d97706}
   *{box-sizing:border-box} html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--fg);font:13px/1.45 "Segoe UI",system-ui,sans-serif;
-       display:flex;flex-direction:column;padding:14px;gap:10px;user-select:none}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+       display:flex;flex-direction:column;padding:12px;gap:10px;user-select:none}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
   .row{display:flex;align-items:center;gap:10px}
   .grow{flex:1;min-width:0}
   .dot{width:14px;height:14px;border-radius:50%;background:var(--red);flex:none;
        box-shadow:0 0 0 0 rgba(22,163,74,.6)}
   .dot.on{background:var(--green);animation:pulse 1.6s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.55)}70%{box-shadow:0 0 0 9px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
-  .title{font-weight:700;letter-spacing:.08em;font-size:14px}
+  .title{font-weight:700;letter-spacing:.08em;font-size:14px;white-space:nowrap}
   .title.off{color:#fca5a5}
   .mono{font-family:Consolas,"Cascadia Mono",monospace}
   .dim{color:var(--dim)} .small{font-size:11.5px}
-  .url{font-size:13.5px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
+  .url{font-size:13px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
   .btn{border:1px solid #374151;background:#111827;color:var(--fg);border-radius:8px;padding:6px 12px;
        cursor:pointer;font:inherit;white-space:nowrap}
   .btn:hover{background:#0b1220} .btn.sm{padding:4px 9px;font-size:12px}
@@ -143,64 +163,101 @@ HTML = r"""<!doctype html>
   .btn.blue:hover{background:#1d4ed8}
   .btn.red{background:#7f1d1d;border-color:#991b1b;color:#fee2e2;font-weight:600}
   .btn.red:hover{background:#991b1b}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+  .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  .main{flex:1;min-height:0;display:grid;grid-template-columns:330px 1fr;gap:10px}
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto}
+  h3{margin:0 0 7px;font-size:11px;letter-spacing:.12em;color:var(--dim);font-weight:600}
   .k{color:var(--dim)} .v{font-weight:600}
-  .chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+  .stat{background:#0b1220;border:1px solid var(--line);border-radius:9px;padding:6px 4px}
+  .stat b{display:block;font-size:19px;line-height:1.1} .stat span{font-size:11px;color:var(--dim)}
+  .stat.ok b{color:#86efac} .stat.err b{color:#fca5a5} .stat.run b{color:#fcd34d}
+  .chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
   .chip.ok{background:#14532d;color:#bbf7d0} .chip.bad{background:#7f1d1d;color:#fecaca}
   .chip.wait{background:#374151;color:#e5e7eb}
-  .log{flex:1;display:flex;flex-direction:column;min-height:0}
-  .log h3{margin:0 0 6px;font-size:11.5px;letter-spacing:.1em;color:var(--dim);font-weight:600}
+  .line{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--line)}
+  .line:first-of-type{border-top:0}
+  .line .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .line .nm small{color:var(--dim);margin-left:6px}
+  .log{display:flex;flex-direction:column;min-height:0}
   pre{flex:1;margin:0;overflow:auto;background:#0b1220;border:1px solid var(--line);border-radius:8px;
       padding:8px 10px;font:12px/1.5 Consolas,"Cascadia Mono",monospace;color:#d1d5db;white-space:pre-wrap;
       word-break:break-word;user-select:text}
-  .foot{display:flex;gap:8px;justify-content:space-between}
-  .q b{font-weight:700} .q .ok{color:#86efac} .q .err{color:#fca5a5} .q .run{color:#fcd34d}
+  .foot{display:flex;gap:8px;justify-content:space-between;align-items:center}
+  .foot .cur{color:#fcd34d;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;text-align:center}
 </style></head><body>
-  <div class="card">
-    <div class="row">
-      <div id="dot" class="dot"></div>
-      <div id="tt" class="title grow">ĐANG KHỞI ĐỘNG...</div>
-      <div id="gio" class="mono dim">--:--:--</div>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <div id="url" class="url grow mono">…</div>
-      <button id="copy" class="btn sm">Sao chép</button>
-    </div>
-    <div class="small dim" style="margin-top:4px">Đã chạy <span id="up" class="mono">00:00:00</span> · cổng <span id="port" class="mono">—</span></div>
+  <div class="card row">
+    <div id="dot" class="dot"></div>
+    <div id="tt" class="title">ĐANG KHỞI ĐỘNG...</div>
+    <div class="sep"></div>
+    <div id="url" class="url grow mono">…</div>
+    <button id="copy" class="btn sm">Sao chép</button>
+    <div class="sep"></div>
+    <div class="small dim" style="white-space:nowrap">cổng <span id="port" class="mono">—</span> · chạy <span id="up" class="mono">00:00:00</span></div>
+    <div id="gio" class="mono dim" style="white-space:nowrap">--:--:--</div>
   </div>
 
-  <div class="card grid">
-    <div><span class="k">Hàng đợi:</span> <span id="q" class="v q">0 video</span></div>
-    <div><span class="k">Worker:</span> <span id="worker" class="chip wait">dừng</span></div>
-    <div><span class="k">Đang đăng:</span> <span id="dang" class="v">0</span> · <span class="k">chờ:</span> <span id="cho" class="v">0</span></div>
-    <div><span class="k">Chrome:</span> <span id="chrome" class="chip bad">chưa nối</span></div>
-  </div>
-
-  <div class="card log">
-    <h3>NHẬT KÝ</h3>
-    <pre id="log">(chưa có)</pre>
+  <div class="main">
+    <div class="col">
+      <div class="card">
+        <h3>HÀNG ĐỢI ĐĂNG <span id="worker" class="chip wait" style="float:right">dừng</span></h3>
+        <div class="stats">
+          <div class="stat"><b id="cho">0</b><span>chờ</span></div>
+          <div class="stat run"><b id="dang">0</b><span>đang đăng</span></div>
+          <div class="stat ok"><b id="xong">0</b><span>xong</span></div>
+          <div class="stat err"><b id="loi">0</b><span>lỗi</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>TRÌNH DUYỆT <span class="dim" style="letter-spacing:0;font-weight:400">— nối 1 lần, giữ tới khi tắt server</span></h3>
+        <div id="tds"></div>
+      </div>
+      <div class="card">
+        <h3>TẠO NỘI DUNG AI <span id="seoRun" class="chip wait" style="float:right">nghỉ</span></h3>
+        <div class="line"><span class="nm">Đang chọn: <b id="aiBackend">—</b></span></div>
+        <div class="line"><span class="nm">ChatGPT CLI<small id="gptNote"></small></span><span id="gptChip" class="chip wait">chưa kiểm tra</span></div>
+        <div class="line"><span class="nm">Việc AI: <span id="seoCnt" class="v">—</span></span></div>
+      </div>
+    </div>
+    <div class="card log">
+      <h3>NHẬT KÝ</h3>
+      <pre id="log">(chưa có)</pre>
+    </div>
   </div>
 
   <div class="foot">
     <button id="open" class="btn blue">Mở giao diện</button>
+    <div id="cur" class="cur"></div>
     <button id="stop" class="btn red">Dừng server &amp; thoát</button>
   </div>
 
 <script>
   const $ = id => document.getElementById(id);
-  let armed = 0, lastLog = "";
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+  let armed = 0, lastLog = "", lastTd = "";
   function render(s){
     $('dot').className = 'dot' + (s.server ? ' on' : '');
     $('tt').textContent = s.server ? 'SERVER ĐANG CHẠY' : 'SERVER ĐÃ DỪNG';
-    $('tt').className = 'title grow' + (s.server ? '' : ' off');
+    $('tt').className = 'title' + (s.server ? '' : ' off');
     $('gio').textContent = s.gio; $('url').textContent = s.url || '—';
     $('up').textContent = s.uptime; $('port').textContent = s.port || '—';
-    const q = `${s.tong} video` + (s.tong ? ` (<b class="ok">${s.xong} xong</b>, <b class="err">${s.loi} lỗi</b>)` : '');
-    $('q').innerHTML = q; $('dang').textContent = s.dang; $('cho').textContent = s.cho;
+    $('cho').textContent = s.cho; $('dang').textContent = s.dang; $('xong').textContent = s.xong; $('loi').textContent = s.loi;
     $('worker').textContent = s.worker ? 'đang chạy ▶' : 'dừng';
     $('worker').className = 'chip ' + (s.worker ? 'ok' : 'wait');
-    $('chrome').textContent = s.chrome ? 'đã nối ✔' : 'chưa nối';
-    $('chrome').className = 'chip ' + (s.chrome ? 'ok' : 'bad');
+    const td = (s.trinh_duyet || []).map(t => `<div class="line"><span class="nm">${esc(t.ten)}<small>${esc(t.profile)}</small></span>
+      <span class="chip ${t.ok ? 'ok' : 'bad'}">${t.ok ? 'đã nối ✔' : 'chưa nối'}</span></div>`).join('');
+    if (td !== lastTd){ $('tds').innerHTML = td; lastTd = td; }
+    const ai = s.ai || {};
+    $('aiBackend').textContent = ai.backend === 'chatgpt' ? '🤖 ChatGPT (Codex CLI)' : '♊ Gemini (trình duyệt)';
+    const gc = $('gptChip');
+    if (!ai.gpt_da_kiem_tra){ gc.textContent = 'chưa kiểm tra'; gc.className = 'chip wait'; }
+    else { gc.textContent = ai.gpt_ok ? 'đã đăng nhập ✔' : 'chưa sẵn sàng'; gc.className = 'chip ' + (ai.gpt_ok ? 'ok' : 'bad'); }
+    $('gptNote').textContent = ai.gpt_ok ? (ai.gpt_email || '') : (ai.gpt_ghi_chu || '');
+    const seo = s.seo || {};
+    $('seoRun').textContent = seo.running ? 'đang chạy ▶' : 'nghỉ';
+    $('seoRun').className = 'chip ' + (seo.running ? 'ok' : 'wait');
+    $('seoCnt').textContent = (seo.cho + seo.dang + seo.xong + seo.loi) ? `${seo.cho} chờ · ${seo.dang} đang làm · ${seo.xong} xong · ${seo.loi} lỗi` : '—';
+    $('cur').textContent = seo.buoc ? '⏳ ' + seo.buoc : (s.current ? '⏳ ' + s.current : '');
     const txt = (s.logs && s.logs.length) ? s.logs.join('\n') : '(chưa có)';
     if (txt !== lastLog){
       const pre = $('log'), atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
@@ -254,7 +311,7 @@ def main():
     _WINDOW = webview.create_window(
         TIEU_DE, html=HTML, js_api=api, width=W, height=H,
         x=max(0, (sw - W) // 2), y=max(0, (sh - H) // 2),       # canh giữa màn hình
-        resizable=True, min_size=(380, 480), background_color="#111827")
+        resizable=True, min_size=(760, 440), background_color="#111827")
     _WINDOW.events.closed += api.dung_server                     # bấm X cũng dừng server
 
     def sau_khi_mo():
@@ -264,6 +321,9 @@ def main():
 
     webview.start(sau_khi_mo, private_mode=False)
     api.dung_server()
+    t = getattr(api, "_ngat", None)
+    if t is not None:
+        t.join(6)               # chờ đóng tab điều khiển xong rồi mới thoát
     sys.stdout.flush()
     os._exit(0)                 # thread server/worker daemon -> thoát thẳng cho gọn
 

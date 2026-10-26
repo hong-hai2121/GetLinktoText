@@ -52,8 +52,11 @@ DEFAULT_CONFIG = {
     "default_kids": False,
     # --- TikTok / Zalo: nội dung = 1 dòng tiêu đề + hashtag ---
     "default_hashtags": "",                # "#a #b"; trống = lấy dòng cuối của mô tả (nếu toàn hashtag)
+    "so_hashtag_ngan": 6,                  # TikTok/Zalo chỉ lấy N hashtag đầu (AI viết 8-12 là dư, user 26/10/2026)
     "default_platforms": ["youtube", "tiktok", "zalo"],   # ô tick mặc định khi thêm video
     "gio_da_dung": [],                     # giờ công bố của mục đã đăng nhưng đã bị bỏ khỏi hàng đợi (không cấp trùng)
+    "ai_backend": "gemini",                # AI viết nội dung: "gemini" (trình duyệt) | "chatgpt" (Codex CLI, hoi_gpt.py)
+    "gpt_model": "",                       # model cho Codex CLI; trống = mặc định trong ~/.codex/config.toml
     # --- trình duyệt + token Playwright Extension riêng từng nền tảng (xem platform_config) ---
     # {"tiktok": {"browser_path", "user_data_dir", "profile_dir", "extension_token", "client_name",
     #             "account" (kết quả Kiểm tra kết nối)}, "zalo": {...}}

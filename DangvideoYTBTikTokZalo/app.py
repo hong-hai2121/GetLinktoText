@@ -22,7 +22,7 @@ import json
 import queue
 import threading
 import webbrowser
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -42,6 +42,41 @@ INDEX_PATH = APP_DIR / "web" / "index.html"
 HOST, PORT = "127.0.0.1", 8765
 MAX_LOG_LINES = 2000
 LABEL = pq.PLATFORM_LABEL
+
+
+AI_JOBS_PATH = APP_DIR / "ai_jobs.json"   # danh sách AI (nhận diện + nội dung) lưu đĩa: khởi động lại không mất
+
+
+def _doc_jobs():
+    """Nạp danh sách AI từ lần chạy trước (user 26/10/2026: tắt server không được mất, không phải làm lại từ
+    đầu). Job 'đang chạy' lúc tắt -> 'chờ' để chạy tiếp (bản nhận diện đã có thì dùng lại). Trả (jobs, seq)."""
+    try:
+        d = json.loads(AI_JOBS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return [], 0
+    jobs = [j for j in (d.get("jobs") if isinstance(d, dict) else d) or [] if isinstance(j, dict) and j.get("id")]
+    for j in jobs:
+        j.setdefault("nhan_dien", ""); j.setdefault("loi_chi_tiet", ""); j.setdefault("backend", "gemini")
+        j.setdefault("ket_qua", None); j.setdefault("da_them", False); j.setdefault("platforms", None)
+        if j.get("status") == "đang chạy":
+            j.update(status="chờ", buoc="(chạy tiếp sau khi khởi động lại)", loi="")
+    seq = 0
+    for j in jobs:
+        try:
+            seq = max(seq, int(str(j["id"]).replace("ai", "")))
+        except ValueError:
+            pass
+    return jobs, seq
+
+
+def _luu_jobs():
+    """Ghi S.seo_jobs ra ai_jobs.json (gọi sau mỗi thay đổi; file nhỏ, ghi nguyên khối)."""
+    with S.lock:
+        try:
+            AI_JOBS_PATH.write_text(json.dumps({"jobs": S.seo_jobs, "seq": S.seo_seq}, ensure_ascii=False, indent=1),
+                                    encoding="utf-8")
+        except Exception as e:              # noqa: BLE001
+            S.log(f"⚠ Không ghi được ai_jobs.json: {e}")
 
 
 def _do_giay(path):
@@ -70,8 +105,9 @@ class State:
         self.stop_flag = threading.Event()
         self.ext_ok = {name: self._ext_installed(name) for name in pq.PLATFORMS}
         # việc "tạo nội dung bằng AI" (bóc băng + Gemini): danh sách job, worker nền chạy lần lượt 1 job một lúc
-        self.seo_jobs = []          # [{id, nguon, ten, status chờ/đang chạy/xong/lỗi/bỏ, buoc, loi, ket_qua, da_them, tu_dong, platforms}]
-        self.seo_seq = 0
+        # [{id, nguon, ten, status chờ/đang chạy/xong/lỗi/bỏ, buoc, loi, loi_chi_tiet, nhan_dien, ket_qua, da_them,
+        #   tu_dong, backend, platforms}] — lưu ai_jobs.json, khởi động lại vẫn còn (xem _doc_jobs)
+        self.seo_jobs, self.seo_seq = _doc_jobs()
         self.seo_running = False    # worker AI đang chạy
         self.seo_current = ""       # id job đang chạy
         self.seo_stop = threading.Event()
@@ -79,6 +115,7 @@ class State:
         self.auto_q = queue.Queue()
         self.auto_thread = None
         self.moc_lich = None        # giờ của video lên lịch muộn nhất đang có trên nền tảng (đọc thật)
+        self.gpt_status = None      # kết quả api_check_gpt gần nhất (trạng thái Codex CLI / đăng nhập ChatGPT)
 
     def _ext_installed(self, name):
         try:
@@ -201,11 +238,14 @@ def state_payload(after=0):
             "kids": bool(S.cfg.get("default_kids")),
             "hashtags_raw": S.cfg.get("default_hashtags") or "",
             "hashtags": " ".join(effective_hashtags()),
+            "so_hashtag": _so_hashtag_ngan(),
             "default_platforms": pq.normalize_platforms(S.cfg.get("default_platforms") or pq.PLATFORMS),
             "platforms": _platform_info(),
             "seo_running": S.seo_running,
             "seo_current": S.seo_current,
             "seo_jobs": [dict(j) for j in S.seo_jobs],
+            "ai_backend": S.cfg.get("ai_backend") or "gemini",
+            "gpt": dict(S.gpt_status or {}),
             "items": items,
             "logs": [t for seq, t in S.logs if seq > after],
             "log_seq": S.log_seq,
@@ -239,6 +279,7 @@ def api_list_downloads(_data):
 def _job_set(job, **kw):
     with S.lock:
         job.update(kw)
+    _luu_jobs()
 
 
 def _ten_nguon(nguon):
@@ -247,7 +288,7 @@ def _ten_nguon(nguon):
 
 # ----- phiên Gemini dùng chung cho cả loạt video (nối 1 lần, 1 cuộc trò chuyện; xem gemini_seo.PhienGemini) -----
 def _phien_moi():
-    return {"pw": None, "page": None, "gemini": None, "loi_gemini": False}
+    return {"pw": None, "page": None, "gemini": None, "gpt": None, "loi_gemini": False}
 
 
 def _gemini_ngat(phien, dong_tab=True):
@@ -274,8 +315,8 @@ def _gemini_san_sang(phien):
 
 
 def _seo_job(job, phien):
-    """Nền, cho MỘT job: (tải Drive) -> bóc băng large-v3-turbo -> Gemini (phiên dùng chung `phien`,
-    profile 'gemini' hoặc Zalo) -> ket_qua. Không nối/ngắt Gemini ở đây — worker giữ phiên cho cả loạt."""
+    """Nền, cho MỘT job: (tải Drive) -> nhận diện giọng nói large-v3-turbo -> Gemini (trình duyệt, phiên
+    dùng chung `phien`) hoặc ChatGPT (Codex CLI, theo job["backend"]) -> ket_qua."""
     import nhan_dien_giong
     nguon = job["nguon"]
     try:
@@ -285,23 +326,41 @@ def _seo_job(job, phien):
             path = download_drive(nguon, log=S.log)
         if not Path(path).exists():
             raise FileNotFoundError(f"Không thấy file video: {path}")
-        _job_set(job, ten=Path(path).name, buoc="Đang bóc băng giọng nói (large-v3-turbo)...")
-        S.log(f"[AI] Bóc băng: {Path(path).name}")
-        giay = _do_giay(path)
-        # gioi_han=0: KHÔNG bỏ qua video dài hơn 3 phút nữa — vẫn bóc băng + đăng; chỉ gắn nhãn Shorts/Video
-        _, doan = nhan_dien_giong.nhan_dien(path, log=S.log, gioi_han=0)
-        van_ban = nhan_dien_giong.van_ban_co_moc(doan)
-        if len(van_ban) < 50:
-            raise RuntimeError("Bản bóc băng quá ngắn — video không có tiếng?")
-        if phien.get("page") is None:
-            _job_set(job, buoc="Đang nối Gemini (trình duyệt profile Zalo, 1 lần cho cả loạt)...")
-        gemini = _gemini_san_sang(phien)
-        _job_set(job, buoc=f"Gemini đang viết nội dung (3-6 phút, chat dùng chung — video thứ {gemini.so_video + 1})...")
-        try:
-            kq = gemini.tao_noi_dung(van_ban)
-        except Exception:
-            phien["loi_gemini"] = True
-            raise
+        van_ban = job.get("nhan_dien") or ""
+        if len(van_ban) >= 50 and job.get("giay"):
+            # chạy tiếp sau khi khởi động lại / làm lại bước AI: bản nhận diện đã có -> không nhận diện lại
+            giay = job.get("giay")
+            _job_set(job, ten=Path(path).name, buoc="Dùng lại bản nhận diện giọng nói đã có...")
+            S.log(f"[AI] {Path(path).name}: dùng lại bản nhận diện đã có ({len(van_ban)} ký tự), bỏ qua bước nhận diện.")
+        else:
+            _job_set(job, ten=Path(path).name, buoc="Đang nhận diện giọng nói (large-v3-turbo)...")
+            S.log(f"[AI] Nhận diện giọng nói: {Path(path).name}")
+            giay = _do_giay(path)
+            # gioi_han=0: KHÔNG bỏ qua video dài hơn 3 phút nữa — vẫn nhận diện + đăng; chỉ gắn nhãn Shorts/Video
+            _, doan = nhan_dien_giong.nhan_dien(path, log=S.log, gioi_han=0)
+            van_ban = nhan_dien_giong.van_ban_co_moc(doan)
+            _job_set(job, nhan_dien=van_ban, giay=giay)     # giữ bản nhận diện kể cả khi bước sau lỗi (nút Sao chép)
+            if len(van_ban) < 50:
+                raise RuntimeError(f"Bản nhận diện giọng nói quá ngắn ({len(doan)} đoạn, {len(van_ban)} ký tự) — video không "
+                                   "có tiếng nói, hoặc âm thanh bị lỗi? Bấm 'Sao chép bản nhận diện' để xem máy nghe được gì.")
+        if job.get("backend") == "chatgpt":
+            # ChatGPT qua Codex CLI (hoi_gpt.py): không đụng trình duyệt, một hội thoại cho cả loạt
+            import gpt_seo
+            if phien.get("gpt") is None:
+                phien["gpt"] = gpt_seo.PhienGPT(log=S.log, model=S.cfg.get("gpt_model") or None)
+            gpt = phien["gpt"]
+            _job_set(job, buoc=f"ChatGPT (Codex CLI) đang viết nội dung (1-3 phút, hội thoại dùng chung — video thứ {gpt.so_video + 1})...")
+            kq = gpt.tao_noi_dung(van_ban)
+        else:
+            if phien.get("page") is None:
+                _job_set(job, buoc="Đang nối Gemini (trình duyệt profile Zalo, 1 lần cho cả loạt)...")
+            gemini = _gemini_san_sang(phien)
+            _job_set(job, buoc=f"Gemini đang viết nội dung (3-6 phút, chat dùng chung — video thứ {gemini.so_video + 1})...")
+            try:
+                kq = gemini.tao_noi_dung(van_ban)
+            except Exception:
+                phien["loi_gemini"] = True
+                raise
         kq = {k: v for k, v in kq.items() if k != "tho"}
         kq["file"] = str(path)
         kq["boc_bang"] = van_ban
@@ -310,7 +369,9 @@ def _seo_job(job, phien):
         _job_set(job, status="xong", buoc="Xong", ket_qua=kq, loi="")
         S.log(f"[AI] ✓ Xong: {kq.get('tieu_de') or '(không có tiêu đề)'}")
     except Exception as e:                  # noqa: BLE001
-        _job_set(job, status="lỗi", buoc="Lỗi", loi=str(e)[:400])
+        import traceback
+        _job_set(job, status="lỗi", buoc="Lỗi", loi=str(e)[:1500],
+                 loi_chi_tiet=traceback.format_exc()[-3000:])
         S.log(f"[AI] ✗ {_ten_nguon(nguon)}: {e}")
 
 
@@ -367,6 +428,7 @@ def _seo_worker():
                     break
                 job.update(status="đang chạy", buoc="Bắt đầu...")
                 S.seo_current = job["id"]
+            _luu_jobs()
             _seo_job(job, phien)
             if job["status"] == "xong":
                 xong += 1
@@ -378,6 +440,8 @@ def _seo_worker():
             bo = [j for j in S.seo_jobs if j["status"] == "chờ"]
             for j in bo:
                 j.update(status="bỏ", loi="Đã dừng trước khi chạy")
+        if bo:
+            _luu_jobs()
         bi_dung = S.seo_stop.is_set()
         if bi_dung:
             S.log(f"[AI] ⏹ Đã dừng theo yêu cầu: {xong} xong, {loi} lỗi, bỏ {len(bo)} video chưa chạy.")
@@ -411,6 +475,9 @@ def api_tao_noi_dung(data):
         return {"ok": False, "msg": "Tối đa 50 video một lần."}
     tu_dong = bool(data.get("auto_add"))
     platforms = data.get("platforms")
+    backend = (data.get("backend") or S.cfg.get("ai_backend") or "gemini").strip().lower()
+    if backend not in ("gemini", "chatgpt"):
+        return {"ok": False, "msg": "AI viết nội dung phải là 'gemini' (trình duyệt) hoặc 'chatgpt' (CLI)."}
     if tu_dong:                              # tự thêm vào hàng đợi khi xong -> cần nền tảng + lịch sẵn
         if platforms is not None and not platforms:
             return {"ok": False, "msg": "Tự thêm vào hàng đợi: tick ít nhất một nền tảng."}
@@ -442,10 +509,14 @@ def api_tao_noi_dung(data):
                 S.seo_jobs.remove(cu)        # làm lại video đã xong/lỗi/bỏ trước đó
             S.seo_seq += 1
             S.seo_jobs.append({"id": f"ai{S.seo_seq}", "nguon": nguon, "ten": _ten_nguon(nguon),
-                               "status": "chờ", "buoc": "", "loi": "", "ket_qua": None,
-                               "da_them": False, "tu_dong": tu_dong,
+                               "status": "chờ", "buoc": "", "loi": "", "loi_chi_tiet": "", "nhan_dien": "",
+                               "ket_qua": None, "da_them": False, "tu_dong": tu_dong, "backend": backend,
                                "platforms": pq.normalize_platforms(platforms) if platforms else None})
             them += 1
+        if S.cfg.get("ai_backend") != backend:
+            S.cfg["ai_backend"] = backend
+            chrome_cdp.save_config(S.cfg)
+        _luu_jobs()
         bat_dau = bool(them) and not S.seo_running
         if bat_dau:
             S.seo_running = True
@@ -454,10 +525,50 @@ def api_tao_noi_dung(data):
         S.auto_q.put(_seo_worker)
     if not them:
         return {"ok": False, "msg": "Các video này đang trong danh sách chờ rồi."}
-    msg = f"Đã xếp {them} video: bóc băng rồi gửi Gemini lần lượt (một cuộc trò chuyện chung)"
+    ten_ai = "ChatGPT (Codex CLI)" if backend == "chatgpt" else "Gemini (trình duyệt)"
+    msg = f"Đã xếp {them} video: nhận diện giọng nói rồi gửi {ten_ai} lần lượt (một hội thoại chung)"
     if bo_qua:
         msg += f" (bỏ qua {bo_qua} đang chờ sẵn)"
     return {"ok": True, "msg": msg + (" — xong tự thêm vào hàng đợi (đã dọn hàng đợi cũ)." if tu_dong else " — theo dõi ở bước 2.")}
+
+
+def api_seo_edit(data):
+    """Lưu chữ người dùng sửa trong thẻ kết quả (bước 3: tiêu đề / thẻ / hashtag / mô tả) vào job ->
+    ai_jobs.json, nên tải lại trang hay khởi động lại server vẫn giữ (user 26/10/2026)."""
+    with S.lock:
+        job = next((j for j in S.seo_jobs if j["id"] == data.get("job_id")), None)
+        if not job or not job.get("ket_qua"):
+            return {"ok": False, "msg": "Không thấy kết quả này."}
+        k = job["ket_qua"]
+        if "tieu_de" in data:
+            k["tieu_de"] = " ".join((data.get("tieu_de") or "").split())
+        if "tags" in data:
+            k["tags"] = (data.get("tags") or "").strip()
+        if "hashtags" in data:
+            k["hashtags"] = [t if t.startswith("#") else "#" + t for t in (data.get("hashtags") or "").split() if t.strip("#")]
+        if "mo_ta_youtube" in data:
+            k["mo_ta_youtube"] = (data.get("mo_ta_youtube") or "").strip()
+        k["da_sua"] = True
+    _luu_jobs()
+    return {"ok": True, "msg": "Đã lưu sửa đổi."}
+
+
+def api_check_gpt(_data):
+    """Kiểm tra Codex CLI + đăng nhập ChatGPT (hoi_gpt.trang_thai: không gọi mạng, ~1-2 s) -> đèn trạng thái."""
+    import gpt_seo
+    st = gpt_seo.trang_thai()
+    with S.lock:
+        S.gpt_status = st
+    ok = bool(st.get("ket_noi"))
+    if ok:
+        msg = "ChatGPT CLI: đã đăng nhập" + (f" ({st.get('email')})" if st.get("email") else "") \
+              + (f" — {st.get('ghi_chu')}" if st.get("ghi_chu") else "")
+    elif st.get("cai"):
+        msg = "ChatGPT CLI: chưa đăng nhập — mở cửa sổ lệnh chạy `codex login` (chọn Continue with Google). " + (st.get("ghi_chu") or "")
+    else:
+        msg = "ChatGPT CLI: " + (st.get("ghi_chu") or "chưa cài Codex CLI (npm install -g @openai/codex@latest)")
+    S.log(("✓ " if ok else "❌ ") + msg)
+    return {"ok": ok, "msg": msg, "gpt": st}
 
 
 def api_seo_stop(_data):
@@ -475,6 +586,7 @@ def api_seo_clear(data):
         truoc = len(S.seo_jobs)
         S.seo_jobs = [j for j in S.seo_jobs if j["status"] == "đang chạy" or (ids and j["id"] not in ids)]
         n = truoc - len(S.seo_jobs)
+    _luu_jobs()
     return {"ok": True, "msg": f"Đã bỏ {n} mục khỏi danh sách AI."}
 
 
@@ -519,8 +631,7 @@ def api_add_seo_item(data):
     ok, msg = _them_muc_ai(data.get("link"), data.get("title"), data.get("desc"), data.get("tags"),
                            data.get("hashtags"), data.get("platforms"), giay=giay)
     if ok and job:
-        with S.lock:
-            job["da_them"] = True
+        _job_set(job, da_them=True)
     return {"ok": ok, "msg": msg}
 
 
@@ -597,6 +708,10 @@ def _noi_tat_ca():
             S.log(f"❌ {LABEL[name]}: {str(e).splitlines()[0][:200]}")
         S.refresh_ext(name)
     S.log("✓ Sẵn sàng — các tab điều khiển giữ mở, không nối lại nữa cho tới khi tắt server.")
+    try:
+        api_check_gpt({})               # đèn trạng thái ChatGPT CLI (không cần mạng)
+    except Exception as e:              # noqa: BLE001
+        S.log(f"  (không kiểm tra được ChatGPT CLI: {str(e)[:120]})")
 
 
 def _auto_loop():
@@ -611,14 +726,32 @@ def _auto_loop():
             S.log(f"❌ Lỗi việc nền: {e}")
 
 
+def _tiep_tuc_ai():
+    """Sau khi nối trình duyệt lúc khởi động: danh sách AI còn job 'chờ' (dang dở từ lần chạy trước) thì tự
+    chạy tiếp, không bắt người dùng xếp lại."""
+    with S.lock:
+        cho = [j for j in S.seo_jobs if j["status"] == "chờ"]
+        if not cho or S.seo_running or S.running:
+            if S.seo_jobs:
+                S.log(f"[AI] Danh sách AI lần trước: {len(S.seo_jobs)} mục vẫn còn (xem bước 2/3).")
+            return
+        S.seo_running = True
+        S.seo_stop.clear()
+    S.log(f"[AI] ▶ Chạy tiếp {len(cho)} video dang dở từ lần chạy trước: "
+          + ", ".join(j["ten"][:30] for j in cho[:5]) + (" ..." if len(cho) > 5 else ""))
+    _seo_worker()
+
+
 def khoi_dong_nen():
-    """Bật thread tự động hoá + xếp việc nối 3 profile. Gọi một lần từ make_server (app.py và app_gui.py)."""
+    """Bật thread tự động hoá + xếp việc nối 3 profile rồi chạy tiếp việc AI dang dở. Gọi một lần từ
+    make_server (app.py và app_gui.py)."""
     with S.lock:
         if S.auto_thread is not None:
             return
         S.auto_thread = threading.Thread(target=_auto_loop, name="auto", daemon=True)
         S.auto_thread.start()
     S.auto_q.put(_noi_tat_ca)
+    S.auto_q.put(_tiep_tuc_ai)
 
 
 def _apply_schedule(times_text, start_text):
@@ -659,14 +792,28 @@ def api_save_defaults(data):
     return {"ok": True, "msg": "Đã lưu thông tin mặc định."}
 
 
+def _so_hashtag_ngan():
+    """Số hashtag tối đa cho TikTok/Zalo (config so_hashtag_ngan, mặc định 6; 1..30)."""
+    try:
+        return max(1, min(30, int(S.cfg.get("so_hashtag_ngan") or 6)))
+    except (TypeError, ValueError):
+        return 6
+
+
 def api_save_hashtags(data):
     with S.lock:
         S.cfg["default_hashtags"] = " ".join((data.get("hashtags") or "").split())
+        if data.get("so_hashtag") not in (None, ""):
+            try:
+                S.cfg["so_hashtag_ngan"] = max(1, min(30, int(data.get("so_hashtag"))))
+            except (TypeError, ValueError):
+                return {"ok": False, "msg": "Số hashtag tối đa phải là số 1..30."}
         chrome_cdp.save_config(S.cfg)
         tags = effective_hashtags()
-    return {"ok": True, "hashtags": " ".join(tags),
-            "msg": ("Hashtag TikTok/Zalo: " + " ".join(tags)) if tags else
-                   "Đã lưu — hiện KHÔNG có hashtag (ô trống và dòng cuối mô tả không phải hashtag)."}
+        gh = _so_hashtag_ngan()
+    return {"ok": True, "hashtags": " ".join(tags), "so_hashtag": gh,
+            "msg": (f"Hashtag TikTok/Zalo (tối đa {gh}): " + " ".join(tags)) if tags else
+                   f"Đã lưu (tối đa {gh} hashtag) — ô trống nên dùng hashtag của nội dung AI / dòng cuối mô tả."}
 
 
 # ------------------------------------------------------------------ hàng đợi
@@ -937,11 +1084,23 @@ def _upload(name, page, path, title, when, dry_run, it=None):
         hashtags = hashtags_from_text(it["desc"])
     else:
         hashtags = effective_hashtags()
+    gh = _so_hashtag_ngan()
+    if len(hashtags) > gh:
+        S.log(f"  Hashtag {LABEL[name]}: lấy {gh}/{len(hashtags)} đầu tiên (giới hạn chỉnh ở tab TikTok/Zalo): "
+              + " ".join(hashtags[:gh]))
+        hashtags = hashtags[:gh]
     if name == "tiktok":
         return tiktok_upload.upload_video(page, path, title, hashtags, schedule_at=when, log=S.log, dry_run=dry_run)
     if name == "zalo":
         return zalo_upload.upload_video(page, path, title, hashtags, schedule_at=when, log=S.log, dry_run=dry_run)
     raise ValueError(name)
+
+
+def _gio_som_nhat():
+    """Giờ hẹn sớm nhất các nền tảng còn nhận: bây giờ + MIN_LEAD, làm tròn LÊN bội 15 phút
+    (YouTube bước 15 phút, TikTok 5, Zalo tự do)."""
+    t = datetime.now() + pq.MIN_LEAD + timedelta(minutes=14)
+    return t.replace(minute=t.minute - t.minute % 15, second=0, microsecond=0)
 
 
 def _run_platform(name, dry_run):
@@ -988,7 +1147,10 @@ def _run_platform(name, dry_run):
                         when = pq.parse_dt(it["scheduled_at"])
                         S.log(f"  Giờ hẹn cũ đã qua -> xếp lại: {pq.fmt_dt(it['scheduled_at'])}")
                     else:
-                        S.log(f"  ⚠ Giờ hẹn {pq.fmt_dt(it.get('scheduled_at'))} đã gần/qua nhưng nền tảng khác đã lên lịch giờ này — vẫn thử.")
+                        # nền tảng khác đã đăng đúng giờ đó rồi (không xếp lại được) -> nền tảng này đăng sớm nhất có thể
+                        when = _gio_som_nhat()
+                        S.log(f"  ⚠ Giờ hẹn {pq.fmt_dt(it.get('scheduled_at'))} đã qua, nền tảng khác đã đăng -> "
+                              f"{label} lên lịch sớm nhất có thể: {when:%d/%m/%Y %H:%M}.")
                 pq.set_pf(it, name, pq.STATUS_RUNNING, error="")
                 pq.save_queue(S.items)
             S.log(f"=== [{label}] {pq.short_link(it['link'])}  (công bố {pq.fmt_dt(it['scheduled_at'])}) ===")
@@ -1074,6 +1236,8 @@ ROUTES = {
     "/api/list_downloads": api_list_downloads,
     "/api/tao_noi_dung": api_tao_noi_dung,
     "/api/seo_stop": api_seo_stop,
+    "/api/check_gpt": api_check_gpt,
+    "/api/seo_edit": api_seo_edit,
     "/api/seo_clear": api_seo_clear,
     "/api/add_seo_item": api_add_seo_item,
     "/api/set_title": api_set_title,

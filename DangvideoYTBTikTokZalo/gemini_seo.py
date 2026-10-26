@@ -84,8 +84,14 @@ def _sach(l):
 
 
 def _la_dong_hashtag(l):
+    """Dòng toàn hashtag. Nới cho trường hợp AI viết hỏng một thẻ (vd. '#ni emmacdaday', gặp 26/10/2026):
+    có >= 3 hashtag và phần chữ còn lại ngoài hashtag chiếm dưới 30% dòng."""
     s = l.strip()
-    return bool(s) and len(re.findall(r"#\w+", s)) >= 2 and len(re.sub(r"#\w+", "", s).strip()) <= 2
+    if not s:
+        return False
+    n = len(re.findall(r"#\w+", s))
+    con = re.sub(r"#\w+", "", s).strip()
+    return (n >= 2 and len(con) <= 2) or (n >= 3 and s.startswith("#") and len(con) < 0.3 * len(s))
 
 
 def _tach_tags(p2, toan_bo):
@@ -107,6 +113,8 @@ def _tach_tags(p2, toan_bo):
     # dọn khoảng trắng quanh dấu phẩy, bỏ trùng (không phân biệt hoa thường)
     seen, out = set(), []
     for t in [x.strip() for x in tags.split(",") if x.strip()]:
+        if t.startswith("#"):                 # ChatGPT hay nhét dãy hashtag vào cuối dòng thẻ -> không phải thẻ YouTube
+            continue
         if t.lower() not in seen:
             seen.add(t.lower()); out.append(t)
     # quá 500 ký tự: bỏ bớt thẻ ở PHẦN TRƯỚC, giữ nguyên đuôi cố định (bác sĩ hội... bệnh dạ dày)
@@ -142,7 +150,7 @@ def _tach_hashtags(p3_lines, toan_bo):
     tags = [t.lower() for t in re.findall(r"#\w+", nguon)]
     out = list(HASHTAG_CO_DINH)
     for t in tags:
-        if t not in out:
+        if t not in out and len(t) >= 4:          # bỏ mảnh hashtag bị đứt (vd. '#ni')
             out.append(t)
     return out[:12]
 
