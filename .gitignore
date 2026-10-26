@@ -134,3 +134,7 @@ DangvideoYTBTikTokZalo/video_qua_dai.json
 
 # venv riêng cho mediapipe (GoogleFlowGhepVideo/lam_dep.py); numpy 2 + opencv-contrib, không dùng chung venv
 venv_lamdep/
+
+# khóa Google service account ở bất kỳ thư mục con nào — không bao giờ commit (26/10/2026)
+service_account*.json
+hai-ads-check-*.json

@@ -928,27 +928,54 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
     m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]{20,})", nguon or "")
     if not m:
         return "kho không phải Google Sheet nên chỉ ghi file thiếu trên máy"
-    khoa = _file_khoa_sa()
-    if not khoa:
-        return "không thấy service_account.json nên chỉ ghi file thiếu trên máy"
+    gc, cach = _gspread_khach(log)
+    if gc is None:
+        return f"không ghi được Sheet tab '{TAB_THIEU}' ({cach}) nên chỉ ghi file thiếu trên máy"
     try:
-        email = json.loads(khoa.read_text(encoding="utf-8")).get("client_email", "")
-    except Exception:                                  # noqa: BLE001
-        email = ""
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-        creds = Credentials.from_service_account_file(str(khoa), scopes=["https://www.googleapis.com/auth/spreadsheets"])
-        ws = gspread.authorize(creds).open_by_key(m.group(1)).worksheet(TAB_THIEU)
+        ws = gc.open_by_key(m.group(1)).worksheet(TAB_THIEU)
         cu = {(r[1], str(r[2])) for r in ws.get_all_values()[1:] if len(r) > 2}
         rows = [[time.strftime("%Y-%m-%d %H:%M"), ten_bo, t["cau"], t.get("text", ""), _goi_y_thieu(t), ""]
                 for t in thieu if (ten_bo, str(t["cau"])) not in cu]
         if rows:
             ws.append_rows(rows, value_input_option="RAW")
         da_co = len(thieu) - len(rows)
-        return f"đã ghi {len(rows)} dòng vào Sheet tab '{TAB_THIEU}'" + (f" ({da_co} dòng đã có từ trước)" if da_co else "")
+        return (f"đã ghi {len(rows)} dòng vào Sheet tab '{TAB_THIEU}'" + (f" ({da_co} dòng đã có từ trước)" if da_co else "")
+                + f" (bằng {cach})")
     except Exception as e:                             # noqa: BLE001 — lỗi Sheet không làm hỏng video
-        return f"không ghi được Sheet tab '{TAB_THIEU}': {e}" + (f" (chia sẻ Sheet cho {email} quyền Editor)" if email else "")
+        return f"không ghi được Sheet tab '{TAB_THIEU}' bằng {cach}: {e} — {GOI_Y_SHEET}"
+
+
+GOI_Y_SHEET = ("đăng nhập Google ở tab Cài đặt bằng tài khoản có quyền sửa Sheet kho, hoặc thay service_account.json bằng khóa "
+               "mới còn hiệu lực và chia sẻ Sheet cho email của khóa quyền Editor")
+
+
+def _gspread_khach(log: Callable[[str], None] = print):
+    """Client gspread để GHI Sheet kho (tab Thiếu, cột Đỉnh âm): ưu tiên đăng nhập Google của chính user (drive_len — token
+    đã có quyền Sheets, cùng tài khoản tải video lên Drive), không có thì mới dùng khóa service account. User 26/10: khóa
+    service account (dùng chung với tool Ads) bị Google từ chối "invalid_grant: Invalid JWT Signature" dù hôm trước còn
+    chạy -> không phụ thuộc vào nó nữa. -> (client, mô tả cách) hoặc (None, lý do)."""
+    import gspread
+    ly_do = []
+    try:
+        import drive_len
+        c = drive_len.creds(log=lambda s: None)
+        if c:
+            return gspread.authorize(c), "tài khoản Google đã đăng nhập"
+        ly_do.append("chưa đăng nhập Google ở tab Cài đặt")
+    except Exception as e:                             # noqa: BLE001
+        ly_do.append(f"đăng nhập Google lỗi: {e}")
+    khoa = _file_khoa_sa()
+    if khoa:
+        try:
+            from google.oauth2.service_account import Credentials
+            creds = Credentials.from_service_account_file(str(khoa), scopes=["https://www.googleapis.com/auth/spreadsheets"])
+            email = json.loads(khoa.read_text(encoding="utf-8")).get("client_email", "")
+            return gspread.authorize(creds), f"service account {email}"
+        except Exception as e:                         # noqa: BLE001
+            ly_do.append(f"service account lỗi: {e}")
+    else:
+        ly_do.append("không có service_account.json")
+    return None, "; ".join(ly_do)
 
 
 # ============================================================== 4. kế hoạch cảnh
@@ -1881,14 +1908,14 @@ def ghi_dinh_sfx(nguon: str, dinh: dict[str, float], log: Callable[[str], None] 
     if not dinh:
         return ""
     m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]{20,})", nguon or "")
-    khoa = _file_khoa_sa()
-    if not m or not khoa:
-        return "không ghi được đỉnh âm lên Sheet (không phải Sheet / thiếu service_account.json), chỉ nhớ trên máy"
+    if not m:
+        return "không ghi được đỉnh âm lên Sheet (kho không phải Google Sheet), chỉ nhớ trên máy"
+    gc, cach = _gspread_khach(log)
+    if gc is None:
+        return f"không ghi được đỉnh âm lên Sheet ({cach}), chỉ nhớ trên máy"
     try:
         import gspread
-        from google.oauth2.service_account import Credentials
-        creds = Credentials.from_service_account_file(str(khoa), scopes=["https://www.googleapis.com/auth/spreadsheets"])
-        ws = gspread.authorize(creds).open_by_key(m.group(1)).get_worksheet_by_id(SFX_GID)
+        ws = gc.open_by_key(m.group(1)).get_worksheet_by_id(SFX_GID)
         rows = ws.get_all_values()
         tieu_de = rows[0] if rows else []
         cot = next((j for j, t in enumerate(tieu_de) if _cot_sfx(t) == "dinh"), None)
@@ -1902,9 +1929,9 @@ def ghi_dinh_sfx(nguon: str, dinh: dict[str, float], log: Callable[[str], None] 
                 o.append(gspread.Cell(i, cot + 1, dinh[ma]))
         if o:
             ws.update_cells(o, value_input_option="RAW")
-        return f"đã ghi đỉnh âm của {len(o)} tiếng lên Sheet tab Âm thanh hiệu ứng"
+        return f"đã ghi đỉnh âm của {len(o)} tiếng lên Sheet tab Âm thanh hiệu ứng (bằng {cach})"
     except Exception as e:                             # noqa: BLE001
-        return f"không ghi được đỉnh âm lên Sheet: {e}"
+        return f"không ghi được đỉnh âm lên Sheet bằng {cach}: {e} — {GOI_Y_SHEET}"
 
 
 def _dich_sfx(thu_muc: Path, fid: str, ten: str) -> Path:
