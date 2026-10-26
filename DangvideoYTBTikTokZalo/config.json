@@ -11,18 +11,35 @@
     "08:00",
     "18:00"
   ],
-  "schedule_start": "2026-10-19",
+  "schedule_start": "2026-10-26",
   "default_desc": "",
   "default_playlist": "Dạ dày tiêu hóa",
   "default_tags": "",
   "default_kids": false,
   "default_hashtags": "",
+  "so_hashtag_ngan": 6,
   "default_platforms": [
     "youtube",
     "tiktok",
     "zalo"
   ],
-  "gio_da_dung": [],
+  "gio_da_dung": [
+    "2026-10-26T18:00",
+    "2026-10-27T08:00",
+    "2026-10-27T18:00",
+    "2026-10-28T08:00",
+    "2026-10-28T18:00",
+    "2026-10-29T08:00",
+    "2026-10-29T18:00",
+    "2026-10-30T08:00",
+    "2026-10-30T18:00",
+    "2026-10-31T08:00",
+    "2026-10-31T18:00",
+    "2026-11-01T08:00",
+    "2026-11-01T18:00"
+  ],
+  "ai_backend": "chatgpt",
+  "gpt_model": "",
   "platforms": {
     "youtube": {
       "browser_path": "",
