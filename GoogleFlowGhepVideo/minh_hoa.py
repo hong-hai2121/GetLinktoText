@@ -947,8 +947,14 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
             ws.append_rows(rows, value_input_option="RAW")
         da_co = len(thieu) - len(rows)
         return f"đã ghi {len(rows)} dòng vào Sheet tab '{TAB_THIEU}'" + (f" ({da_co} dòng đã có từ trước)" if da_co else "")
-    except Exception as e:                             # noqa: BLE001 — lỗi Sheet không làm hỏng video
-        return f"không ghi được Sheet tab '{TAB_THIEU}': {e}" + (f" (chia sẻ Sheet cho {email} quyền Editor)" if email else "")
+    except ModuleNotFoundError as e:                   # noqa: BLE001 — lỗi Sheet không làm hỏng video
+        return f"không ghi được Sheet tab '{TAB_THIEU}': thiếu thư viện {e.name} (cài: pip install gspread)"
+    except Exception as e:                             # noqa: BLE001
+        loi = str(e)
+        if "invalid_grant" in loi or "Invalid JWT" in loi:
+            loi = (f"khóa service account trong {khoa.name} không còn dùng được (Google báo invalid_grant: khóa đã bị xóa/thay "
+                   f"trên Google Cloud hoặc file bị hỏng) — tải khóa JSON mới cho {email or 'service account'} rồi thay file này")
+        return f"không ghi được Sheet tab '{TAB_THIEU}': {loi}" + (f" (chia sẻ Sheet cho {email} quyền Editor)" if email else "")
 
 
 # ============================================================== 4. kế hoạch cảnh
