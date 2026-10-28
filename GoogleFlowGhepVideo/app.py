@@ -60,8 +60,8 @@ import drive_len                                  # tải video lên Drive + ghi
 import drive_thu_muc as dtm
 import lam_dep                                    # tab Làm đẹp: làm trắng da / son môi / màu toàn khung (xem thử tại chỗ)
 import minh_hoa                                   # kho video minh họa (Sheet) + thư mục video mẫu
-from ghep_tieude import (THU_MUC_GOC, TEN_VAI_TRO, doi_toc_do_giong, downloads_dir, liet_ke_clip, need_ffmpeg,
-                         pick_from_folder, unique_path, vai_tro_theo_ten)
+from ghep_tieude import (DUOI_VIDEO, THU_MUC_GOC, TEN_VAI_TRO, doi_toc_do_giong, downloads_dir, liet_ke_clip,
+                         need_ffmpeg, pick_from_folder, unique_path, vai_tro_theo_ten)
 
 APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR.parent))          # hoi_claude / hoi_gpt / hoi_gemini nằm ở gốc repo
@@ -112,7 +112,7 @@ TUY_CHON_MAC_DINH = {
     "minh_hoa_toc_do": 1.2,  # phủ kín: tốc độ chiếu clip minh họa (1.2 = nhanh 20%); cần phủ dài hơn thì planner hạ dần tới 0.8 thay vì đứng hình
     "minh_hoa_soat": True,   # AI soát lại cảnh đã chọn: clip chưa hợp câu -> ghi tab Thiếu để bổ sung kho (user 23/10)
     "minh_hoa_xen_bs": True, # có clip gốc: rút ngẫu nhiên theo seed một phần câu giữ hình bác sĩ thay cảnh kho (user 25/10)
-    "minh_hoa_xen_bs_pct": 50,   # tỉ lệ câu bác sĩ (%); không clip gốc thì ô này không có tác dụng
+    "minh_hoa_xen_bs_pct": 25,   # tỉ lệ câu bác sĩ (%), luôn ≥ 1 câu (user 28/10: 25%); không clip gốc thì ô này không có tác dụng
     "minh_hoa_ti_le": 0.45,  # tổng minh họa tối đa / thời lượng phần sau (chỉ điểm xuyết)
     "minh_hoa_che_do": "phu_kin",   # phu_kin = cảnh kho là nền chính, bác sĩ bù | diem_xuyet = vài cảnh ngắn (cũ)
     "minh_hoa_chuyen": 0.5,         # giây mờ chồng khi vào/ra mỗi cảnh minh họa, CHỈ dùng với kiểu mo_chong; 0 = cắt cụp
@@ -318,15 +318,27 @@ def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
     return a
 
 
+def _as_q(x: str) -> str:
+    """Chuỗi trong AppleScript."""
+    return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def _osascript_chon(lenh: str, tieu_de: str, bat_dau: str) -> str:
     """macOS: hộp thoại chọn của Finder qua AppleScript (tkinter không chạy được ngoài main thread trên Mac,
     mà main thread đã thuộc cửa sổ pywebview). `lenh` = 'choose folder' / 'choose file ...'; '' nếu hủy."""
-    def _q(x: str) -> str:
-        return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    vi_tri = f" default location (POSIX file {_q(bat_dau)})" if bat_dau and Path(bat_dau).is_dir() else ""
-    r = subprocess.run(["osascript", "-e", f"POSIX path of ({lenh} with prompt {_q(tieu_de)}{vi_tri})"],
+    vi_tri = f" default location (POSIX file {_as_q(bat_dau)})" if bat_dau and Path(bat_dau).is_dir() else ""
+    r = subprocess.run(["osascript", "-e", f"POSIX path of ({lenh} with prompt {_as_q(tieu_de)}{vi_tri})"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _osascript_chon_nhieu(lenh: str, tieu_de: str, bat_dau: str) -> list[str]:
+    """macOS: như _osascript_chon nhưng cho chọn NHIỀU file; mỗi dòng một đường dẫn; [] nếu hủy."""
+    vi_tri = f" default location (POSIX file {_as_q(bat_dau)})" if bat_dau and Path(bat_dau).is_dir() else ""
+    script = (f"set ds to ({lenh} with prompt {_as_q(tieu_de)}{vi_tri} with multiple selections allowed)\n"
+              'set ra to ""\nrepeat with f in ds\nset ra to ra & POSIX path of f & linefeed\nend repeat\nreturn ra')
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return [d for d in r.stdout.splitlines() if d.strip()] if r.returncode == 0 else []
 
 
 def _chon_thu_muc_dialog(tieu_de: str, bat_dau: str) -> str:
@@ -356,6 +368,21 @@ def _chon_anh_dialog(tieu_de: str, bat_dau: str) -> str:
                                    filetypes=[("Ảnh", "*.jpg *.jpeg *.png *.webp"), ("Mọi file", "*.*")])
     root.destroy()
     return p or ""
+
+
+def _chon_video_dialog(tieu_de: str, bat_dau: str) -> list[str]:
+    """Hộp thoại chọn NHIỀU file video; [] nếu hủy."""
+    if sys.platform == "darwin":
+        return _osascript_chon_nhieu('choose file of type {"public.movie"}', tieu_de, bat_dau)
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    ds = filedialog.askopenfilenames(parent=root, title=tieu_de, initialdir=bat_dau or str(Path.home()),
+                                     filetypes=[("Video", "*.mov *.mp4 *.mkv *.m4v"), ("Mọi file", "*.*")])
+    root.destroy()
+    return [str(p) for p in (ds or ())]
 
 
 _KHO_CACHE: dict[str, tuple[tuple, list]] = {}   # thư mục -> (chữ ký file, [(tên, giây)]); web poll mỗi giây
@@ -662,6 +689,82 @@ def api_chon_thu_muc(_data):
     if not p:
         return {"ok": False, "msg": "Đã hủy chọn thư mục."}
     return api_set_goc_dir({"dir": p})
+
+
+THU_MUC_DA_XOA = "đã xóa"        # thư mục con trong thư mục clip gốc; liet_ke_clip không đệ quy nên clip trong đó coi như đã bỏ
+_GOC_THEM_CUOI = [""]            # thư mục của file được chọn lần gần nhất -> hộp thoại lần sau mở sẵn ở đó
+
+
+def api_goc_them(_data):
+    """Chọn một/nhiều file video rồi SAO CHÉP vào thư mục clip gốc (file ở chỗ cũ vẫn còn); trùng tên thì thêm số."""
+    d = Path(S.goc_dir) if S.goc_dir else THU_MUC_GOC
+    if d == THU_MUC_GOC:
+        d.mkdir(parents=True, exist_ok=True)
+    if not d.is_dir():
+        return {"ok": False, "msg": f"Không thấy thư mục clip gốc: {d}"}
+    if not _DIALOG.acquire(blocking=False):
+        return {"ok": False, "msg": "Hộp thoại chọn file đang mở."}
+    try:
+        ds = _chon_video_dialog("Chọn clip gốc (quay bác sĩ) để thêm vào kho — chọn được nhiều file",
+                                _GOC_THEM_CUOI[0] or str(downloads_dir()))
+    finally:
+        _DIALOG.release()
+    if not ds:
+        return {"ok": False, "msg": "Đã hủy chọn file."}
+    _GOC_THEM_CUOI[0] = str(Path(ds[0]).parent)
+    them, bo = [], []
+    for s in ds:
+        p = Path(s)
+        if not p.is_file() or p.suffix.lower() not in DUOI_VIDEO:
+            bo.append(f"{p.name} (không phải video .mov/.mp4/.mkv/.m4v)")
+            continue
+        try:
+            if p.resolve().parent == d.resolve():
+                bo.append(f"{p.name} (đã nằm trong thư mục clip gốc)")
+                continue
+            ra = unique_path(d, p.name)
+            shutil.copy2(p, ra)
+        except OSError as e:
+            bo.append(f"{p.name}: {e}")
+            continue
+        them.append(ra.name)
+    if S.goc_dir != str(d):
+        with S.lock:
+            S.goc_dir = str(d)
+            S.save()
+    kho = kho_clip(str(d))
+    msg = (f"Đã thêm {len(them)} clip: {', '.join(them)}" if them else "Không thêm được clip nào")
+    msg += f" — kho {len(kho)} clip, tổng {sum(g for _, g in kho):.0f}s."
+    if bo:
+        msg += " Bỏ qua: " + "; ".join(bo)
+    S.log(msg)
+    return {"ok": bool(them), "msg": msg}
+
+
+def api_goc_xoa(data):
+    """Bỏ một clip khỏi kho: chuyển vào thư mục con 'đã xóa' (không xóa khỏi ổ đĩa, kéo lại là dùng tiếp)."""
+    ten = str(data.get("ten") or "")
+    d = Path(S.goc_dir) if S.goc_dir else None
+    if not d or not d.is_dir():
+        return {"ok": False, "msg": "Chưa có thư mục clip gốc."}
+    if not ten or ten != Path(ten).name:
+        return {"ok": False, "msg": "Tên clip không hợp lệ."}
+    p = d / ten
+    if not p.is_file():
+        return {"ok": False, "msg": f"Không thấy clip {ten} (đã xóa / đổi tên?)."}
+    rac = d / THU_MUC_DA_XOA
+    try:
+        rac.mkdir(exist_ok=True)
+        ra = unique_path(rac, ten)
+        shutil.move(str(p), str(ra))
+    except OSError as e:
+        return {"ok": False, "msg": f"Không chuyển được {ten}: {e} (clip đang được dùng để dựng?)"}
+    kho = kho_clip(str(d))
+    msg = f"Đã bỏ clip {ten} (chuyển vào {rac}) — kho còn {len(kho)} clip, tổng {sum(g for _, g in kho):.0f}s."
+    if not kho and not S.tuy_chon.get("khong_clip_goc"):
+        msg += " ⚠ Kho trống: thêm clip hoặc bật KHÔNG DÙNG CLIP GỐC trước khi chạy."
+    S.log(msg)
+    return {"ok": True, "msg": msg}
 
 
 # ---- thẻ 3: kho video minh họa
@@ -1658,6 +1761,13 @@ def api_mo(data):
             return {"ok": False, "msg": "Chưa có thư mục clip gốc."}
         _mo(S.goc_dir)
         return {"ok": True}
+    if loai == "clip_goc":                         # một clip trong thư mục clip gốc, mở bằng trình phát mặc định
+        ten = str(data.get("ten") or "")
+        p = Path(S.goc_dir) / ten if S.goc_dir else None
+        if not p or ten != Path(ten).name or not p.is_file():
+            return {"ok": False, "msg": f"Không thấy clip {ten or '(trống)'}."}
+        _mo(p)
+        return {"ok": True}
     if loai == "minh_hoa":                         # thư mục video mẫu (mặc định chưa có thì tạo)
         d = Path(S.minh_hoa_dir)
         if d == THU_MUC_MINH_HOA:
@@ -1975,6 +2085,8 @@ def _nghi_giua_tap(phut: float) -> bool:
 ROUTES = {
     "/api/set_goc_dir": api_set_goc_dir,
     "/api/chon_thu_muc": api_chon_thu_muc,
+    "/api/goc_them": api_goc_them,
+    "/api/goc_xoa": api_goc_xoa,
     "/api/set_minh_hoa_dir": api_set_minh_hoa_dir,
     "/api/chon_thu_muc_minh_hoa": api_chon_thu_muc_minh_hoa,
     "/api/set_minh_hoa_sheet": api_set_minh_hoa_sheet,

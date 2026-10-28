@@ -102,6 +102,9 @@ input:focus,textarea:focus,select:focus{outline:2px solid #bfdbfe;border-color:v
 
 .goc-list{margin:8px 0 0;font-size:12.5px}
 .goc-list .f{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border-radius:6px;background:var(--gray-bg);border:1px solid var(--border)}
+.goc-list .f a{cursor:pointer;color:var(--fg)} .goc-list .f a:hover{color:var(--blue);text-decoration:underline}
+.goc-list .f a.x{color:var(--dim);margin-left:4px;font-weight:600} .goc-list .f a.x:hover{color:var(--red);text-decoration:none}
+.goc-list .row{margin-bottom:4px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-weight:600;font-size:12px;color:var(--dim);padding:7px 8px;border-bottom:1px solid var(--border);background:#fafafa;position:sticky;top:0}
 td{padding:8px;border-bottom:1px solid #f1f2f4;vertical-align:top}
@@ -188,7 +191,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
         <div class="body">
           <textarea id="links" placeholder="https://drive.google.com/drive/folders/…&#10;hoặc link Google Sheet lịch đăng (tab có cột D tiêu đề · F link nguyên liệu · G link video)" spellcheck="false"></textarea>
           <div class="row" style="margin-top:8px">
-            <span class="muted grow">Mỗi thư mục là một tập có đủ Hook / Tiêu đề / Minh họa / Giọng đọc / Kịch bản. Link Sheet: tool đọc các dòng cột F, ghép xong tải video lên Drive và điền link vào cột G.</span>
+            <span class="spacer"></span>
             <button class="btn" onclick="danVao($('links'))" title="Dán link đã sao chép vào ô trên">📋 Dán</button>
             <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
           </div>
@@ -686,14 +689,19 @@ function tlCell(it){
 }
 function renderGoc(g){
   if (!gocDirDirty && document.activeElement !== $('gocDir')) $('gocDir').value = g.dir || '';
-  let h = '';
-  if (!g.dir) h = '<span class="chip warn">Chưa chọn thư mục clip gốc</span>';
-  else if (!g.ton_tai) h = '<span class="chip bad">Không thấy thư mục này nữa</span>';
-  else if (!g.clips.length) h = '<span class="chip bad">Thư mục không có clip video</span>';
-  else { h = `<div class="muted">${g.clips.length} clip, tổng ${fmt(g.tong_giay)}${g.mac_dinh ? ' · <span class="chip ok">thư mục mặc định của dự án</span>' : ''}</div>`;
-    h += g.clips.map(c => `<span class="f">${esc(c.ten)} <span class="muted">${c.giay.toFixed(1)}s</span></span>`).join(''); }
+  const nut = `<span class="spacer"></span><button class="btn sm" onclick="gocThem()" title="Chọn một hoặc nhiều file .mov/.mp4/.mkv/.m4v — SAO CHÉP vào thư mục clip gốc, file ở chỗ cũ vẫn còn; trùng tên thì tự thêm số">+ Thêm clip…</button><button class="btn sm" onclick="api('/api/mo',{loai:'goc'})" title="Mở thư mục clip gốc trong Explorer / Finder">📁 Mở thư mục</button>`;
+  let dau;
+  if (!g.dir) dau = '<span class="chip warn">Chưa chọn thư mục clip gốc</span>';
+  else if (!g.ton_tai) dau = '<span class="chip bad">Không thấy thư mục này nữa</span>';
+  else if (!g.clips.length) dau = '<span class="chip bad">Thư mục không có clip video</span>';
+  else dau = `<span class="muted">${g.clips.length} clip, tổng ${fmt(g.tong_giay)}${g.mac_dinh ? ' · <span class="chip ok">thư mục mặc định của dự án</span>' : ''}</span>`;
+  let h = `<div class="row">${dau}${nut}</div>`;
+  if (g.dir && g.ton_tai) h += g.clips.map(c => `<span class="f"><a data-ten="${esc(c.ten)}" onclick="gocMo(this.dataset.ten)" title="Xem clip bằng trình phát của máy">▶ ${esc(c.ten)}</a> <span class="muted">${c.giay.toFixed(1)}s</span><a class="x" data-ten="${esc(c.ten)}" onclick="gocXoa(this.dataset.ten)" title="Bỏ clip này khỏi kho (chuyển vào thư mục con “đã xóa”, không mất file)">✕</a></span>`).join('');
   $('gocInfo').innerHTML = h;
 }
+async function gocThem(){ toast('Đang mở hộp thoại chọn file…'); await api('/api/goc_them'); }
+function gocMo(ten){ api('/api/mo', {loai:'clip_goc', ten}); }
+function gocXoa(ten){ if (confirm(`Bỏ clip ${ten} khỏi kho?\nFile được chuyển vào thư mục con “đã xóa” trong thư mục clip gốc, không mất.`)) api('/api/goc_xoa', {ten}); }
 
 /* nút lớn "không dùng clip gốc" = tùy chọn khong_clip_goc; đang gửi thì tick() không ghi đè */
 let kcgDangGui = false;
@@ -846,7 +854,7 @@ function tcFill(tc){
   $('tc_minh_hoa_chuyen').value = tc.minh_hoa_chuyen ?? 0.5; $('tc_minh_hoa_anh_dong').checked = tc.minh_hoa_anh_dong !== false;
   $('tc_minh_hoa_sfx').checked = tc.minh_hoa_sfx !== false; $('tc_minh_hoa_sfx_db').value = tc.minh_hoa_sfx_db ?? -4;
   $('tc_minh_hoa_soat').checked = tc.minh_hoa_soat !== false;
-  $('tc_minh_hoa_xen_bs').checked = tc.minh_hoa_xen_bs !== false; $('tc_minh_hoa_xen_bs_pct').value = tc.minh_hoa_xen_bs_pct ?? 50;
+  $('tc_minh_hoa_xen_bs').checked = tc.minh_hoa_xen_bs !== false; $('tc_minh_hoa_xen_bs_pct').value = tc.minh_hoa_xen_bs_pct ?? 25;
   ['tc_minh_hoa_xen_bs', 'tc_minh_hoa_xen_bs_pct'].forEach(id => { $(id).disabled = !!tc.khong_clip_goc; });   // không clip gốc -> không liên quan
   $('tc_minh_hoa_vec_nguong').value = tc.minh_hoa_vec_nguong ?? 0.7; $('tc_minh_hoa_vec_nhom').value = tc.minh_hoa_vec_nhom ?? 0.9;
   $('tc_minh_hoa_chuyen_kieu').value = tc.minh_hoa_chuyen_kieu || 'ngau_nhien'; tcChuyenKieu();
@@ -871,7 +879,7 @@ function tcLay(){
     minh_hoa_chuyen: v('tc_minh_hoa_chuyen') === '' ? 0.5 : +v('tc_minh_hoa_chuyen'), minh_hoa_chuyen_kieu: v('tc_minh_hoa_chuyen_kieu') || 'ngau_nhien', minh_hoa_anh_dong: $('tc_minh_hoa_anh_dong').checked,
     minh_hoa_sfx: $('tc_minh_hoa_sfx').checked, minh_hoa_sfx_db: v('tc_minh_hoa_sfx_db') === '' ? -4 : +v('tc_minh_hoa_sfx_db'),
     minh_hoa_soat: $('tc_minh_hoa_soat').checked,
-    minh_hoa_xen_bs: $('tc_minh_hoa_xen_bs').checked, minh_hoa_xen_bs_pct: +v('tc_minh_hoa_xen_bs_pct') || 50,
+    minh_hoa_xen_bs: $('tc_minh_hoa_xen_bs').checked, minh_hoa_xen_bs_pct: +v('tc_minh_hoa_xen_bs_pct') || 25,
     minh_hoa_vec_nguong: +v('tc_minh_hoa_vec_nguong') || 0.7, minh_hoa_vec_nhom: +v('tc_minh_hoa_vec_nhom') || 0.9,
     lam_dep: $('tc_lam_dep').checked, ld_trang: +v('tc_ld_trang'), ld_son: +v('tc_ld_son'), ld_son_mau: rad('tc_ld_son_mau') || 'hong',
     ld_suc_song: +v('tc_ld_suc_song'), ld_sang: +v('tc_ld_sang'), ld_tuong_phan: +v('tc_ld_tuong_phan'), ld_nhiet: +v('tc_ld_nhiet') };

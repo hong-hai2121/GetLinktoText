@@ -1187,6 +1187,14 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
             if d < tot_diem:
                 tot, tot_diem = thu, d
         xen = set(tot)
+        # video ngắn (user 28/10): bật xen thì luôn có ÍT NHẤT 1 câu bác sĩ. Chỉ tiêu làm tròn ra 0, hoặc câu đầu/cuối/
+        # ngắn bị loại hết -> nới dần: lấy câu chưa phải bác sĩ, ưu tiên không phải câu kêu gọi cuối, rồi câu dài nhất
+        can = max(can, 1 - len(bat_buoc))
+        if len(xen) < can:
+            du_phong = sorted((c for c in hop_le if c.so not in bat_buoc and c.so not in xen),
+                              key=lambda c: (vi_tri[c.so] == n_cau - 1, -(c.end - c.start)))
+            for c in du_phong[:can - len(xen)]:
+                xen.add(c.so)
         phu["cau_xen"], phu["xen_ti_le"] = sorted(xen), xen_bac_si
         log(f"  xen clip gốc {xen_bac_si:.0%}: {n_cau} câu -> chỉ tiêu {chi_tieu} câu bác sĩ ({len(bat_buoc)} câu không có cảnh"
             + (f"; rút thêm câu {', '.join(map(str, sorted(xen)))}" if xen else "; không rút thêm") + ")")
