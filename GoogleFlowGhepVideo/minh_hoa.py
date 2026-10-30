@@ -933,16 +933,39 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
         return f"không ghi được Sheet tab '{TAB_THIEU}' ({cach}) nên chỉ ghi file thiếu trên máy"
     try:
         ws = gc.open_by_key(m.group(1)).worksheet(TAB_THIEU)
-        cu = {(r[1], str(r[2])) for r in ws.get_all_values()[1:] if len(r) > 2}
+        da_co_rows = ws.get_all_values()
+        cu = {(r[1], str(r[2])) for r in da_co_rows[1:] if len(r) > 2}
         rows = [[time.strftime("%Y-%m-%d %H:%M"), ten_bo, t["cau"], t.get("text", ""), _goi_y_thieu(t), ""]
                 for t in thieu if (ten_bo, str(t["cau"])) not in cu]
         if rows:
-            ws.append_rows(rows, value_input_option="RAW")
+            _ghi_dong_thieu(ws, da_co_rows, rows)
         da_co = len(thieu) - len(rows)
         return (f"đã ghi {len(rows)} dòng vào Sheet tab '{TAB_THIEU}'" + (f" ({da_co} dòng đã có từ trước)" if da_co else "")
                 + f" (bằng {cach})")
     except Exception as e:                             # noqa: BLE001 — lỗi Sheet không làm hỏng video
         return f"không ghi được Sheet tab '{TAB_THIEU}' bằng {cach}: {e} — {GOI_Y_SHEET}"
+
+
+def _ghi_dong_thieu(ws, da_co: list[list[str]], rows: list[list]) -> None:
+    """Ghi các dòng mới vào CHỖ TRỐNG ĐẦU TIÊN dưới tiêu đề (dòng mà cột A-E đều trống, kể cả khi cột F còn ô tick), chỉ
+    khi không còn chỗ trống đủ dài mới nối xuống cuối. User 30/10: xóa nội dung các dòng đã bổ sung (để lại 30 dòng trống
+    trên đầu) -> append_rows nối tít xuống dưới, mở tab nhìn toàn dòng trống tưởng không ghi được."""
+    def trong(r) -> bool:
+        return not any(c.strip() for c in r[:5])
+    n = len(rows)
+    i = 1                                              # bỏ dòng tiêu đề (chỉ số 0)
+    while i < len(da_co):
+        if trong(da_co[i]):
+            j = i
+            while j < len(da_co) and trong(da_co[j]):
+                j += 1
+            if j - i >= n:
+                ws.update(f"A{i + 1}:F{i + n}", rows, value_input_option="RAW")
+                return
+            i = j
+        else:
+            i += 1
+    ws.append_rows(rows, value_input_option="RAW")
 
 
 GOI_Y_SHEET = ("đăng nhập Google ở tab Cài đặt bằng tài khoản có quyền sửa Sheet kho, hoặc thay service_account.json bằng khóa "
