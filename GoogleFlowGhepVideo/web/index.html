@@ -59,6 +59,7 @@ body{margin:0;display:flex;background:var(--bg);color:var(--fg);font:14px/1.5 "S
 .card>h3{margin:0;padding:12px 16px 8px;font-size:13.5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .card>h3 small{font-weight:400;color:var(--dim)}
 .card .body{padding:0 16px 14px}
+.card.gon .body{display:none} .card.gon>h3{padding-bottom:12px} .card.gon{align-self:start}   /* thẻ ít dùng (clip gốc) thu gọn còn dòng tiêu đề, không kéo cao theo thẻ bên cạnh */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 @media (max-width:1000px){.grid2,.grid3{grid-template-columns:1fr}}
@@ -66,10 +67,10 @@ body{margin:0;display:flex;background:var(--bg);color:var(--fg);font:14px/1.5 "S
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .grow{flex:1;min-width:0}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;font-size:12px;background:var(--gray-bg);color:var(--dim);border:1px solid var(--border);white-space:nowrap}
 /* nút lớn bật/tắt "không dùng clip gốc" (thẻ 1, tab Ghép video) — phải nổi bật: xanh = đang dùng clip gốc, đỏ = KHÔNG dùng */
-.tog-big{display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border-radius:999px;border:2px solid #16a34a;background:#f0fdf4;color:#166534;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
-.tog-big .dot{width:11px;height:11px;border-radius:50%;background:#16a34a;flex:none}
+.tog-big{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:999px;border:1.5px solid #16a34a;background:#f0fdf4;color:#166534;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}   /* nhỏ lại cho vừa 1 hàng (user 31/10) */
+.tog-big .dot{width:9px;height:9px;border-radius:50%;background:#16a34a;flex:none}
 .tog-big:hover{filter:brightness(.96)}
-.tog-big.on{border-color:#dc2626;background:#dc2626;color:#fff;box-shadow:0 0 0 4px #fee2e2}
+.tog-big.on{border-color:#dc2626;background:#dc2626;color:#fff;box-shadow:0 0 0 3px #fee2e2}
 .tog-big.on .dot{background:#fff;animation:nhay 1.2s infinite}
 @keyframes nhay{0%,100%{opacity:1}50%{opacity:.35}}
 .card.kcg-on .goc-list,.card.kcg-on .hint,.card.kcg-on #gocDir{opacity:.45}
@@ -96,7 +97,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid #bfdbfe;border-color:v
 .btn.sm{padding:3px 9px;font-size:12px} .btn.link{border:0;background:none;color:var(--blue);padding:2px 4px} .btn.link:hover{text-decoration:underline}
 .btn.danger{color:var(--red)}
 /* danh sách tự vẽ thay popup gốc của <select> (WebView2 trong cửa sổ desktop không mở được popup gốc — user 24/10) */
-.sel-menu{position:absolute;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;max-height:300px;overflow:auto}
+.sel-menu{position:fixed;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;max-height:300px;overflow:auto}
 .sel-item{display:block;width:100%;text-align:left;padding:7px 12px;border:0;background:none;cursor:pointer;font:inherit;font-size:13px;border-radius:6px;white-space:nowrap;color:inherit}
 .sel-item:hover{background:var(--blue-bg)} .sel-item.on{font-weight:600;color:#1e40af} .sel-item:disabled{opacity:.5;cursor:default}
 
@@ -169,11 +170,12 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
 
   <!-- ===================== GHÉP VIDEO ===================== -->
   <section class="tab active" id="tab-ghep">
-    <div class="grid2">
-      <div class="card" id="cardGoc">
-        <h3>1. Thư mục clip gốc <small>các clip ngắn quay bác sĩ, tắt tiếng, lồng giọng đọc</small>
+    <div><!-- thẻ 1 (thu gọn, 1 hàng) rồi thẻ 2 xuống hàng cho rộng (user 31/10), không chia 2 cột nữa -->
+      <div class="card gon" id="cardGoc">
+        <h3>1. Thư mục clip gốc <small id="gocTom" title="Tóm tắt kho clip gốc; bấm “chi tiết” để xem/sửa"></small>
           <span class="spacer"></span>
           <button class="tog-big" id="btnKcg" onclick="datKhongClipGoc()" title="Bấm để đổi. BẬT = phần sau không dùng clip bác sĩ, toàn bộ là cảnh kho minh họa; câu không khớp từ khóa lấy clip có từ khóa gần nhất"><span class="dot"></span><span id="btnKcgTxt">Đang dùng clip gốc</span></button>
+          <button class="btn link sm" id="btnGocGon" onclick="gocGon()" title="Thẻ này ít dùng nên mặc định thu gọn; bấm để xem / đổi thư mục, thêm hoặc bỏ clip">▸ chi tiết</button>
         </h3>
         <div class="body">
           <div id="kcgNote" class="chip bad" style="display:none;margin:4px 0 10px;white-space:normal">⛔ KHÔNG DÙNG CLIP GỐC đang bật: phần sau = 100% cảnh kho minh họa (thẻ 4), kéo cho chạm nhau; câu không khớp từ khóa → lấy đại clip có từ khóa gần nhất (hết cách mới lấy clip ít dùng nhất); câu đó vẫn ghi vào tab Thiếu. Thư mục dưới đây không dùng.</div>
@@ -190,16 +192,16 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
         <h3>2. Thêm link thư mục Drive hoặc Sheet lịch đăng <small>mỗi dòng một link thư mục; hoặc dán link Sheet để đọc cột F</small></h3>
         <div class="body">
           <textarea id="links" placeholder="https://drive.google.com/drive/folders/…&#10;hoặc link Google Sheet lịch đăng (tab có cột D tiêu đề · F link nguyên liệu · G link video)" spellcheck="false"></textarea>
+          <!-- một hàng (user 31/10): thư mục Drive nhận video + ô tự động thêm từ Sheet + nút Dán / Thêm -->
           <div class="row" style="margin-top:8px">
+            <span class="muted" title="Tập thêm từ giờ sẽ tải lên thư mục này; đổi riêng từng tập ở cột Trạng thái. Dán link Sheet đã thêm lần trước thì tool tự chọn lại đúng thư mục của Sheet đó.">Nhận video:</span>
+            <select id="ddChon" style="width:auto;min-width:160px;font-weight:600" title="Tập thêm từ giờ sẽ tải lên thư mục này; đổi riêng từng tập ở cột Trạng thái. Dán link Sheet đã thêm lần trước thì tool tự chọn lại đúng thư mục của Sheet đó." onchange="api('/api/set_drive_dich',{id:this.value})"></select>
+            <button class="btn link sm" onclick="moTab('cai-dat')" title="Thêm / bớt / ẩn thư mục Drive nhận video (tab Cài đặt)">thêm / bớt</button>
+            <label class="sw" title="Bật: dán link Sheet rồi bấm Thêm vào hàng đợi là tool đọc Sheet, tick mọi dòng chạy được và tự thêm luôn, không cần bấm “Thêm dòng đã chọn”. Chỉ tự thêm khi “chọn mọi dòng chạy được” đang tick. Nhớ cho các lần sau."><input type="checkbox" id="sheetTuThem" onchange="sheetTuThemDoi(this.checked)"> Tự thêm từ Sheet</label>
+            <label class="sw" title="Mỗi lần thêm từ Sheet chỉ lấy tối đa chừng này dòng chạy được, theo thứ tự trên Sheet (tick tất cả cũng chỉ tick tới số này). Để trống = tất cả. Nhớ cho các lần sau."><span class="muted">tối đa</span> <input type="number" id="sheetGioiHan" min="1" step="1" placeholder="tất cả" style="width:64px" onchange="sheetGioiHanDoi(this.value)"> <span class="muted">tập</span></label>
             <span class="spacer"></span>
             <button class="btn" onclick="danVao($('links'))" title="Dán link đã sao chép vào ô trên">📋 Dán</button>
             <button class="btn primary" onclick="themLink()">+ Thêm vào hàng đợi</button>
-          </div>
-          <div class="row" style="margin-top:8px">
-            <span class="muted">Thư mục Drive nhận video:</span>
-            <select id="ddChon" style="width:auto;min-width:170px;font-weight:600" onchange="api('/api/set_drive_dich',{id:this.value})"></select>
-            <span class="muted" id="ddChonTt">— tập thêm từ giờ sẽ tải lên đây; đổi riêng từng tập ở cột Trạng thái</span>
-            <button class="btn link sm" onclick="moTab('cai-dat')">thêm / bớt thư mục</button>
           </div>
           <div id="sheetPanel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
             <div class="row"><b id="sheetTen"></b><span class="muted" id="sheetTab"></span><span class="spacer"></span>
@@ -225,6 +227,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
         <button id="btnStop" class="btn sm danger" onclick="api('/api/stop')" title="Dừng ngay: cắt tập đang dựng, mục về trạng thái chờ">■ Dừng ngay</button>
         <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
         <button class="btn sm" onclick="api('/api/clear_done')">Bỏ mục đã xong</button>
+        <button class="btn sm" onclick="api('/api/clear_cho')" title="Bỏ mọi mục đang chờ và mục lỗi khỏi hàng đợi; giữ mục đang chạy và mục đã xong. Không hỏi lại.">Bỏ mục chưa xong</button>
       </h3>
       <div class="tbl-wrap">
         <table>
@@ -544,32 +547,46 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* <select> trong cửa sổ desktop (pywebview + WebView2) không mở được popup gốc -> chặn popup gốc, tự vẽ danh sách
    ngay dưới ô; chọn thì gán value + bắn 'change' như người dùng chọn thật. Áp cho MỌI select, kể cả select sinh sau. */
-function selDong(){ const m = document.getElementById('selMenu'); if (m) m.remove(); }
+let selLuc = 0;                                               // lúc mở/đóng gần nhất: click nổ ngay sau đó thì bỏ qua
+function selDong(){ const m = document.getElementById('selMenu'); if (m){ m.remove(); selLuc = Date.now(); } }
 function selMo(sel){
   const dang = document.getElementById('selMenu');
   if (dang && dang.dataset.cho === (sel.id || sel.name || '')) { selDong(); return; }   // bấm lại ô đang mở = đóng
   selDong();
   const r = sel.getBoundingClientRect(), m = document.createElement('div');
   m.className = 'sel-menu'; m.id = 'selMenu'; m.dataset.cho = sel.id || sel.name || '';
-  m.style.left = `${r.left + window.scrollX}px`; m.style.top = `${r.bottom + window.scrollY + 2}px`; m.style.minWidth = `${r.width}px`;
   [...sel.options].forEach(o => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sel-item' + (o.selected ? ' on' : '');
     b.textContent = o.text; b.disabled = o.disabled;
     b.onclick = ev => { ev.stopPropagation(); if (sel.value !== o.value){ sel.value = o.value; sel.dispatchEvent(new Event('change', {bubbles: true})); } selDong(); };
     m.appendChild(b);
   });
+  // Vị trí cố định theo khung nhìn, KHÔNG BAO GIỜ đè lên ô chọn: đè lên thì mouseup rơi vào danh sách, click nổ ở body
+  // -> đóng ngay, user thấy "bấm không bung" (cửa sổ thấp + 10 thư mục, 31/10). Chỗ nào rộng hơn thì xổ về phía đó,
+  // chiều cao thu lại cho vừa chỗ trống (cuộn trong danh sách).
+  const duoi = window.innerHeight - r.bottom - 10, tren = r.top - 10;
+  m.style.maxHeight = `${Math.max(60, Math.min(300, Math.max(duoi, tren)))}px`;
+  m.style.minWidth = `${r.width}px`; m.style.visibility = 'hidden';
   document.body.appendChild(m);
-  const rm = m.getBoundingClientRect();                       // tràn mép phải / đáy thì dịch vào trong
-  if (rm.right > window.innerWidth - 8) m.style.left = `${Math.max(8, r.right + window.scrollX - rm.width)}px`;
-  if (rm.bottom > window.innerHeight - 8) m.style.top = `${Math.max(8, r.top + window.scrollY - rm.height - 2)}px`;
+  const rm = m.getBoundingClientRect(), xuongDuoi = duoi >= rm.height || duoi >= tren;
+  m.style.top = `${xuongDuoi ? r.bottom + 2 : Math.max(2, r.top - 2 - rm.height)}px`;
+  m.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - rm.width - 8))}px`;
+  m.style.visibility = '';
+  selLuc = Date.now();
 }
 document.addEventListener('mousedown', e => {
   const sel = e.target.closest && e.target.closest('select');
   if (!sel || sel.disabled || sel.multiple || sel.size > 1) return;
   e.preventDefault(); sel.focus(); selMo(sel);
 });
-document.addEventListener('click', e => { if (!e.target.closest('#selMenu') && !e.target.closest('select')) selDong(); });
+document.addEventListener('click', e => {
+  if (e.target.closest('#selMenu')) return;
+  const sel = e.target.closest('select'), vua = Date.now() - selLuc < 300;
+  if (sel){ if (!vua && !document.getElementById('selMenu') && !sel.disabled && !sel.multiple && sel.size <= 1) selMo(sel); return; }  // dự phòng: mousedown không mở được thì click mở
+  if (!vua) selDong();
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') selDong(); });
+document.addEventListener('scroll', e => { if (!(e.target.closest && e.target.closest('#selMenu'))) selDong(); }, true);  // cuộn trang thì đóng (vị trí cố định không bám theo ô)
 window.addEventListener('resize', selDong);
 const fmt = s => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
 let seq = 0, logLines = [], state = null, toastT = 0, busy = false;
@@ -659,17 +676,31 @@ async function docSheet(link){
   const j = await api('/api/doc_sheet', {link});
   if (!j.ok){ sheetDoc = null; $('sheetDong').innerHTML = `<span class="chip bad">${esc(j.msg || 'không đọc được Sheet')}</span>`; return; }
   sheetDoc = j; $('sheetTen').textContent = j.tieu_de_sheet; $('sheetTab').textContent = ` · tab “${j.tab}” · ${j.dong.length} dòng`;
-  $('sheetDong').innerHTML = j.dong.map(d => { const ok = !!d.fid, da = !!d.link_g;
+  let daTick = 0;                                           // tick sẵn các dòng chạy được, tối đa sheetGioiHan dòng (0 = tất cả)
+  $('sheetDong').innerHTML = j.dong.map(d => { const ok = !!d.fid, da = !!d.link_g, chay = ok && !da && !d.dang_co;
     const chip = !ok ? '<span class="chip warn">F trống</span>' : da ? `<span class="chip ok" title="${esc(d.link_g)}">G đã có link</span>` : d.dang_co ? '<span class="chip run">đã trong hàng đợi</span>' : '<span class="chip">F có link · G trống</span>';
-    return `<label class="sw" style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><input type="checkbox" data-dong="${d.dong}" ${ok ? '' : 'disabled'} ${ok && !da && !d.dang_co ? 'checked' : ''}><span class="muted" style="min-width:52px">dòng ${d.dong}</span><span class="grow">${esc(d.tieu_de || '(không có tiêu đề)')}</span>${chip}</label>`; }).join('') || '<span class="muted">không có dòng nào có tiêu đề / link nguyên liệu</span>';
+    const tick = chay && (!sheetGioiHan || daTick < sheetGioiHan); if (tick) daTick++;
+    return `<label class="sw" style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><input type="checkbox" data-dong="${d.dong}" ${ok ? '' : 'disabled'} ${tick ? 'checked' : ''}><span class="muted" style="min-width:52px">dòng ${d.dong}</span><span class="grow">${esc(d.tieu_de || '(không có tiêu đề)')}</span>${chip}</label>`; }).join('') || '<span class="muted">không có dòng nào có tiêu đề / link nguyên liệu</span>';
   $('sheetTatCa').checked = true;
+  if (j.dich_nho){ $('ddChon').value = j.dich_nho; }      // Sheet này lần trước lưu vào thư mục nào thì chọn sẵn (server đã đổi drive_dich_chon)
+  sheetTuDongThem();
 }
-function sheetTickTatCa(bat){ document.querySelectorAll('#sheetDong input[type=checkbox]:not(:disabled)').forEach(c => { const d = sheetDoc && sheetDoc.dong.find(x => x.dong === +c.dataset.dong); c.checked = bat && d && !d.link_g && !d.dang_co; }); }
-async function themTuSheet(){
+function sheetTickTatCa(bat){ let n = 0; document.querySelectorAll('#sheetDong input[type=checkbox]:not(:disabled)').forEach(c => { const d = sheetDoc && sheetDoc.dong.find(x => x.dong === +c.dataset.dong); c.checked = bat && d && !d.link_g && !d.dang_co && (!sheetGioiHan || n < sheetGioiHan); if (c.checked) n++; }); if (bat) sheetTuDongThem(); }
+/* ô "Tự động thêm vào hàng đợi" (user 31/10): bật + "chọn mọi dòng chạy được" đang tick -> tự bấm nút thêm; nhớ trong localStorage */
+let sheetTuThem = false; try{ sheetTuThem = localStorage.getItem('sheetTuThem') === '1'; } catch(e){}
+$('sheetTuThem').checked = sheetTuThem;
+function sheetTuThemDoi(bat){ sheetTuThem = bat; try{ localStorage.setItem('sheetTuThem', bat ? '1' : '0'); } catch(e){} if (bat) sheetTuDongThem(); }
+function sheetTuDongThem(){ if (sheetTuThem && sheetDoc && $('sheetTatCa').checked) themTuSheet(true); }
+/* ô "tối đa N tập" (user 31/10): mỗi lần thêm từ Sheet lấy tối đa N dòng chạy được theo thứ tự Sheet; trống = tất cả */
+let sheetGioiHan = 0; try{ sheetGioiHan = Math.max(0, Math.floor(+localStorage.getItem('sheetGioiHan') || 0)); } catch(e){}
+$('sheetGioiHan').value = sheetGioiHan || '';
+function sheetGioiHanDoi(v){ sheetGioiHan = Math.max(0, Math.floor(+v || 0)); $('sheetGioiHan').value = sheetGioiHan || ''; try{ localStorage.setItem('sheetGioiHan', String(sheetGioiHan)); } catch(e){} if (sheetDoc && $('sheetTatCa').checked) sheetTickTatCa(true); }
+async function themTuSheet(tuDong){
   if (!sheetDoc) return toast('Đọc Sheet trước.', true);
   const chon = [...document.querySelectorAll('#sheetDong input[type=checkbox]:checked')].map(c => +c.dataset.dong);
-  const dong = sheetDoc.dong.filter(d => chon.includes(d.dong));
-  if (!dong.length) return toast('Chưa tick dòng nào.', true);
+  let dong = sheetDoc.dong.filter(d => chon.includes(d.dong));
+  if (sheetGioiHan && dong.length > sheetGioiHan) dong = dong.slice(0, sheetGioiHan);
+  if (!dong.length) return tuDong ? undefined : toast('Chưa tick dòng nào.', true);
   const j = await api('/api/them_tu_sheet', {sheet: {id: sheetDoc.id, tab: sheetDoc.tab, cot_g: sheetDoc.cot_g, link: sheetDoc.link}, dong, dich: $('ddChon').value});
   if (j.ok){ $('links').value = ''; $('sheetPanel').style.display = 'none'; sheetDoc = null; }
 }
@@ -677,7 +708,7 @@ async function themTuSheet(){
 function dichCell(it){
   const dd = (state && state.drive_dich) || [], t = it.tai_len || {}, ten = (dd.find(x => x.id === it.dich) || {}).ten;
   if (t.tt === 'xong' || t.tt === 'dang' || it.status === 'dang') return ten ? `<div class="muted">→ ${esc(ten)}</div>` : '';
-  return `<div class="muted" style="margin-top:3px">→ <select style="width:auto;font-size:12px;padding:1px 4px" title="Thư mục Drive nhận video của tập này" onchange="api('/api/set_dich_muc',{id:${it.id},dich:this.value})"><option value="">(không tải lên)</option>${dd.map(x => `<option value="${esc(x.id)}" ${x.id === it.dich ? 'selected' : ''}>${esc(x.ten)}</option>`).join('')}</select></div>`;
+  return `<div class="muted" style="margin-top:3px">→ <select style="width:auto;font-size:12px;padding:1px 4px" title="Thư mục Drive nhận video của tập này" onchange="api('/api/set_dich_muc',{id:${it.id},dich:this.value})"><option value="">(không tải lên)</option>${dd.filter(x => !x.an || x.id === it.dich).map(x => `<option value="${esc(x.id)}" ${x.id === it.dich ? 'selected' : ''}>${esc(x.ten)}${x.an ? ' (ẩn)' : ''}</option>`).join('')}</select></div>`;
 }
 function tlCell(it){
   const t = it.tai_len || {};
@@ -687,8 +718,14 @@ function tlCell(it){
   if (!it.dich) return dichCell(it);
   return `<div class="muted" style="margin-top:3px">${it.status === 'xong' ? '⬆ chưa tải lên Drive' : 'xong sẽ tải lên Drive' + (it.sheet ? ' + điền cột G' : '')}</div>` + dichCell(it);
 }
+/* thẻ 1 ít dùng (user 31/10): mặc định thu gọn còn dòng tiêu đề + tóm tắt; trạng thái nhớ trong localStorage */
+let gocGonBat = true; try{ gocGonBat = localStorage.getItem('gocGon') !== '0'; } catch(e){}
+function apGocGon(){ $('cardGoc').classList.toggle('gon', gocGonBat); $('btnGocGon').textContent = gocGonBat ? '▸ chi tiết' : '▾ thu gọn'; $('gocTom').style.display = gocGonBat ? '' : 'none'; }
+function gocGon(){ gocGonBat = !gocGonBat; try{ localStorage.setItem('gocGon', gocGonBat ? '1' : '0'); } catch(e){} apGocGon(); }
+apGocGon();
 function renderGoc(g){
   if (!gocDirDirty && document.activeElement !== $('gocDir')) $('gocDir').value = g.dir || '';
+  $('gocTom').textContent = !g.dir ? '⚠ chưa chọn thư mục' : !g.ton_tai ? '⚠ không thấy thư mục' : !g.clips.length ? '⚠ thư mục không có clip' : `${g.clips.length} clip · ${fmt(g.tong_giay)}`;
   const nut = `<span class="spacer"></span><button class="btn sm" onclick="gocThem()" title="Chọn một hoặc nhiều file .mov/.mp4/.mkv/.m4v — SAO CHÉP vào thư mục clip gốc, file ở chỗ cũ vẫn còn; trùng tên thì tự thêm số">+ Thêm clip…</button><button class="btn sm" onclick="api('/api/mo',{loai:'goc'})" title="Mở thư mục clip gốc trong Explorer / Finder">📁 Mở thư mục</button>`;
   let dau;
   if (!g.dir) dau = '<span class="chip warn">Chưa chọn thư mục clip gốc</span>';
@@ -713,7 +750,7 @@ function renderKcg(tc){
   if (kcgDangGui || !tc) return;
   const on = !!tc.khong_clip_goc;
   $('btnKcg').classList.toggle('on', on); $('cardGoc').classList.toggle('kcg-on', on);
-  $('btnKcgTxt').textContent = on ? 'KHÔNG DÙNG CLIP GỐC — phần sau 100% cảnh kho (bấm để tắt)' : 'Đang dùng clip gốc (bấm để KHÔNG dùng)';
+  $('btnKcgTxt').textContent = on ? 'KHÔNG DÙNG CLIP GỐC (bấm để tắt)' : 'Đang dùng clip gốc (bấm để KHÔNG dùng)';
   $('kcgNote').style.display = on ? '' : 'none';
   ['tc_minh_hoa_xen_bs', 'tc_minh_hoa_xen_bs_pct'].forEach(id => { const el = $(id); if (el) el.disabled = on; });   // xen clip gốc chỉ có nghĩa khi dùng clip gốc
 }
@@ -797,7 +834,7 @@ function actCell(it){
   const t = it.tai_len || {};
   if (it.status === 'xong' && it.out && t.tt !== 'dang' && (t.tt !== 'xong' || t.g === 'loi')) b.push(`<button class="btn sm${t.tt === 'loi' || t.g === 'loi' ? ' blue' : ''}" title="Tải video + txt lên thư mục Drive đích (có bản cũ cùng tên thì đè lên, link không đổi), điền cột G nếu lấy từ Sheet" onclick="api('/api/tai_len_lai',{id:${it.id}})">${t.tt === 'loi' || t.g === 'loi' ? '⬆ Tải lên lại' : '⬆ Tải lên Drive'}</button>`);
   if (it.status === 'xong' || it.status === 'loi') b.push(`<button class="btn sm" onclick="api('/api/retry',{id:${it.id}})">Chạy lại</button>`);
-  b.push(`<button class="btn sm link danger" onclick="if(confirm('Bỏ mục này khỏi hàng đợi?'))api('/api/delete',{id:${it.id}})">Xóa</button>`);
+  b.push(`<button class="btn sm link danger" onclick="api('/api/delete',{id:${it.id}})">Xóa</button>`);   // không hỏi lại (user 31/10)
   return b.join(' ');
 }
 function renderItems(s){
@@ -1071,10 +1108,11 @@ function renderGoogle(s){
   $('cdTuTaiLen').checked = !!s.tu_tai_len; $('cdTuDonRac').checked = s.tu_don_rac !== false;
   const dd = s.drive_dich || [];
   // LƯU Ý: trong thuộc tính onclick="…" không dùng JSON.stringify (sinh dấu " làm đứt thuộc tính) — dùng '${esc(x)}'
-  $('ddList').innerHTML = dd.length ? dd.map(d => `<div class="row" style="margin:3px 0">${d.id === s.drive_dich_chon ? '<span class="chip ok">đang chọn</span>' : '<span class="chip" style="visibility:hidden">đang chọn</span>'}<b>${esc(d.ten)}</b><a class="muted" style="font-size:12px;cursor:pointer" onclick="api('/api/mo',{loai:'url',url:'${esc(d.link)}'})">${esc(d.link)}</a><span class="spacer"></span><button class="btn link sm danger" onclick="if(confirm('Bỏ thư mục ${esc(d.ten)} khỏi danh sách?'))api('/api/drive_dich_xoa',{id:'${esc(d.id)}'})">bỏ</button></div>`).join('') : '<span class="muted">chưa có thư mục nào — dán link ở dưới</span>';
-  const sel = $('ddChon');
+  // ẩn (user 31/10): thư mục ẩn không hiện trong các ô chọn, vẫn nằm ở danh sách này (mờ) để bấm "hiện" lại
+  $('ddList').innerHTML = dd.length ? dd.map(d => `<div class="row" style="margin:3px 0${d.an ? ';opacity:.55' : ''}">${d.id === s.drive_dich_chon ? '<span class="chip ok">đang chọn</span>' : d.an ? '<span class="chip">ẩn</span>' : '<span class="chip" style="visibility:hidden">đang chọn</span>'}<b>${esc(d.ten)}</b><a class="muted" style="font-size:12px;cursor:pointer" onclick="api('/api/mo',{loai:'url',url:'${esc(d.link)}'})">${esc(d.link)}</a><span class="spacer"></span><button class="btn link sm" title="${d.an ? 'Hiện lại trong ô chọn thư mục nhận video' : 'Ẩn khỏi ô chọn thư mục nhận video (vẫn giữ ở đây, bấm hiện là có lại)'}" onclick="api('/api/drive_dich_an',{id:'${esc(d.id)}',an:${d.an ? 'false' : 'true'}})">${d.an ? 'hiện' : 'ẩn'}</button><button class="btn link sm danger" onclick="if(confirm('Bỏ thư mục ${esc(d.ten)} khỏi danh sách?'))api('/api/drive_dich_xoa',{id:'${esc(d.id)}'})">bỏ</button></div>`).join('') : '<span class="muted">chưa có thư mục nào — dán link ở dưới</span>';
+  const sel = $('ddChon'), hien = dd.filter(d => !d.an || d.id === s.drive_dich_chon);
   if (document.activeElement !== sel){
-    sel.innerHTML = dd.map(d => `<option value="${esc(d.id)}">${esc(d.ten)}</option>`).join('') || '<option value="">(chưa có thư mục — thêm ở tab Cài đặt)</option>';
+    sel.innerHTML = hien.map(d => `<option value="${esc(d.id)}">${esc(d.ten)}${d.an ? ' (ẩn)' : ''}</option>`).join('') || '<option value="">(chưa có thư mục — thêm ở tab Cài đặt)</option>';
     sel.value = s.drive_dich_chon || '';
   }
   const tenChon = (dd.find(d => d.id === s.drive_dich_chon) || {}).ten || '(chưa chọn)';

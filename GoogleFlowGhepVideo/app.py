@@ -465,6 +465,9 @@ class State:
         self.drive_dich_chon = str(d.get("drive_dich_chon") or (self.drive_dich[0]["id"] if self.drive_dich else ""))
         self.tu_tai_len = bool(d.get("tu_tai_len", True))
         self.tu_don_rac = bool(d.get("tu_don_rac", True))   # bấm "Bỏ mục đã xong" thì tập đã lên Drive + ghi Sheet được đưa file vào Thùng rác (user 26/10)
+        # nhớ thư mục Drive nhận video theo từng Sheet/tab (user 31/10): "sheet_id|tab" -> id thư mục; lần sau dán link Sheet đó là chọn sẵn
+        sd = d.get("sheet_dich")
+        self.sheet_dich = {str(k): str(v) for k, v in sd.items() if v} if isinstance(sd, dict) else {}
         self.google = {"dang": False, "loi": ""}      # đang chờ user đăng nhập trên trình duyệt
         self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
         self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
@@ -587,7 +590,7 @@ class State:
             data = {"goc_dir": self.goc_dir, "items": self.items, "tuy_chon": self.tuy_chon,
                     "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh,
                     "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len,
-                    "tu_don_rac": self.tu_don_rac}
+                    "tu_don_rac": self.tu_don_rac, "sheet_dich": self.sheet_dich}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -1134,6 +1137,25 @@ def api_drive_dich_xoa(data):
     return {"ok": True, "msg": "Đã bỏ thư mục khỏi danh sách."}
 
 
+def api_drive_dich_an(data):
+    """Ẩn / hiện một thư mục Drive nhận video (user 31/10): ẩn = không hiện trong các ô chọn, vẫn giữ trong danh sách ở
+    tab Cài đặt (bấm "hiện" là có lại). Đang chọn thư mục bị ẩn thì chuyển sang thư mục đang hiện đầu tiên."""
+    i, an = str(data.get("id") or ""), bool(data.get("an"))
+    with S.lock:
+        x = next((x for x in S.drive_dich if x["id"] == i), None)
+        if x is None:
+            return {"ok": False, "msg": "Không thấy thư mục."}
+        x["an"] = an
+        doi = ""
+        if an and S.drive_dich_chon == i:
+            khac = next((y for y in S.drive_dich if not y.get("an")), None)
+            if khac:
+                S.drive_dich_chon = khac["id"]
+                doi = f"; thư mục nhận video chuyển sang “{khac['ten']}”"
+        S.save()
+    return {"ok": True, "msg": f"Đã {'ẩn' if an else 'hiện lại'} thư mục “{x['ten']}”{doi}."}
+
+
 def api_doc_sheet(data):
     """Đọc Sheet lịch đăng -> các dòng (D tiêu đề, F link nguyên liệu, G link video) để tick thêm vào hàng đợi."""
     link = str(data.get("link") or "").strip()
@@ -1148,6 +1170,17 @@ def api_doc_sheet(data):
     kq.update(ok=True, link=link)
     n_ok = sum(1 for d in kq["dong"] if d.get("fid") and not d.get("link_g") and not d["dang_co"])
     kq["msg"] = f"Sheet “{kq['tieu_de_sheet']}”: {len(kq['dong'])} dòng, {n_ok} dòng chạy được (F có link, G trống)."
+    # Sheet/tab này lần trước đã thêm với thư mục nhận video nào thì chọn sẵn thư mục đó (user 31/10)
+    with S.lock:
+        nho = S.sheet_dich.get(f"{kq.get('id')}|{kq.get('tab')}", "")
+        tm = next((x for x in S.drive_dich if x["id"] == nho), None)
+        if tm:
+            kq["dich_nho"] = tm["id"]
+            if S.drive_dich_chon != tm["id"]:
+                S.drive_dich_chon = tm["id"]
+                S.save()
+    if tm:
+        kq["msg"] += f" Nhận video: “{tm['ten']}” (nhớ từ lần trước)."
     return kq
 
 
@@ -1176,6 +1209,8 @@ def api_them_tu_sheet(data):
             S.next_id += 1
             S.items.append(it)
             them.append(it["id"])
+        if sh.get("id") and dich:                  # nhớ Sheet/tab này lưu video vào thư mục nào (user 31/10)
+            S.sheet_dich[f"{sh.get('id')}|{sh.get('tab')}"] = dich
         S.save()
         ten_dich = next((x["ten"] for x in S.drive_dich if x["id"] == dich), "(chưa chọn)")
     if them:
@@ -1654,6 +1689,21 @@ def api_clear_done(_data):
             + (f"; đưa file của {len(don)} tập đã lên Drive vào Thùng rác." if don else " (video vẫn ở Downloads).")}
 
 
+def api_clear_cho(_data):
+    """Nút "Bỏ mục chưa xong" (user 31/10): bỏ mọi mục đang chờ + mục lỗi khỏi hàng đợi, giữ mục đang chạy và mục đã xong.
+    Không hỏi lại, không đụng file nào trên máy."""
+    with S.lock:
+        bo = [it for it in S.items if it.get("status") in (CHO, LOI)]
+        S.items = [it for it in S.items if it.get("status") not in (CHO, LOI)]
+        S.save()
+    if not bo:
+        return {"ok": False, "msg": "Không có mục chưa xong nào để bỏ."}
+    n_cho = sum(1 for it in bo if it.get("status") == CHO)
+    msg = f"Đã bỏ {len(bo)} mục chưa xong ({n_cho} chờ, {len(bo) - n_cho} lỗi) khỏi hàng đợi."
+    S.log(msg)
+    return {"ok": True, "msg": msg}
+
+
 def api_start(_data):
     with S.lock:
         if S.running:
@@ -2103,6 +2153,7 @@ ROUTES = {
     "/api/set_drive_dich": api_set_drive_dich,
     "/api/drive_dich_them": api_drive_dich_them,
     "/api/drive_dich_xoa": api_drive_dich_xoa,
+    "/api/drive_dich_an": api_drive_dich_an,
     "/api/doc_sheet": api_doc_sheet,
     "/api/them_tu_sheet": api_them_tu_sheet,
     "/api/tai_len_lai": api_tai_len_lai,
@@ -2111,6 +2162,7 @@ ROUTES = {
     "/api/delete": api_delete,
     "/api/retry": api_retry,
     "/api/clear_done": api_clear_done,
+    "/api/clear_cho": api_clear_cho,
     "/api/start": api_start,
     "/api/chon_thu": api_chon_thu,
     "/api/stop": api_stop,
