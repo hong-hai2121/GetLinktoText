@@ -162,14 +162,38 @@
     return /^https?:\/\/([a-z0-9-]+\.)*facebook\.com(\/|$)/i.test(url || '');
   }
 
-  function getActiveTab() {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-        if (!tabs.length) return reject(new Error('No active tab'));
-        resolve(tabs[0]);
-      });
-    });
+  // ── Tab đích ───────────────────────────────────────────────────────────────
+  // Giao diện chạy trong CỬA SỔ RIÊNG (background.js mở), nên "tab active của cửa sổ
+  // hiện tại" chính là cửa sổ này. Phải nhớ tab Facebook được truyền qua ?tabId=… lúc
+  // mở, và đổi khi người dùng bấm icon extension trên tab khác (SET_TARGET_TAB).
+  const tabInfoEl  = document.getElementById('tabInfo');
+  const NO_TAB_MSG = 'Không thấy tab Facebook. Mở trang Hoạt động thanh toán rồi bấm lại icon extension.';
+  let targetTabId  = Number(new URLSearchParams(location.search).get('tabId')) || null;
+
+  function errText(err, fallback) {
+    return err?.message === 'NO_FB_TAB' ? NO_TAB_MSG : fallback;
+  }
+
+  async function findFacebookTab() {
+    // Ưu tiên tab Facebook đang active ở cửa sổ Chrome thường; không có thì tab Facebook bất kỳ
+    const active = await chrome.tabs.query({ active: true, windowType: 'normal' });
+    const hit = active.find(t => isFacebookUrl(t.url));
+    if (hit) return hit;
+    const any = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+    return any[0] || null;
+  }
+
+  async function getTargetTab() {
+    if (targetTabId !== null) {
+      try {
+        const tab = await chrome.tabs.get(targetTabId);
+        if (tab && isFacebookUrl(tab.url)) return tab;
+      } catch (_) { /* tab đã đóng */ }
+    }
+    const tab = await findFacebookTab();
+    if (!tab) throw new Error('NO_FB_TAB');
+    targetTabId = tab.id;
+    return tab;
   }
 
   function sendToContent(tabId, message) {
@@ -208,6 +232,9 @@
     } else if (isDetailPage) {
       pageCtx.className   = 'page-ctx detail';
       pageCtx.textContent = 'Trang chi tiết giao dịch — quay lại danh sách để bắt đầu cào';
+    } else if (status.noTab) {
+      pageCtx.className   = 'page-ctx wrong';
+      pageCtx.textContent = NO_TAB_MSG;
     } else {
       pageCtx.className   = 'page-ctx wrong';
       pageCtx.textContent = 'Chưa thấy bảng giao dịch — hãy vào trang Hoạt động thanh toán';
@@ -278,7 +305,7 @@
   btnScrapeList.addEventListener('click', async () => {
     clearError();
     try {
-      const tab = await getActiveTab();
+      const tab = await getTargetTab();
       if (!isFacebookUrl(tab.url)) {
         showError('Hãy mở trang Hoạt động thanh toán của Trình quản lý quảng cáo trước.');
         return;
@@ -288,7 +315,7 @@
       if (!res?.ok) showError(res?.reason ?? 'Không thể bắt đầu cào.');
       else { progressText.textContent = 'Đang khởi động...'; progressBar.style.width = '0%'; }
     } catch (err) {
-      showError('Lỗi kết nối content script.');
+      showError(errText(err, 'Lỗi kết nối content script.'));
       console.error(err);
     }
   });
@@ -296,44 +323,44 @@
   btnScrapeDetail.addEventListener('click', async () => {
     clearError();
     try {
-      const tab = await getActiveTab();
+      const tab = await getTargetTab();
       await ensureContentScript(tab.id);
       const res = await sendToContent(tab.id, { type: 'START_DETAIL_SCRAPE' });
       if (!res?.ok) showError(res?.reason ?? 'Không thể bắt đầu cào chi tiết.');
       else { progressText.textContent = 'Đang khởi động...'; progressBar.style.width = '0%'; }
     } catch (err) {
-      showError('Lỗi kết nối content script.');
+      showError(errText(err, 'Lỗi kết nối content script.'));
     }
   });
 
   btnStop.addEventListener('click', async () => {
     clearError();
     try {
-      const tab = await getActiveTab();
+      const tab = await getTargetTab();
       await sendToContent(tab.id, { type: 'STOP_SCRAPE' });
       progressText.textContent = 'Đã dừng.';
     } catch (err) {
-      showError('Lỗi khi dừng.');
+      showError(errText(err, 'Lỗi khi dừng.'));
     }
   });
 
   btnExport.addEventListener('click', async () => {
     clearError();
     try {
-      const tab = await getActiveTab();
+      const tab = await getTargetTab();
       await ensureContentScript(tab.id);
       const res = await sendToContent(tab.id, { type: 'EXPORT_CSV' });
       if (!res?.ok) showError(res?.reason ?? 'Không có dữ liệu để xuất.');
       else exportExcel(res.list, res.detail, res.accountName);
     } catch (err) {
-      showError('Lỗi khi xuất Excel.');
+      showError(errText(err, 'Lỗi khi xuất Excel.'));
     }
   });
 
   btnClear.addEventListener('click', async () => {
     clearError();
     try {
-      const tab = await getActiveTab();
+      const tab = await getTargetTab();
       await ensureContentScript(tab.id);
       await sendToContent(tab.id, { type: 'CLEAR_DATA' });
       listCountEl.textContent   = '0';
@@ -345,14 +372,21 @@
       phaseText.textContent     = 'Chờ';
       phaseBadge.className      = 'badge';
     } catch (err) {
-      showError('Lỗi khi xóa dữ liệu.');
+      showError(errText(err, 'Lỗi khi xóa dữ liệu.'));
     }
   });
 
   // ── Listen for progress messages from content script ──────────────────────
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (msg.type === 'SET_TARGET_TAB') {          // người dùng bấm icon extension trên tab khác
+      targetTabId = Number(msg.tabId) || null;
+      clearError();
+      return;
+    }
     if (msg.type !== 'PROGRESS') return;
+    // Chỉ nhận tiến độ từ tab đang điều khiển (các tab Facebook khác bỏ qua)
+    if (sender?.tab && targetTabId !== null && sender.tab.id !== targetTabId) return;
     setProgress(msg.message, msg.current, msg.total);
 
     // Update counters from progress
@@ -367,22 +401,25 @@
 
   async function pollStatus() {
     try {
-      const tab = await getActiveTab();
-      if (!isFacebookUrl(tab.url)) {
-        renderUI({
-          running: false, phase: 'idle',
-          listCount: 0, detailCount: 0, processed: 0, total: 0,
-          isListPage: false, isDetailPage: false,
-        });
-        return;
-      }
+      const tab = await getTargetTab();          // luôn là tab Facebook, hoặc ném NO_FB_TAB
+      tabInfoEl.textContent = (tab.title || 'Facebook Business').slice(0, 60);
       await ensureContentScript(tab.id);
       const status = await sendToContent(tab.id, { type: 'GET_STATUS' });
       if (status) renderUI(status);
-    } catch (_) {
-      // content script not ready yet
+    } catch (err) {
+      if (err?.message === 'NO_FB_TAB') {
+        tabInfoEl.textContent = 'Chưa có tab Facebook';
+        renderUI({
+          running: false, phase: 'idle',
+          listCount: 0, detailCount: 0, processed: 0, total: 0,
+          isListPage: false, isDetailPage: false, noTab: true,
+        });
+      }
+      // lỗi khác: content script chưa sẵn sàng → thử lại lượt sau
+    } finally {
+      // Cửa sổ sống lâu nên vòng poll KHÔNG được dừng (bản popup cũ return sớm là dừng hẳn)
+      pollTimer = setTimeout(pollStatus, 1200);
     }
-    pollTimer = setTimeout(pollStatus, 1200);
   }
 
   pollStatus();
