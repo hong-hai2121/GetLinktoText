@@ -12,8 +12,8 @@ Các bước:
   4. gom_cau()        : gom từ thành câu phụ đề ngắn (ngắt theo dấu câu, giới hạn ký tự)
   5. ghi_srt()        : ghi file .srt; ghep_tieude.py đốt vào video bằng filter subtitles
 
-Model: tìm theo thứ tự  models/ cạnh tool (bản đóng gói)  ->  ../whisper_cache (máy dev,
-dùng chung với GetTextFromLink)  ->  cache Hugging Face mặc định (tự tải ~1,5 GB lần đầu).
+Model: tìm theo thứ tự  models/ cạnh tool (bản đóng gói)  ->  ../GetTextFromLink/whisper_cache
+(máy dev, dùng chung với GetTextFromLink)  ->  cache Hugging Face mặc định (tự tải ~1,5 GB lần đầu).
 Model nạp xong được giữ suốt phiên, KHÔNG del (ctranslate2 có thể abort 0xC0000409 khi hủy
 model GPU); chương trình gọi os._exit() lúc kết thúc để bỏ qua bước hủy.
 
@@ -33,7 +33,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODEL_MAC_DINH = "large-v3-turbo"
-THU_MUC_MODEL = [HERE / "models", HERE.parent / "whisper_cache"]   # ưu tiên từ trên xuống
+THU_MUC_MODEL = [HERE / "models", HERE.parent / "GetTextFromLink" / "whisper_cache"]   # ưu tiên từ trên xuống
 
 TOC_DO_UOC = 0.30      # giây/từ dùng khi phải ước lượng mốc ở đầu/cuối (không có từ neo)
 CUE_TOI_DA = 46        # số ký tự tối đa một câu phụ đề (libass tự xuống 2 dòng)

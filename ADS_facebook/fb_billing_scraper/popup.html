@@ -41,6 +41,23 @@
       opacity: 0.8;
     }
 
+    /* Nút đổi chế độ hiển thị (cửa sổ riêng / popup gắn icon) */
+    .header-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+    .mode-btn[hidden] { display: none; }
+    .mode-btn {
+      background: rgba(255,255,255,.18);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.45);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .mode-btn:hover    { background: rgba(255,255,255,.3); }
+    .mode-btn:disabled { opacity: .5; cursor: default; }
+
     .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 
     /* Cards */
@@ -178,6 +195,17 @@
     }
 
     .divider { height: 1px; background: #e4e6eb; }
+
+    /* Lớp phủ ở cửa sổ gốc khi bảng điều khiển đã chuyển sang cửa sổ nổi (PiP) */
+    #pipOverlay {
+      position: fixed; inset: 0; z-index: 9;
+      background: #f0f2f5;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      gap: 14px; padding: 24px; text-align: center;
+      font-size: 13px; color: #1c1e21; line-height: 1.5;
+    }
+    #pipOverlay[hidden] { display: none; }
+    #pipOverlay .btn { width: auto; padding: 8px 18px; }
   </style>
 </head>
 <body>
@@ -186,6 +214,10 @@
     <div>
       <div class="header-title">FB Billing Scraper</div>
       <div class="header-sub" id="tabInfo" title="Tab Facebook đang điều khiển">Facebook Business</div>
+    </div>
+    <div class="header-actions">
+      <button class="mode-btn" id="btnPip" type="button" title="Mở bảng điều khiển trong cửa sổ nổi luôn trên cùng" hidden>📌 Luôn nổi</button>
+      <button class="mode-btn" id="btnMode" type="button" title="Đổi chế độ hiển thị">Tách cửa sổ</button>
     </div>
   </div>
 
@@ -238,6 +270,13 @@
       <button class="btn btn-danger" id="btnClear" disabled>Xóa dữ liệu</button>
     </div>
 
+  </div>
+
+  <!-- Hiện ở cửa sổ gốc khi bảng điều khiển đang nằm trong cửa sổ nổi -->
+  <div id="pipOverlay" hidden>
+    <div>Bảng điều khiển đang hiện ở <b>cửa sổ nổi luôn trên cùng</b>.<br>
+      Đóng cửa sổ nổi (nút ✕ của nó) hoặc bấm nút dưới để quay lại đây.</div>
+    <button class="btn btn-ghost" id="btnPipOff" type="button">Tắt cửa sổ nổi</button>
   </div>
 
   <script src="popup.js"></script>

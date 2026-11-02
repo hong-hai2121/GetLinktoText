@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 SRT_INPUT_DIR = "SourceTruyen/aSRT"
 OUTPUT_DIR = "SourceTruyen/Outputs"
 FIREFOX_PROFILE_PATH = r"C:\\Users\\PC\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\wyo2tlat.GPT Chị Thảo"
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
+GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\GetTextFromLink\\geckodriver.exe"
 CHATGPT_URL = "https://chatgpt.com/g/g-p-685e66fce9808191a6d242086700558d-youtube-hai/project"
 GROUP_SIZE = 10  # Gửi 10 block một lần
 START_BLOCK_INDEX = 1121  # block số 541 trong file

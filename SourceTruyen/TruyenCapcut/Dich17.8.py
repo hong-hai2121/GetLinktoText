@@ -26,7 +26,7 @@ profiles = {
 selected_profile = profiles["Profile02"]  # hoặc "Profile01", "Profile02"...
 
 FIREFOX_PROFILE_PATH = selected_profile
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"  # Đường dẫn geckodriver
+GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\GetTextFromLink\\geckodriver.exe"  # Đường dẫn geckodriver
 CHATGPT_URL = "https://chatgpt.com/?model=gpt-5-thinking"  # Trang ChatGPT
 
 GROUP_SIZE = 25           # Số block gửi mỗi lượt

@@ -52,9 +52,11 @@ def center_on_screen(win, w=None, h=None):
 
 
 # ================= CẤU HÌNH =================
-WHISPER_MODEL_PATH = "whisper_cache"
+# Model và thư mục ra dùng chung nằm trong GetTextFromLink/ (không phụ thuộc thư mục đang đứng)
+_GETTEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink")
+WHISPER_MODEL_PATH = os.path.join(_GETTEXT_DIR, "whisper_cache")
 MODEL_NAME = "large-v3"  # large-v3, medium, small
-OUTPUT_DIR = "output_videos"
+OUTPUT_DIR = os.path.join(_GETTEXT_DIR, "output_videos")
 SAMPLE_RATE = 16000  # Whisper yêu cầu 16kHz
 
 # Kiểm tra GPU

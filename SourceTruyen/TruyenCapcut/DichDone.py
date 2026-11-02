@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 SRT_INPUT_DIR = "SourceTruyen/aSRT"
 OUTPUT_DIR = "SourceTruyen/Outputs"
 FIREFOX_PROFILE_PATH = r"C:\\Users\\PC\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\wyo2tlat.GPT Chị Thảo"
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
+GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\GetTextFromLink\\geckodriver.exe"
 CHATGPT_URL = "https://chatgpt.com/g/g-p-685e66fce9808191a6d242086700558d-youtube-hai/c/68838fbc-c24c-8326-8f16-762b4754dfa6"
 GROUP_SIZE = 15
 START_BLOCK_INDEX = 0

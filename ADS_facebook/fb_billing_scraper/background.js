@@ -8,6 +8,7 @@
 
 const WIN_KEY    = 'panelWindowId';   // storage.session: id cửa sổ đang mở (mất khi tắt Chrome)
 const BOUNDS_KEY = 'panelBounds';     // storage.local: vị trí + kích cỡ lần cuối người dùng kéo
+const MODE_KEY   = 'panelMode';       // storage.local: 'window' = cửa sổ riêng | 'popup' = bám icon như cũ
 const DEFAULT_W  = 360;
 const DEFAULT_H  = 640;
 
@@ -19,7 +20,12 @@ async function getPanelWindowId() {
 // Cửa sổ đã mở → đưa lên trước, báo tab đích mới. Trả false nếu cửa sổ đã bị đóng.
 async function focusExisting(winId, tabId) {
   try {
-    await chrome.windows.update(winId, { focused: true, drawAttention: true });
+    const { pipActive } = await chrome.storage.session.get('pipActive');
+    if (pipActive) {
+      await chrome.windows.get(winId);     // chỉ kiểm tra còn sống; cửa sổ nổi PiP tự đưa mình lên
+    } else {
+      await chrome.windows.update(winId, { focused: true, drawAttention: true });
+    }
   } catch (_) {
     return false;
   }
@@ -38,7 +44,7 @@ async function defaultPosition(tab) {
 }
 
 async function openPanel(tab) {
-  const url   = chrome.runtime.getURL('popup.html') + '?tabId=' + encodeURIComponent(tab.id);
+  const url   = chrome.runtime.getURL('popup.html') + (tab.id != null ? '?tabId=' + encodeURIComponent(tab.id) : '');
   const saved = (await chrome.storage.local.get(BOUNDS_KEY))[BOUNDS_KEY] || {};
   const base  = { url, type: 'popup', focused: true };
 
@@ -74,5 +80,39 @@ chrome.windows.onBoundsChanged.addListener(async (win) => {
 });
 
 chrome.windows.onRemoved.addListener(async (winId) => {
-  if (winId === await getPanelWindowId()) await chrome.storage.session.remove(WIN_KEY);
+  if (winId === await getPanelWindowId()) await chrome.storage.session.remove([WIN_KEY, 'pipActive']);
+});
+
+// ── Hai chế độ hiển thị ───────────────────────────────────────────────────────
+// 'window': action không có popup → bấm icon chạy onClicked ở trên → mở cửa sổ riêng.
+// 'popup' : gán lại popup.html cho icon → Chrome tự mở popup bám icon như bản cũ.
+// setPopup không giữ qua lần khởi động lại Chrome nên áp lại mỗi khi worker chạy.
+async function getMode() {
+  const o = await chrome.storage.local.get(MODE_KEY);
+  return o[MODE_KEY] === 'popup' ? 'popup' : 'window';
+}
+
+async function applyMode(mode) {
+  await chrome.action.setPopup({ popup: mode === 'popup' ? 'popup.html' : '' });
+}
+
+getMode().then(applyMode);
+chrome.runtime.onInstalled.addListener(async () => applyMode(await getMode()));
+chrome.runtime.onStartup.addListener(async () => applyMode(await getMode()));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[MODE_KEY]) {
+    applyMode(changes[MODE_KEY].newValue === 'popup' ? 'popup' : 'window');
+  }
+});
+
+// Popup gắn icon bấm "Tách cửa sổ" → nhờ background mở cửa sổ riêng cho tab đích
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'OPEN_WINDOW') return false;
+  (async () => {
+    const existing = await getPanelWindowId();
+    if (existing === null || !(await focusExisting(existing, msg.tabId))) {
+      await openPanel({ id: msg.tabId, windowId: msg.windowId });
+    }
+  })().then(() => sendResponse({ ok: true }), err => sendResponse({ ok: false, error: String(err) }));
+  return true;                         // trả lời bất đồng bộ
 });

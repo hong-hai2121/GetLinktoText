@@ -20,17 +20,20 @@ from docx.shared import RGBColor, Pt
 from pydub import AudioSegment
 from collections import Counter
 import gc
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# profiles_config.py / config.py nằm trong <repo>/GetTextFromLink/
+_GETTEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink")
+sys.path.append(_GETTEXT_DIR)
 
 # Giờ mới import được
 from profiles_config import FIREFOX_PROFILE_PATH
 
 # ================= Cấu hình =================
-LINKS_FILE = "linkgettoText.txt"  # File chứa danh sách link video
-OUTPUT_WORD_FILE = "final_result.docx"  # Xuất kết quả ra file Word
-OUTPUT_WORD_FILE2 = "titles_only.docx"  # Xuất kết quả ra file Word
-WHISPER_MODEL_PATH = "whisper_cache"  # Thư mục lưu mô hình Whisper
-OUTPUT_VIDEO_DIR = "output_videos"  # Thư mục lưu video tải xuống
+# Dữ liệu và model dùng chung nằm trong GetTextFromLink/ (không phụ thuộc thư mục đang đứng)
+LINKS_FILE = os.path.join(_GETTEXT_DIR, "linkgettoText.txt")  # File chứa danh sách link video
+OUTPUT_WORD_FILE = os.path.join(_GETTEXT_DIR, "final_result.docx")  # Xuất kết quả ra file Word
+OUTPUT_WORD_FILE2 = os.path.join(_GETTEXT_DIR, "titles_only.docx")  # Xuất kết quả ra file Word
+WHISPER_MODEL_PATH = os.path.join(_GETTEXT_DIR, "whisper_cache")  # Thư mục lưu mô hình Whisper
+OUTPUT_VIDEO_DIR = os.path.join(_GETTEXT_DIR, "output_videos")  # Thư mục lưu video tải xuống
 MODEL_NAME = "medium"  # Đặt đúng tên file mô hình đã có (large-v3,medium,small)
 FFMPEG_PATH = shutil.which("ffmpeg")  # Kiểm tra ffmpeg
 OUTPUT_TITLES_ONLY_FILE = "titles_only.docx"
@@ -104,7 +107,7 @@ clear_output_directory(OUTPUT_VIDEO_DIR)
 
 # Giờ mới import được
 
-GECKODRIVER_PATH = r"D:\Python\GetLinktoText\geckodriver.exe"
+GECKODRIVER_PATH = os.path.join(_GETTEXT_DIR, "geckodriver.exe")
 
 # ✅ Cấu hình Firefox để gửi nội dung đến GPT
 from profiles_config import FIREFOX_PROFILE_PATH
@@ -625,7 +628,7 @@ def process_videos():
         doc = Document()
         doc.save(OUTPUT_WORD_FILE)  # Đảm bảo file tồn tại
     driver = init_firefox()  # Dùng trình duyệt đã mở sẵn
-    with open("linkgettoText.txt", "r", encoding="utf-8") as file:
+    with open(LINKS_FILE, "r", encoding="utf-8") as file:
         links = [line.strip() for line in file.readlines() if line.strip()]
     # Giới hạn chỉ lấy 50 link đầu tiên
     #inks = links[0:4]

@@ -169,13 +169,27 @@
   const tabInfoEl  = document.getElementById('tabInfo');
   const NO_TAB_MSG = 'Không thấy tab Facebook. Mở trang Hoạt động thanh toán rồi bấm lại icon extension.';
   let targetTabId  = Number(new URLSearchParams(location.search).get('tabId')) || null;
+  const MODE_KEY   = 'panelMode';     // 'window' = cửa sổ riêng | 'popup' = bám icon như cũ
+  const btnMode    = document.getElementById('btnMode');
+  let detachedMode = false;           // true khi trang này đang chạy trong cửa sổ riêng
+  const inPip      = new URLSearchParams(location.search).has('pip');   // đang chạy trong cửa sổ nổi (PiP)
+  const btnPip     = document.getElementById('btnPip');
+  const pipOverlay = document.getElementById('pipOverlay');
+  const btnPipOff  = document.getElementById('btnPipOff');
+  let pipWin       = null;            // cửa sổ nổi đang mở (chỉ ở cửa sổ gốc)
+  let pollPaused   = false;           // tạm dừng poll khi bảng đã chuyển sang PiP
 
   function errText(err, fallback) {
     return err?.message === 'NO_FB_TAB' ? NO_TAB_MSG : fallback;
   }
 
   async function findFacebookTab() {
-    // Ưu tiên tab Facebook đang active ở cửa sổ Chrome thường; không có thì tab Facebook bất kỳ
+    // Popup bám icon: tab active của cửa sổ vừa focus chính là tab người dùng đang xem.
+    // (Ở chế độ cửa sổ riêng, cửa sổ vừa focus là chính nó → không khớp, rơi xuống dưới.)
+    const focused = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const cur = focused.find(t => isFacebookUrl(t.url));
+    if (cur) return cur;
+    // Rồi tới tab Facebook đang active ở cửa sổ Chrome thường bất kỳ; cuối cùng là tab Facebook bất kỳ
     const active = await chrome.tabs.query({ active: true, windowType: 'normal' });
     const hit = active.find(t => isFacebookUrl(t.url));
     if (hit) return hit;
@@ -376,12 +390,108 @@
     }
   });
 
+  // ── Chế độ hiển thị: cửa sổ riêng ⇄ popup bám icon ───────────────────────
+
+  if (inPip) {
+    // Trong cửa sổ nổi chỉ hiện bảng điều khiển; đổi chế độ / tắt nổi làm ở cửa sổ gốc
+    btnMode.hidden = true;
+    btnPip.hidden  = true;
+  } else {
+    chrome.windows.getCurrent().then(w => {
+      detachedMode = w.type === 'popup';
+      btnMode.textContent = detachedMode ? 'Gắn vào icon' : 'Tách cửa sổ';
+      btnMode.title = detachedMode
+        ? 'Quay về popup bám icon extension (tự đóng khi bấm ra ngoài)'
+        : 'Mở thành cửa sổ riêng: kéo đi được, không tự đóng khi bấm sang Facebook';
+      // Popup bám icon đóng là PiP đóng theo → nút Luôn nổi chỉ có ở cửa sổ riêng
+      btnPip.hidden = !detachedMode;
+    }).catch(() => {});
+  }
+
+  btnMode.addEventListener('click', async () => {
+    btnMode.disabled = true;
+    clearError();
+    try {
+      let tab = null;
+      try { tab = await getTargetTab(); } catch (_) { /* không có tab Facebook cũng vẫn đổi chế độ */ }
+
+      if (detachedMode) {
+        // → popup bám icon: gán lại popup cho icon, đóng cửa sổ này, thử mở popup ngay
+        await chrome.storage.local.set({ [MODE_KEY]: 'popup' });
+        await chrome.action.setPopup({ popup: 'popup.html' });
+        try { await chrome.action.openPopup(tab ? { windowId: tab.windowId } : {}); } catch (_) { /* Chrome cũ: bấm icon để mở */ }
+        window.close();
+      } else {
+        // → cửa sổ riêng: bỏ popup khỏi icon, nhờ background mở cửa sổ cho tab đích
+        await chrome.storage.local.set({ [MODE_KEY]: 'window' });
+        await chrome.action.setPopup({ popup: '' });
+        const r = await chrome.runtime.sendMessage({ type: 'OPEN_WINDOW', tabId: tab?.id, windowId: tab?.windowId });
+        if (r && r.ok === false) throw new Error(r.error || 'không mở được cửa sổ');
+        window.close();
+      }
+    } catch (err) {
+      btnMode.disabled = false;
+      showError('Không đổi được chế độ: ' + (err?.message || err));
+    }
+  });
+
+  // ── Cửa sổ nổi luôn trên cùng (Document Picture-in-Picture, Chrome 116+) ─────
+  // Extension không có API "always on top"; chỉ cửa sổ PiP được hệ điều hành giữ trên
+  // cùng. PiP sống nhờ cửa sổ gốc (opener) còn sống → thu nhỏ cửa sổ gốc thay vì đóng.
+  // Nội dung PiP là chính popup.html (?pip=1) trong iframe, chạy độc lập, tự poll.
+
+  async function myWindowId() {
+    try { return (await chrome.windows.getCurrent()).id; } catch (_) { return null; }
+  }
+
+  async function openPip() {
+    if (!('documentPictureInPicture' in window)) {
+      showError('Chrome này chưa hỗ trợ cửa sổ nổi (cần Chrome 116 trở lên).');
+      return;
+    }
+    if (pipWin && !pipWin.closed) { pipWin.focus(); return; }
+
+    pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 580, disallowReturnToOpener: true });
+    const d = pipWin.document;
+    d.title = 'FB Billing Scraper';
+    d.body.style.cssText = 'margin:0;overflow:hidden;background:#f0f2f5';
+    const q = new URLSearchParams({ pip: '1' });
+    if (targetTabId !== null) q.set('tabId', String(targetTabId));
+    const frame = d.createElement('iframe');
+    frame.src = chrome.runtime.getURL('popup.html') + '?' + q.toString();
+    frame.style.cssText = 'border:0;display:block;width:100vw;height:100vh';
+    d.body.append(frame);
+    pipWin.addEventListener('pagehide', onPipClosed);
+
+    pipOverlay.hidden = false;
+    pollPaused = true; clearTimeout(pollTimer);          // bảng trong PiP tự poll, tránh gọi đôi
+    await chrome.storage.session.set({ pipActive: true }); // background: đừng kéo cửa sổ gốc lên nữa
+    const id = await myWindowId();
+    if (id !== null) chrome.windows.update(id, { state: 'minimized' }).catch(() => {});
+  }
+
+  async function onPipClosed() {
+    pipWin = null;
+    pipOverlay.hidden = true;
+    await chrome.storage.session.remove('pipActive');
+    if (pollPaused) { pollPaused = false; pollStatus(); }
+    const id = await myWindowId();
+    if (id !== null) chrome.windows.update(id, { state: 'normal', focused: true }).catch(() => {});
+  }
+
+  btnPip.addEventListener('click', () => {
+    clearError();
+    openPip().catch(err => showError('Không mở được cửa sổ nổi: ' + (err?.message || err)));
+  });
+  btnPipOff.addEventListener('click', () => { if (pipWin && !pipWin.closed) pipWin.close(); });
+
   // ── Listen for progress messages from content script ──────────────────────
 
   chrome.runtime.onMessage.addListener((msg, sender) => {
     if (msg.type === 'SET_TARGET_TAB') {          // người dùng bấm icon extension trên tab khác
       targetTabId = Number(msg.tabId) || null;
       clearError();
+      if (pipWin && !pipWin.closed) pipWin.focus(); // đang nổi → đưa cửa sổ nổi lên, cửa sổ gốc vẫn thu nhỏ
       return;
     }
     if (msg.type !== 'PROGRESS') return;
@@ -417,8 +527,9 @@
       }
       // lỗi khác: content script chưa sẵn sàng → thử lại lượt sau
     } finally {
-      // Cửa sổ sống lâu nên vòng poll KHÔNG được dừng (bản popup cũ return sớm là dừng hẳn)
-      pollTimer = setTimeout(pollStatus, 1200);
+      // Cửa sổ sống lâu nên vòng poll KHÔNG được dừng (bản popup cũ return sớm là dừng hẳn),
+      // trừ khi bảng đã chuyển sang cửa sổ nổi (PiP tự poll).
+      if (!pollPaused) pollTimer = setTimeout(pollStatus, 1200);
     }
   }
 

@@ -46,7 +46,8 @@ def center_on_screen(win, w=None, h=None):
 
 
 # ================= CẤU HÌNH =================
-WHISPER_MODEL_PATH = "whisper_cache"
+# Model Whisper dùng chung nằm trong <repo>/GetTextFromLink/whisper_cache
+WHISPER_MODEL_PATH = str(Path(__file__).resolve().parents[1] / "GetTextFromLink" / "whisper_cache")
 MODEL_NAME = "medium"  # large-v3, medium, small
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov")
 

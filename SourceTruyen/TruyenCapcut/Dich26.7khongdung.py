@@ -13,7 +13,7 @@ import random
 SRT_INPUT_DIR = "SourceTruyen/aSRT"
 OUTPUT_DIR = "SourceTruyen/Outputs"
 FIREFOX_PROFILE_PATH = r"C:\\Users\\PC\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\wyo2tlat.GPT Chị Thảo"
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
+GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\GetTextFromLink\\geckodriver.exe"
 CHATGPT_URL = "https://chatgpt.com/"
 GROUP_SIZE = 8
 OVERLAP_STEP = 2

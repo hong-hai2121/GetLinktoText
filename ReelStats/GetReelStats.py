@@ -57,11 +57,13 @@ from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-# File này nằm trong thư mục con ReelStats/. config.py và profiles_config.py ở
-# thư mục gốc dự án -> thêm thư mục cha vào sys.path để import được.
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+# File này nằm trong thư mục con ReelStats/. config.py và profiles_config.py nằm
+# trong thư mục anh em GetTextFromLink/ -> thêm thư mục đó vào sys.path để import được.
+_GETTEXT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink"
+)
+if _GETTEXT_DIR not in sys.path:
+    sys.path.insert(0, _GETTEXT_DIR)
 
 from config import GECKODRIVER_PATH
 from profiles_config import FIREFOX_PROFILE_PATH, PROFILES

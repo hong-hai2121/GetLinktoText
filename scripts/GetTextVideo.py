@@ -21,10 +21,12 @@ from collections import Counter
 import gc
 
 # ================= Cấu hình =================
-LINKS_FILE = "linkgettoText.txt"  # File chứa danh sách link video
-OUTPUT_WORD_FILE = "final_result.docx"  # Xuất kết quả ra file Word
-WHISPER_MODEL_PATH = "whisper_cache"  # Thư mục lưu mô hình Whisper
-OUTPUT_VIDEO_DIR = "output_videos"  # Thư mục lưu video tải xuống
+# Dữ liệu và model dùng chung nằm trong GetTextFromLink/ (không phụ thuộc thư mục đang đứng)
+_GETTEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink")
+LINKS_FILE = os.path.join(_GETTEXT_DIR, "linkgettoText.txt")  # File chứa danh sách link video
+OUTPUT_WORD_FILE = os.path.join(_GETTEXT_DIR, "final_result.docx")  # Xuất kết quả ra file Word
+WHISPER_MODEL_PATH = os.path.join(_GETTEXT_DIR, "whisper_cache")  # Thư mục lưu mô hình Whisper
+OUTPUT_VIDEO_DIR = os.path.join(_GETTEXT_DIR, "output_videos")  # Thư mục lưu video tải xuống
 MODEL_NAME = "medium"  # Đặt đúng tên file mô hình đã có (large-v3,medium,small)
 FFMPEG_PATH = shutil.which("ffmpeg")  # Kiểm tra ffmpeg
 
@@ -91,7 +93,7 @@ def clear_output_directory(directory):
 clear_output_directory(OUTPUT_VIDEO_DIR)
 
 # ✅ Cấu hình Firefox để gửi nội dung đến GPT
-GECKODRIVER_PATH = r"D:\Python\GetLinktoText\geckodriver.exe"
+GECKODRIVER_PATH = os.path.join(_GETTEXT_DIR, "geckodriver.exe")
 FIREFOX_PROFILE_PATH = r"C:\Users\PC\AppData\Roaming\Mozilla\Firefox\Profiles\wyo2tlat.GPT Chị Thảo" #C:\Users\PC\AppData\Roaming\Mozilla\Firefox\Profiles\kt92li14.GPT_DEEPSEEK
 
 def clean_link(line, counter=[0]):

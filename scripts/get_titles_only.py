@@ -11,13 +11,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 from docx import Document
 
 # ====== cấu hình đường dẫn ======
-# Thêm thư mục chứa profiles_config.py vào sys.path
-sys.path.append(r"D:\Python\GetLinktoText")
+# profiles_config.py, geckodriver.exe và file link nằm trong <repo>/GetTextFromLink/
+_GETTEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink")
+sys.path.append(_GETTEXT_DIR)
 from profiles_config import FIREFOX_PROFILE_PATH  # trong đó bạn cấu hình profile Firefox
 
-LINKS_FILE = r"D:\Python\GetLinktoText\linkgettoText.txt"          # file chứa link
-OUTPUT_WORD_FILE = r"D:\Python\GetLinktoText\titles_only.docx"    # file Word để lưu tiêu đề
-GECKODRIVER_PATH = r"D:\Python\GetLinktoText\geckodriver.exe"     # đường dẫn geckodriver
+LINKS_FILE = os.path.join(_GETTEXT_DIR, "linkgettoText.txt")       # file chứa link
+OUTPUT_WORD_FILE = os.path.join(_GETTEXT_DIR, "titles_only.docx")  # file Word để lưu tiêu đề
+GECKODRIVER_PATH = os.path.join(_GETTEXT_DIR, "geckodriver.exe")   # đường dẫn geckodriver
 
 
 # ============ HÀM PHỤ ============

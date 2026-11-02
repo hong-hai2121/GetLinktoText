@@ -12,8 +12,10 @@ from docx import Document
 from docx.shared import RGBColor
 
 # ================= Cấu hình =================
-OUTPUT_VIDEO_DIR = "output_videos"  # Thư mục chứa file transcript_xx.txt textRender2
-OUTPUT_WORD_FILE = "final_result.docx"  # File Word xuất kết quả
+# transcript_xx.txt và file Word nằm trong GetTextFromLink/ (không phụ thuộc thư mục đang đứng)
+_GETTEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "GetTextFromLink")
+OUTPUT_VIDEO_DIR = os.path.join(_GETTEXT_DIR, "output_videos")  # Thư mục chứa file transcript_xx.txt textRender2
+OUTPUT_WORD_FILE = os.path.join(_GETTEXT_DIR, "final_result.docx")  # File Word xuất kết quả
 FIREFOX_PROFILE_PATH = r"C:\Users\PC\AppData\Roaming\Mozilla\Firefox\Profiles\kt92li14.GPT_DEEPSEEK"
 
 def init_firefox():

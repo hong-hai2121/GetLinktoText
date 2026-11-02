@@ -5,7 +5,7 @@ from pathlib import Path
 
 GOC_MYEDIT = Path(__file__).resolve().parent           # .../GetLinktoText/myedit
 GOC_REPO = GOC_MYEDIT.parent                            # .../GetLinktoText
-WHISPER_CACHE = GOC_REPO / "whisper_cache"
+WHISPER_CACHE = GOC_REPO / "GetTextFromLink" / "whisper_cache"   # dùng chung model với GetTextFromLink
 MAU_DIR = GOC_MYEDIT / "mau"
 
 try:

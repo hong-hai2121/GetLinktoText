@@ -145,7 +145,7 @@ def main():
     parser.add_argument("--ffmpeg-dir")
     args = parser.parse_args()
     if os.name != "nt" or sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
-        raise RuntimeError("Run with Python 3.12 64-bit on Windows: py -3.12 GetTextFromLink_Package/packaging/build_installer.py")
+        raise RuntimeError("Run with Python 3.12 64-bit on Windows: py -3.12 GetTextFromLink/GetTextFromLink_Package/packaging/build_installer.py")
     if Path(sys.prefix).resolve() != ENV.resolve():
         python = ENV / "Scripts" / "python.exe"
         if not python.is_file():

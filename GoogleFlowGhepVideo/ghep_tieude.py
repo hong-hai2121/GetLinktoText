@@ -1403,7 +1403,7 @@ def main():
     ap.add_argument("--kich-ban", help="file kịch bản (docx/txt) làm chuẩn chữ cho phụ đề; mặc định = 'Kịch bản - ...' trong thư mục")
     ap.add_argument("--khong-sub", action="store_true", help="không làm phụ đề (mặc định có nếu tìm thấy kịch bản)")
     ap.add_argument("--model-sub", default=None, help="model faster-whisper lấy mốc thời gian (mặc định large-v3-turbo)")
-    ap.add_argument("--thu-muc-model", default=None, help="thư mục cache model (mặc định: models/ cạnh tool -> ../whisper_cache -> HF)")
+    ap.add_argument("--thu-muc-model", default=None, help="thư mục cache model (mặc định: models/ cạnh tool -> ../GetTextFromLink/whisper_cache -> HF)")
     ap.add_argument("--sub-kieu", choices=("karaoke", "thuong"), default="karaoke",
                     help="karaoke = chữ IN HOA trắng viền đen đậm, từ đang đọc tô vàng (ASS, mặc định) | "
                          "thuong = chữ trắng viền đen như cũ (SRT)")

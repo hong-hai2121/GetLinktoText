@@ -10,7 +10,7 @@ import tkinter as tk
 from tkinter import filedialog
 
 # ===== Cấu hình =====
-MODEL_PATH   = r"D:\Python\GetLinktoText\whisper_cache\medium.pt"
+MODEL_PATH   = r"D:\Python\GetLinktoText\GetTextFromLink\whisper_cache\medium.pt"
 OUT_ROOT     = r"D:\truyen"
 TARGET_MIN   = 55            # phút/đoạn
 POST_WINDOW  = 120           # chỉ nhìn 3 phút SAU mốc (giây)

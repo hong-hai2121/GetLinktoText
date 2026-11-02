@@ -2,7 +2,7 @@
 """Bóc băng giọng nói từ video/audio bằng faster-whisper large-v3-turbo (model user chốt, KHÔNG hạ nhỏ hơn).
 
 Dùng cho tính năng "tạo nội dung SEO": video -> văn bản thô -> gửi Gemini sửa + viết mô tả.
-Model tìm theo thứ tự: models/ cạnh tool -> ../whisper_cache (dùng chung GetTextFromLink) -> cache HF.
+Model tìm theo thứ tự: models/ cạnh tool -> ../GetTextFromLink/whisper_cache (dùng chung GetTextFromLink) -> cache HF.
 Model nạp xong giữ suốt phiên, không del (ctranslate2 có thể abort khi hủy model GPU).
 
 Chạy riêng:  python nhan_dien_giong.py "video.mp4" [ra.txt]
@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODEL = "large-v3-turbo"
-THU_MUC_MODEL = [HERE / "models", HERE.parent / "whisper_cache"]
+THU_MUC_MODEL = [HERE / "models", HERE.parent / "GetTextFromLink" / "whisper_cache"]
 GIOI_HAN_GIAY = 180        # video dài hơn 3 phút -> KHÔNG bóc băng, báo VideoQuaDai để app ghi lại link
 _models = {}
 

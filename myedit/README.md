@@ -7,7 +7,7 @@ minh họa lấy từ kho ảnh stock, mỗi cảnh 8-20 giây có hiệu ứng 
 
 | Bước | File | Việc làm | Kết quả |
 |------|------|----------|---------|
-| 1 | `nhandien_audio.py` | faster-whisper (large-v3-turbo, offline từ `../whisper_cache`) | `transcript.json` |
+| 1 | `nhandien_audio.py` | faster-whisper (large-v3-turbo, offline từ `../GetTextFromLink/whisper_cache`) | `transcript.json` |
 | 2 | `chia_canh.py` | Gemini API chia cảnh + sinh từ khóa ảnh tiếng Anh | `canh.json` |
 | 3 | `tai_anh.py` | tải ảnh Pexels / Pixabay / Openverse, crop 1920x1080 | `anh/canh_*.jpg` |
 | 4 | `ghep_video.py` | ffmpeg Ken Burns từng cảnh rồi nối + ghép audio | `video_ra.mp4` |

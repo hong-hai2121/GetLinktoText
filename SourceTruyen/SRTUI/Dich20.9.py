@@ -36,8 +36,9 @@ except Exception:
         pass  # Không có âm thanh trên hệ khác
 
 # ======== Import đường dẫn profile Firefox ========
+# profiles_config.py nằm trong <repo>/GetTextFromLink/
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.append(str(repo_root))
+sys.path.append(str(repo_root / "GetTextFromLink"))
 from profiles_config import FIREFOX_PROFILE_PATH
 
 # ======== Cấu hình chính ========
@@ -45,7 +46,7 @@ SRT_INPUT_DIR = "SourceTruyen/dSRT"       # Thư mục chứa file gốc
 OUTPUT_DIR = "SourceTruyen/Outputs"        # Thư mục lưu file dịch
 OLD_SRT_DIR = "SourceTruyen/old srt"       # Nơi lưu file gốc sau khi hoàn tất
 
-GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\geckodriver.exe"
+GECKODRIVER_PATH = r"D:\\Python\\GetLinktoText\\GetTextFromLink\\geckodriver.exe"
 CHATGPT_URL = "https://chatgpt.com/"
 
 GROUP_SIZE = 60
