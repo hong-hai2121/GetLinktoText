@@ -190,17 +190,24 @@ def set_pf(it, name, status, result=None, error=None):
         e["result"] = result
     if error is not None:
         e["error"] = error
+    if status == STATUS_DONE:
+        e.pop("loi_truoc", None)
     update_status(it)
     return it
 
 
 def reset_errors(items, only=None):
-    """'Đăng lại lỗi': nền tảng đang lỗi -> chờ (only: chỉ nền tảng đó). Trả về số ô được reset."""
+    """'Đăng lại phần thiếu': nền tảng đang lỗi -> chờ (only: chỉ nền tảng đó). Chữ lỗi cũ giữ ở
+    'loi_truoc' để còn xem được vì sao (user 02/11/2026: trước đây xoá sạch, không tìm lại được).
+    Trả về số ô được reset."""
     n = 0
     for it in items:
         for p in it["platforms"]:
             if it["pf"][p]["status"] == STATUS_ERROR and (only is None or p in only):
+                loi = it["pf"][p].get("error") or it["pf"][p].get("loi_truoc") or ""
                 it["pf"][p] = _pf_entry()
+                if loi:
+                    it["pf"][p]["loi_truoc"] = loi
                 n += 1
         update_status(it)
     return n

@@ -234,7 +234,7 @@ HTML = r"""<!doctype html>
 <script>
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-  let armed = 0, lastLog = "", lastTd = "";
+  let lastLog = "", lastTd = "";
   function render(s){
     $('dot').className = 'dot' + (s.server ? ' on' : '');
     $('tt').textContent = s.server ? 'SERVER ĐANG CHẠY' : 'SERVER ĐÃ DỪNG';
@@ -270,9 +270,8 @@ HTML = r"""<!doctype html>
   $('open').onclick = () => pywebview.api.mo_giao_dien();
   $('copy').onclick = async () => { const ok = await pywebview.api.sao_chep();
     $('copy').textContent = ok ? 'Đã sao chép ✔' : 'Lỗi'; setTimeout(() => $('copy').textContent = 'Sao chép', 1500); };
-  $('stop').onclick = () => {
-    if (!armed){ armed = 1; $('stop').textContent = 'Bấm lần nữa để dừng'; setTimeout(() => { armed = 0; $('stop').textContent = 'Dừng server & thoát'; }, 3000); return; }
-    $('stop').textContent = 'Đang dừng...'; pywebview.api.dung();
+  $('stop').onclick = () => {   // bấm 1 lần là dừng, không hỏi lại (user 02/11/2026)
+    $('stop').disabled = true; $('stop').textContent = 'Đang dừng...'; pywebview.api.dung();
   };
 </script></body></html>"""
 

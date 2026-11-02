@@ -8,7 +8,8 @@ MỘT hàng đợi cho cả ba nền tảng: mỗi mục tick [YouTube][TikTok][
 Worker gom theo nền tảng: nối trình duyệt của YouTube -> đăng hết mục chờ -> ngắt, rồi TikTok, rồi
 Zalo (mỗi nền tảng một profile/trình duyệt riêng, xem config.json mục "platforms"; relay của
 chrome_cdp chỉ nối được một profile một lúc). Lỗi ở một nền tảng: đánh dấu lỗi mục đó, dừng nền
-tảng đó (tab giữ nguyên để xem) và chuyển sang nền tảng kế; "Đăng lại lỗi" chỉ làm lại phần lỗi.
+tảng đó (tab giữ nguyên để xem) và chuyển sang nền tảng kế; "Đăng lại phần thiếu" (api_dang_lai) đưa ô lỗi
+về chờ (giữ chữ lỗi cũ) rồi đăng ngay các ô còn chờ; YouTube đối chiếu kênh trước để không tải trùng.
 
 Nội dung: YouTube = tiêu đề + mô tả đầy đủ + thẻ + playlist; TikTok và Zalo = MỘT dòng tiêu đề
 + hashtag (ô "Hashtag" hoặc dòng cuối của mô tả). Giờ công bố dùng chung cho cả ba.
@@ -19,6 +20,7 @@ Chrome riêng, không đóng Chrome, cookie/đăng nhập là của profile th�
 Server chỉ nghe trên 127.0.0.1 (máy này) — không mở ra mạng LAN vì nó điều khiển Chrome của bạn.
 """
 import json
+import os
 import queue
 import threading
 import webbrowser
@@ -459,6 +461,12 @@ def _seo_worker():
         _tu_bat_dau_dang()
 
 
+def _khoa_video(p):
+    """Khoá so trùng video: file cục bộ bỏ khác biệt hoa/thường + dấu gạch; link Drive giữ nguyên."""
+    p = (p or "").strip().strip('"')
+    return os.path.normcase(os.path.normpath(p)) if p and not pq.is_drive(p) else p
+
+
 def api_tao_noi_dung(data):
     """Xếp một hoặc nhiều video (đường dẫn file / link Drive) vào danh sách AI; worker nền chạy lần lượt."""
     raw = data.get("sources")
@@ -487,31 +495,45 @@ def api_tao_noi_dung(data):
                 return {"ok": False, "msg": err}
         if not S.cfg.get("schedule_times"):
             return {"ok": False, "msg": "Chưa có khung giờ công bố — nhập ở mục Lịch (ví dụ 08:00, 19:00)."}
-    xoa_cu = bool(data.get("clear_queue", tu_dong))   # tự thêm: dọn sạch hàng đợi + kết quả AI cũ, chỉ còn loạt mới
+    xoa_cu = bool(data.get("clear_queue", tu_dong))   # tự thêm: dọn hàng đợi + kết quả AI cũ, chỉ còn loạt mới
+    pf_moi = pq.normalize_platforms(platforms) if platforms else None
+    cho_them = []                            # job AI đã xong của video chọn lại nhưng chưa vào hàng đợi
     with S.lock:
         if S.running:
             return {"ok": False, "msg": "Đang đăng video — chờ xong rồi tạo nội dung (dùng chung trình duyệt)."}
+        # video chọn lại mà đã có từ trước (hàng đợi / danh sách AI) thì giữ nguyên, không làm lại (user 02/11/2026)
+        file_cua = {j["nguon"]: _khoa_video((j.get("ket_qua") or {}).get("file")) for j in S.seo_jobs}
+        chon = {_khoa_video(s) for s in nguon_list} | {file_cua[s] for s in nguon_list if file_cua.get(s)}
         if xoa_cu:
-            cu = [it for it in S.items if not pq.is_running(it)]
+            cu = [it for it in S.items if not pq.is_running(it) and _khoa_video(it["link"]) not in chon]
             if cu:
                 _nho_gio_da_dung(cu)
-                S.items = [it for it in S.items if pq.is_running(it)]
+                S.items = [it for it in S.items if pq.is_running(it) or _khoa_video(it["link"]) in chon]
                 pq.save_queue(S.items)
                 S.log(f"🧹 Tự thêm vào hàng đợi: đã xoá {len(cu)} mục cũ trong hàng đợi để nhận loạt mới.")
-            S.seo_jobs = [j for j in S.seo_jobs if j["status"] in ("chờ", "đang chạy")]
-        them = bo_qua = 0
+            S.seo_jobs = [j for j in S.seo_jobs if j["status"] in ("chờ", "đang chạy") or j["nguon"] in nguon_list]
+        trong_hd = {_khoa_video(it["link"]) for it in S.items}
+        them = da_co = 0
         for nguon in nguon_list:
             cu = next((j for j in S.seo_jobs if j["nguon"] == nguon), None)
-            if cu and cu["status"] in ("chờ", "đang chạy"):
-                bo_qua += 1
+            if _khoa_video(nguon) in trong_hd or (file_cua.get(nguon) or None) in trong_hd:
+                da_co += 1                   # đã nằm trong hàng đợi
+                continue
+            if cu and cu["status"] in ("chờ", "đang chạy", "xong"):
+                da_co += 1                   # đang chờ AI / đã có nội dung AI
+                if tu_dong and cu["status"] == "chờ":
+                    cu.update(tu_dong=True, platforms=pf_moi)
+                elif tu_dong and cu["status"] == "xong":
+                    cu["platforms"] = pf_moi
+                    cho_them.append(cu)
                 continue
             if cu:
-                S.seo_jobs.remove(cu)        # làm lại video đã xong/lỗi/bỏ trước đó
+                S.seo_jobs.remove(cu)        # lần trước lỗi / bị bỏ -> làm lại
             S.seo_seq += 1
             S.seo_jobs.append({"id": f"ai{S.seo_seq}", "nguon": nguon, "ten": _ten_nguon(nguon),
                                "status": "chờ", "buoc": "", "loi": "", "loi_chi_tiet": "", "nhan_dien": "",
                                "ket_qua": None, "da_them": False, "tu_dong": tu_dong, "backend": backend,
-                               "platforms": pq.normalize_platforms(platforms) if platforms else None})
+                               "platforms": pf_moi})
             them += 1
         if S.cfg.get("ai_backend") != backend:
             S.cfg["ai_backend"] = backend
@@ -523,13 +545,19 @@ def api_tao_noi_dung(data):
             S.seo_stop.clear()
     if bat_dau:
         S.auto_q.put(_seo_worker)
+    vao_hd = sum(1 for j in cho_them if _tu_them_hang_doi(j))   # có sẵn nội dung AI -> vào hàng đợi luôn
+    if vao_hd:
+        _luu_jobs()
+    bo_qua = f"bỏ qua {da_co} video đã có trong danh sách" + (f", {vao_hd} trong đó vừa đưa vào hàng đợi" if vao_hd else "")
     if not them:
-        return {"ok": False, "msg": "Các video này đang trong danh sách chờ rồi."}
+        if vao_hd and not S.seo_running:
+            _tu_bat_dau_dang()
+        return {"ok": True, "msg": f"Không có video mới — {bo_qua}."}
     ten_ai = "ChatGPT (Codex CLI)" if backend == "chatgpt" else "Gemini (trình duyệt)"
-    msg = f"Đã xếp {them} video: nhận diện giọng nói rồi gửi {ten_ai} lần lượt (một hội thoại chung)"
-    if bo_qua:
-        msg += f" (bỏ qua {bo_qua} đang chờ sẵn)"
-    return {"ok": True, "msg": msg + (" — xong tự thêm vào hàng đợi (đã dọn hàng đợi cũ)." if tu_dong else " — theo dõi ở bước 2.")}
+    msg = f"Đã xếp {them} video mới: nhận diện giọng nói rồi gửi {ten_ai} lần lượt (một hội thoại chung)"
+    if da_co:
+        msg += f" ({bo_qua})"
+    return {"ok": True, "msg": msg + (" — xong tự thêm vào hàng đợi." if tu_dong else " — theo dõi ở bước 2.")}
 
 
 def api_seo_edit(data):
@@ -903,6 +931,30 @@ def api_retry_errors(data):
     return {"ok": True, "msg": f"Đã đưa {n} ô lỗi về chờ — bấm Bắt đầu đăng để làm lại."}
 
 
+def api_dang_lai(data):
+    """'Đăng lại phần thiếu' (user 02/11/2026): MỘT nút là chạy — ô lỗi -> chờ (chữ lỗi cũ giữ ở loi_truoc để
+    còn xem), rồi đăng ngay các nền tảng còn ô chờ; video đã xong không đụng. YouTube còn đối chiếu kênh
+    trước khi tải (_bo_video_da_co_tren_kenh) nên lần trước lỗi sau nút Lưu cũng không bị đăng trùng."""
+    only = [_valid_platform(data["platform"])] if data.get("platform") else list(pq.PLATFORMS)
+    with S.lock:
+        if S.running:
+            return {"ok": False, "msg": "Đang chạy rồi."}
+        n = pq.reset_errors(S.items, only)
+        if n:
+            pq.save_queue(S.items)
+        thieu = {p: sum(1 for it in S.items if p in pq.pending_platforms(it, [p])) for p in only}
+    chay = [p for p in only if thieu[p]]
+    if not chay:
+        return {"ok": False, "msg": "Không có ô nào thiếu / lỗi" + (f" ở {LABEL[only[0]]}." if len(only) == 1 else ".")}
+    S.log("↻ Đăng lại phần thiếu: " + (f"{n} ô lỗi về chờ; " if n else "")
+          + ", ".join(f"{LABEL[p]} {thieu[p]}" for p in chay) + " — video đã xong giữ nguyên.")
+    data = dict(data)
+    data["platforms"] = chay
+    if not (data.get("times") or "").strip():
+        data["times"] = ", ".join(S.cfg.get("schedule_times") or [])
+    return api_start(data)
+
+
 # ------------------------------------------------------------------ hành động
 def api_check_connection(data):
     name = _valid_platform(data.get("platform"))
@@ -1103,6 +1155,38 @@ def _gio_som_nhat():
     return t.replace(minute=t.minute - t.minute % 15, second=0, microsecond=0)
 
 
+def _khop_ten(s):
+    return " ".join((s or "").lower().split())[:90]      # Studio có thể cắt tiêu đề dài -> so 90 ký tự đầu
+
+
+def _bo_video_da_co_tren_kenh(page, todo):
+    """YouTube: trước khi đăng, đọc các video ĐANG LÊN LỊCH trên kênh; mục chờ nào trùng tiêu đề + ngày công bố
+    thì ghi xong kèm link kênh, không tải lại (user 02/11/2026: lần trước lỗi sau nút Lưu nhưng video đã lên
+    lịch thật, 'Đăng lại' tải trùng). Trả về các mục còn phải đăng."""
+    try:
+        tren_kenh = youtube_upload.video_tren_kenh(page, log=S.log)
+    except Exception as e:                  # noqa: BLE001
+        S.log(f"  ⚠ Không đọc được danh sách video trên kênh ({str(e).splitlines()[0][:120]}) — đăng như thường.")
+        return todo
+    con = []
+    with S.lock:
+        for it in todo:
+            ten = _khop_ten(it.get("title") or Path(it.get("file") or it["link"]).stem)
+            dt = pq.parse_dt(it.get("scheduled_at"))
+            ngay = dt.date() if dt else None
+            link = next((l for t, l, d in tren_kenh if _khop_ten(t) == ten and (d is None or ngay is None or d == ngay)), None)
+            if link:
+                pq.set_pf(it, "youtube", pq.STATUS_DONE, result=link, error="")
+                S.log(f"  ✓ Đã có trên kênh (lên lịch {ngay:%d/%m}), không đăng lại: {it.get('title')} — {link}"
+                      if ngay else f"  ✓ Đã có trên kênh, không đăng lại: {it.get('title')} — {link}")
+            else:
+                con.append(it)
+        if len(con) != len(todo):
+            pq.save_queue(S.items)
+    S.log(f"  Kênh YouTube: {len(tren_kenh)} video đang lên lịch — {len(todo) - len(con)} trùng mục chờ, còn {len(con)} cần đăng.")
+    return con
+
+
 def _run_platform(name, dry_run):
     """Nối trình duyệt của một nền tảng, đăng mọi mục còn chờ ở nền tảng đó, ngắt.
     Trả về (số xong, số lỗi)."""
@@ -1132,6 +1216,10 @@ def _run_platform(name, dry_run):
         return 0, len(todo)
     giu_tab = False                 # True = dừng vì lỗi, để tab mở cho người dùng xem
     try:
+        if name == "youtube" and not dry_run:
+            truoc = len(todo)
+            todo = _bo_video_da_co_tren_kenh(page, todo)
+            done += truoc - len(todo)
         for it in todo:
             if S.stop_flag.is_set():
                 break
@@ -1195,14 +1283,19 @@ def _run_platform(name, dry_run):
 def _worker(dry_run, only):
     tong = {}
     try:
-        # trước khi đăng: đọc lịch thật trên nền tảng rồi xếp lại giờ cho mọi mục chưa đăng ở đâu
-        _cap_nhat_lich_that()
+        # trước khi đăng: đọc lịch thật trên nền tảng rồi xếp lại giờ cho mọi mục chưa đăng ở đâu.
+        # Đăng lại phần thiếu (mọi mục chờ đã có giờ cố định vì nền tảng khác đăng rồi) thì bỏ qua bước này
+        # cho nhanh — khỏi nối cả 3 trình duyệt đọc lịch rồi mới tới việc chính (user 02/11/2026).
         with S.lock:
             xep = [it for it in S.items if pq.reschedulable(it) and pq.pending_platforms(it, only)]
-            if xep:
+        if xep:
+            _cap_nhat_lich_that()
+            with S.lock:
                 _xep_gio(reassign=True)
                 pq.save_queue(S.items)
                 S.log("📅 Giờ công bố: " + "; ".join(f"{pq.short_link(it['link'])[:30]} → {pq.fmt_dt(it['scheduled_at'])}" for it in xep))
+        else:
+            S.log("📅 Mọi mục chờ đã có giờ công bố cố định (nền tảng khác đã đăng) — bỏ qua bước đọc lịch, đăng ngay phần thiếu.")
         for name in pq.PLATFORMS:
             if name not in only:
                 continue
@@ -1215,7 +1308,7 @@ def _worker(dry_run, only):
         elif dry_run:
             S.log(f"✓ Chạy thử xong: {tom_tat}. Các tab vẫn mở để bạn kiểm tra.")
         elif any(e for _d, e in tong.values()):
-            S.log(f"⚠ Hết lượt đăng, có lỗi: {tom_tat}. Sửa xong bấm 'Đăng lại lỗi'.")
+            S.log(f"⚠ Hết lượt đăng, có lỗi: {tom_tat}. Sửa xong bấm 'Đăng lại phần thiếu'.")
         else:
             S.log(f"🎉 Hết hàng đợi: {tom_tat}.")
     except Exception as e:
@@ -1245,6 +1338,7 @@ ROUTES = {
     "/api/delete": api_delete,
     "/api/clear_finished": api_clear_finished,
     "/api/retry_errors": api_retry_errors,
+    "/api/dang_lai": api_dang_lai,
     "/api/check_connection": api_check_connection,
     "/api/start": api_start,
     "/api/stop": api_stop,

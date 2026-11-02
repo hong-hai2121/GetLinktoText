@@ -118,8 +118,7 @@ textarea{resize:vertical}
 .ai-badges span{font-size:11.5px;padding:4px 11px;border-radius:999px;font-weight:600;
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4)}
 .ai-body{padding:16px 18px 18px;background:linear-gradient(180deg,#faf5ff 0%,#fff 55%)}
-.ai-steps{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media (max-width:900px){.ai-steps{grid-template-columns:1fr}}
+.ai-steps{display:grid;grid-template-columns:1fr;gap:14px}   /* bước 1 và 2 mỗi bước một hàng (user 02/11/2026) */
 .step{border-radius:12px;padding:14px 16px;border:1px solid var(--step-bd);background:var(--step-bg);min-width:0}
 .step header{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}
 .step header .num{width:25px;height:25px;border-radius:50%;background:var(--step-c);color:#fff;font-weight:700;
@@ -129,6 +128,11 @@ textarea{resize:vertical}
 .s1{--step-c:#2563eb;--step-bg:#eff6ff;--step-bd:#bfdbfe;--step-sh:rgba(37,99,235,.35);--step-ring:#bfdbfe}
 .s2{--step-c:#7c3aed;--step-bg:#f5f3ff;--step-bd:#ddd6fe;--step-sh:rgba(124,58,237,.35);--step-ring:#ddd6fe}
 .s3{--step-c:#16a34a;--step-bg:#f0fdf4;--step-bd:#bbf7d0;--step-sh:rgba(22,163,74,.35);--step-ring:#bbf7d0;margin-top:14px}
+/* bước 3 bấm tiêu đề để ẩn / hiện (nhớ qua localStorage) */
+.s3 header{cursor:pointer;user-select:none;margin-bottom:0}
+.s3 header .caret{color:var(--dim);transition:transform .15s;font-size:15px}
+.s3.thu header .caret{transform:rotate(-90deg)}
+.s3.thu #seoResults{display:none}
 .step input[type=text],.step select,.step textarea{border-color:var(--step-bd)}
 .step input:focus,.step select:focus,.step textarea:focus{outline:2px solid var(--step-ring);border-color:var(--step-c)}
 .or{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11px;margin:9px 0;text-transform:uppercase;letter-spacing:.08em}
@@ -180,6 +184,7 @@ textarea{resize:vertical}
 .filelist input{accent-color:var(--step-c);width:15px;height:15px;flex:none}
 .filelist .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .filelist .meta{color:var(--dim);font-size:11.5px;white-space:nowrap}
+.filelist .daco{flex:none;font-size:11px;font-weight:700;color:#15803d;background:#dcfce7;padding:1px 8px;border-radius:999px}
 .empty-s{padding:14px;text-align:center;color:var(--dim);font-size:12.5px}
 .check.auto{font-size:12.5px;margin:0 0 10px;color:#5b21b6}
 .check.auto input{accent-color:#7c3aed}
@@ -263,6 +268,7 @@ td.kq{word-break:break-all;color:var(--dim);max-width:360px;font-size:12.5px}
 td.kq a{color:var(--blue)}
 td.kq .pfn{color:var(--fg);font-weight:600}
 td.kq .er{color:#b91c1c}
+td.kq .er.cu{color:#b45309}
 .empty{padding:26px;text-align:center;color:var(--dim)}
 
 /* ---------------- nhật ký ---------------- */
@@ -346,7 +352,7 @@ td.kq .er{color:#b91c1c}
               <label class="check"><input type="checkbox" class="pfsel" value="tiktok" checked>TikTok</label>
               <label class="check"><input type="checkbox" class="pfsel" value="zalo" checked>Zalo</label>
             </div>
-            <label class="check auto"><input type="checkbox" id="seoAuto" checked>Tự thêm vào hàng đợi khi xong rồi tự ▶ Bắt đầu đăng (không cần duyệt từng video — xoá hết hàng đợi cũ trước)</label>
+            <label class="check auto"><input type="checkbox" id="seoAuto" checked>Tự thêm vào hàng đợi khi xong rồi tự ▶ Bắt đầu đăng (không cần duyệt từng video — xoá hàng đợi cũ trước, video chọn lại đã có thì giữ nguyên)</label>
             <button class="ai-run" id="btnSeoRun">✨ Tạo nội dung</button>
             <ol class="pipe" id="seoPipe">
               <li data-k="tai">Video</li><li data-k="boc">Nhận diện giọng nói</li><li data-k="gem">AI viết</li><li data-k="xong">Xong</li>
@@ -362,8 +368,9 @@ td.kq .er{color:#b91c1c}
         </div>
 
         <section class="step s3" id="seoResult" style="display:none">
-          <header><span class="num">3</span><h4>Kết quả</h4><small>mỗi video một thẻ — sửa trực tiếp nếu cần rồi thêm vào hàng đợi (nền tảng tick ở bước 2)</small>
-            <button class="ai-add sm" id="btnSeoAddAll" style="margin-left:auto">➕ Thêm tất cả chưa thêm</button></header>
+          <header id="seoResHead" title="Bấm để ẩn / hiện kết quả"><span class="num">3</span><h4>Kết quả</h4><small>mỗi video một thẻ — sửa trực tiếp nếu cần rồi thêm vào hàng đợi (nền tảng tick ở bước 2)</small>
+            <span class="pick" id="seoResCnt">0 video</span>
+            <button class="ai-add sm" id="btnSeoAddAll">➕ Thêm tất cả chưa thêm</button><span class="caret">▾</span></header>
           <div id="seoResults"></div>
         </section>
       </div>
@@ -374,7 +381,7 @@ td.kq .er{color:#b91c1c}
       <div class="toolbar">
         <button class="btn primary" id="btnStart">▶&nbsp; Bắt đầu đăng</button>
         <button class="btn" id="btnStop">⏹ Dừng sau video này</button>
-        <button class="btn" id="btnRetry" title="Đưa các ô 'lỗi' về 'chờ' để đăng lại phần chưa xong">↻ Đăng lại lỗi</button>
+        <button class="btn" id="btnRetry" title="Ô 'lỗi' về 'chờ' (vẫn giữ chữ lỗi cũ để xem) rồi đăng ngay các ô còn chờ — video đã xong giữ nguyên; YouTube tự đối chiếu kênh, video đã lên lịch sẵn thì không tải lại">↻ Đăng lại phần thiếu</button>
         <button class="btn" id="btnDelete">Xoá dòng chọn</button>
         <button class="btn" id="btnClear">Dọn mục xong/lỗi</button>
         <label class="check" style="margin-left:auto">
@@ -566,7 +573,7 @@ function platformPage(n) {
       <div class="toolbar">
         <button class="btn primary" id="${n}-start">▶&nbsp; Chỉ đăng ${L}</button>
         <button class="btn" id="${n}-stop">⏹ Dừng sau video này</button>
-        <button class="btn" id="${n}-retry">↻ Đăng lại lỗi ${L}</button>
+        <button class="btn" id="${n}-retry" title="Ô lỗi ${L} về chờ (giữ chữ lỗi cũ) rồi đăng ngay các ô ${L} còn chờ">↻ Đăng lại phần thiếu ${L}</button>
         <span class="hint" style="margin:0 0 0 auto">Ô "Chỉ chạy thử" ở tab YouTube cũng áp dụng cho nút này.</span>
       </div>
       <div class="tbl-wrap">
@@ -592,12 +599,14 @@ const stPill = (st, title) => `<span class="st ${ST_CLASS[st] || "st-wait"}" tit
 function pfCell(it, p) {
   if (!it.platforms.includes(p)) return `<td class="pf"><span class="na" title="không đăng ${PF_LABEL[p]}">–</span></td>`;
   const e = it.pf[p];
-  return `<td class="pf">${stPill(e.status, e.error || e.result)}</td>`;
+  return `<td class="pf">${stPill(e.status, e.error || e.result || (e.loi_truoc ? "lần trước: " + e.loi_truoc : ""))}</td>`;
 }
 function kqCell(it, only) {
   const lines = it.platforms.filter(p => !only || p === only).map(p => {
     const e = it.pf[p];
-    const txt = e.error ? `<span class="er">❌ ${esc(e.error)}</span>` : linkify(e.result);
+    let txt = e.error ? `<span class="er">❌ ${esc(e.error)}</span>` : linkify(e.result);
+    // ô đã đưa về chờ bằng "Đăng lại phần thiếu": vẫn hiện lỗi lần trước (mờ) tới khi đăng xong
+    if (!txt && e.loi_truoc && e.status !== "xong") txt = `<span class="er cu" title="Lỗi lần đăng trước — ô này đang chờ đăng lại">⟲ lần trước: ${esc(e.loi_truoc)}</span>`;
     if (!txt) return "";
     return only ? txt : `<span class="pfn">${PF_SHORT[p]}:</span> ${txt}`;
   }).filter(Boolean);
@@ -696,6 +705,8 @@ function renderPlatformCards(st) {
 }
 function render(st) {
   lastState = st;
+  const sig = [...daCoKeys(st)].sort().join("|");   // nhãn "đã có" ở bước 1 chỉ vẽ lại khi danh sách đổi
+  if (sig !== daCoSig) { daCoSig = sig; if (seoFiles.length) renderFiles(); }
   if (!formLoaded) {            // chỉ nạp form 1 lần, khỏi đè lên chữ đang gõ
     $("token").value = st.token; $("times").value = st.times; $("start").value = st.start;
     $("desc").value = st.desc; $("playlist").value = st.playlist;
@@ -768,6 +779,17 @@ function startRun(only) {
     : `Tải lên và lên lịch: ${chi_tiet} video?${only ? "" : "\nThứ tự: YouTube → TikTok → Zalo, mỗi nền tảng nối một trình duyệt."}`;
   if (confirm(msg)) post("/api/start", {...formData(), dry_run: dry, platforms: only ? [only] : null});
 }
+// "Đăng lại phần thiếu": một nút là chạy — ô lỗi về chờ (giữ chữ lỗi cũ) rồi đăng ngay các ô còn chờ (user 02/11/2026)
+function dangLai(only) {
+  const items = lastState?.items || [];
+  const pfs = only ? [only] : PF;
+  const thieu = pfs.map(p => [p, items.filter(it => it.platforms.includes(p) && ["chờ", "lỗi"].includes(it.pf[p].status)).length]).filter(([, n]) => n);
+  if (!thieu.length) return toast("Không có ô nào thiếu / lỗi" + (only ? ` ở ${PF_LABEL[only]}.` : "."), false);
+  const chi_tiet = thieu.map(([p, n]) => `${PF_LABEL[p]} ${n}`).join(", ");
+  if (!confirm(`Đăng lại phần thiếu: ${chi_tiet} video — chỉ các ô còn chờ / lỗi, video đã xong giữ nguyên.\n`
+             + `YouTube tự đối chiếu kênh trước: video đã lên lịch sẵn thì ghi link, không tải lại.\nTiếp tục?`)) return;
+  post("/api/dang_lai", {...formData(), dry_run: $("dryRun").checked, platform: only || null});
+}
 
 // ---------- Tạo nội dung bằng AI (bóc băng + Gemini) — chạy loạt nhiều video ----------
 const STAGES = ["tai", "boc", "gem", "xong"];
@@ -781,12 +803,22 @@ function updatePick() {
   $("seoPick").textContent = `${n} video`;
   $("btnSeoRun").textContent = n > 1 ? `✨ Tạo nội dung cho ${n} video` : "✨ Tạo nội dung";
 }
+// khoá so trùng giống _khoa_video bên server: file cục bộ không phân biệt hoa/thường, / hay \
+const khoaVideo = p => /drive\.google\.com|docs\.google\.com/.test(p || "") ? (p || "").trim() : (p || "").trim().replace(/\//g, "\\").toLowerCase();
+function daCoKeys(st) {   // video đã có từ trước (hàng đợi / danh sách AI chưa lỗi) -> bấm Tạo nội dung sẽ bỏ qua
+  const s = new Set();
+  (st?.items || []).forEach(it => s.add(khoaVideo(it.link)));
+  (st?.seo_jobs || []).forEach(j => { if (j.status !== "lỗi" && j.status !== "bỏ") s.add(khoaVideo(j.nguon)); });
+  return s;
+}
+let daCoSig = "";
 function renderFiles() {
   const box = $("seoFiles");
   if (!seoFiles.length) { box.innerHTML = '<div class="empty-s">Downloads không có video (.mp4 / .mov / .mkv / .m4v).</div>'; return; }
+  const daCo = daCoKeys(lastState);
   box.innerHTML = seoFiles.map(f => `
     <label class="${seoPicked.has(f.path) ? "sel" : ""}"><input type="checkbox" value="${esc(f.path)}" ${seoPicked.has(f.path) ? "checked" : ""}>
-      <span class="nm" title="${esc(f.path)}">${esc(f.name)}</span><span class="meta">${f.size_mb} MB · ${esc(f.mtime)}</span></label>`).join("");
+      <span class="nm" title="${esc(f.path)}">${esc(f.name)}</span>${daCo.has(khoaVideo(f.path)) ? '<span class="daco" title="Đã có trong danh sách từ trước — chọn lại sẽ không thêm lần nữa">đã có</span>' : ""}<span class="meta">${f.size_mb} MB · ${esc(f.mtime)}</span></label>`).join("");
   box.querySelectorAll("input").forEach(cb => cb.addEventListener("change", () => {
     cb.checked ? seoPicked.add(cb.value) : seoPicked.delete(cb.value);
     cb.closest("label").classList.toggle("sel", cb.checked);
@@ -811,9 +843,10 @@ $("btnSeoRun").onclick = async () => {
   if (!sources.length) return toast("Tick video trong Downloads hoặc dán link Drive.", false);
   const auto = $("seoAuto").checked, pf = selectedPlatforms();
   if (auto && !pf.length) return toast("Tự thêm vào hàng đợi: tick ít nhất một nền tảng.", false);
-  if (auto) {   // tự thêm = loạt mới thay loạt cũ: xoá hết hàng đợi (kể cả mục đã xong / đang chờ) + kết quả AI cũ
-    const n = (lastState?.items || []).length;
-    if (n && !confirm(`Tự thêm vào hàng đợi: sẽ XOÁ ${n} mục đang có trong hàng đợi (cả đã xong lẫn đang chờ) để nhận loạt mới.\nTiếp tục?`)) return;
+  if (auto) {   // tự thêm = loạt mới thay loạt cũ: xoá các mục hàng đợi KHÔNG được chọn lại; video chọn lại đã có thì giữ nguyên
+    const chon = new Set(sources.map(khoaVideo));
+    const n = (lastState?.items || []).filter(it => !chon.has(khoaVideo(it.link))).length;
+    if (n && !confirm(`Tự thêm vào hàng đợi: sẽ XOÁ ${n} mục đang có trong hàng đợi (cả đã xong lẫn đang chờ) để nhận loạt mới.\nVideo chọn lại mà đã có thì giữ nguyên, không thêm lần nữa.\nTiếp tục?`)) return;
   }
   const backend = (document.querySelector("input[name=aiBackend]:checked") || {}).value || "gemini";
   const j = await post("/api/tao_noi_dung", {sources, auto_add: auto, clear_queue: auto, platforms: pf, backend,
@@ -931,6 +964,13 @@ $("btnSeoAddAll").onclick = async () => {
   if (!cards.length) return toast("Không còn kết quả nào chưa thêm.", false);
   for (const d of cards) await addResult(d);
 };
+// bước 3: bấm tiêu đề để thu / bung (nút trong tiêu đề không tính); trạng thái nhớ qua localStorage
+try { if (localStorage.getItem("seoResThu") === "1") $("seoResult").classList.add("thu"); } catch (e) {}
+$("seoResHead").onclick = e => {
+  if (e.target.closest("button")) return;
+  const thu = $("seoResult").classList.toggle("thu");
+  try { localStorage.setItem("seoResThu", thu ? "1" : "0"); } catch (e) {}
+};
 function renderResults(jobs) {
   const box = $("seoResults");
   const done = jobs.filter(j => j.status === "xong" && j.ket_qua);
@@ -945,7 +985,9 @@ function renderResults(jobs) {
     if (j.da_them && !d.classList.contains("added")) { d.classList.add("added"); d.open = false; }
   });
   $("seoResult").style.display = done.length ? "" : "none";
-  $("btnSeoAddAll").style.display = done.some(j => !j.da_them) ? "" : "none";
+  const chua = done.filter(j => !j.da_them).length;
+  $("seoResCnt").textContent = chua ? `${chua} chưa thêm / ${done.length} video` : `${done.length} video`;
+  $("btnSeoAddAll").style.display = chua ? "" : "none";
 }
 let backendInit = false;
 function renderSeo(st) {
@@ -985,7 +1027,7 @@ loadDownloads();
 
 $("btnStart").onclick = () => startRun(null);
 $("btnStop").onclick = () => post("/api/stop");
-$("btnRetry").onclick = () => post("/api/retry_errors", {});
+$("btnRetry").onclick = () => dangLai(null);
 $("btnDelete").onclick = () => {
   if (!checked.size) return toast("Chưa chọn dòng nào.", false);
   post("/api/delete", {ids: [...checked]}).then(() => checked.clear());
@@ -1009,7 +1051,7 @@ $("selAll").onchange = e => {
   };
   $(n + "-start").onclick = () => startRun(n);
   $(n + "-stop").onclick = () => post("/api/stop");
-  $(n + "-retry").onclick = () => post("/api/retry_errors", {platform: n});
+  $(n + "-retry").onclick = () => dangLai(n);
 });
 
 /* ------------------------------ menu trái ------------------------------ */

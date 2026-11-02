@@ -831,7 +831,8 @@ def _sau_khi_luu(page, done_btn, video_link, log, timeout_sec=120):
     except Exception:
         pass
     raise RuntimeError(f"Đã bấm Lưu/Lên lịch nhưng hộp thoại tải lên vẫn mở sau {timeout_sec}s — có popup Studio chưa "
-                       f"xác nhận được? Hãy xem tab Chrome và ảnh {shot}; bấm xác nhận bằng tay rồi 'Đăng lại lỗi' nếu cần.")
+                       f"xác nhận được? Hãy xem tab Chrome và ảnh {shot}; bấm xác nhận bằng tay rồi 'Đăng lại phần thiếu' "
+                       f"(app tự đối chiếu kênh, video đã lên lịch thì không tải trùng).")
 
 
 # ----- đọc lịch đã đặt (app xếp giờ video mới SAU video gần nhất đang lên lịch, user 19/10/2026) -----
@@ -936,3 +937,43 @@ def lich_da_dat(page, log=_log_default):
         if dt is not None:
             out.add(dt)
     return sorted(out)
+
+
+def video_tren_kenh(page, log=_log_default):
+    """Video ĐANG LÊN LỊCH ở cả tab Shorts lẫn Video của Studio: list (tiêu đề, link, ngày công bố hoặc None).
+    App đối chiếu trước khi 'Đăng lại phần thiếu' để không tải trùng video đã lên kênh (user 02/11/2026:
+    lần trước lỗi sau nút Lưu nhưng video thực ra đã lên lịch rồi)."""
+    page.goto(STUDIO_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(3000)
+    _check_logged_in(page, log)
+    m = re.search(r"/channel/(UC[\w-]+)", page.url)
+    if not m:
+        raise RuntimeError("không lấy được id kênh từ địa chỉ Studio")
+    cid = m.group(1)
+    out = []
+    for tab in ("short", "upload"):
+        page.goto(f"https://studio.youtube.com/channel/{cid}/videos/{tab}", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(6000)
+        rows = page.locator("ytcp-video-row")
+        for i in range(min(rows.count(), 40)):
+            r = rows.nth(i)
+            try:
+                t = " ".join(r.inner_text(timeout=3000).split())
+            except Exception:
+                continue
+            if not re.search(r"Đã lên lịch|Scheduled", t):
+                continue
+            ten = vid = ""
+            try:
+                a = r.locator("a#video-title, a[href*='/video/']").first
+                ten = " ".join((a.inner_text(timeout=2000) or "").split())
+                mv = re.search(r"/video/([\w-]+)/", a.get_attribute("href", timeout=2000) or "")
+                vid = mv.group(1) if mv else ""
+            except Exception:
+                pass
+            if not ten or not vid:
+                continue
+            mn = RE_NGAY_VI.search(t)
+            ngay = date(int(mn.group(3)), int(mn.group(2)), int(mn.group(1))) if mn else None
+            out.append((ten, f"https://youtube.com/shorts/{vid}" if tab == "short" else f"https://youtu.be/{vid}", ngay))
+    return out
