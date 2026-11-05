@@ -83,6 +83,9 @@ DRIVE_DICH_MAC_DINH = [
     {"id": "1Qini2sM2SU5Jeft6wlwWG-5yBMelHxpb", "ten": "LÂM ANH", "link": "https://drive.google.com/drive/folders/1Qini2sM2SU5Jeft6wlwWG-5yBMelHxpb"},
     {"id": "1MYKqbh2XLcORyxFuYTdi5Y_9EeJGPQNF", "ten": "EM HIỀN", "link": "https://drive.google.com/drive/folders/1MYKqbh2XLcORyxFuYTdi5Y_9EeJGPQNF"},
 ]
+# thư mục Drive nhận video của tab C Thảo HeyGen (user đưa 04/11/2026); link video tải lên đó điền vào cột "Link Đăng"
+HEYGEN_DICH = {"id": "1TdcAMkK6SaEynEt3Xw-HGIffTfUHzP_D", "ten": "C THẢO HEYGEN",
+               "link": "https://drive.google.com/drive/folders/1TdcAMkK6SaEynEt3Xw-HGIffTfUHzP_D"}
 # ảnh mẫu mặc định cho tab Làm đẹp (ảnh xem trước user chọn lúc đầu, 19/10/2026); không còn thì để trống, chọn ảnh khác
 ANH_MAU_LAM_DEP = downloads_dir() / "Người bị đau dạ dày cần tránh 4 thói quen làm việc xuyên giờ ăn_ghep_20261019_180943_preview.jpg"
 MAX_LOG_LINES = 3000
@@ -139,6 +142,28 @@ TUY_CHON_MAC_DINH = {
     "ld_sang": 0,              # độ sáng -100..100
     "ld_tuong_phan": 0,        # tương phản -100..100
     "ld_nhiet": 0,             # nhiệt độ màu -100 (lạnh) .. 100 (ấm)
+    # tab C Thảo HeyGen (user 04/11/2026): Sheet có cột "Tiêu đề" · "Link video" (thư mục Drive: Tiêu đề, Minh họa, Kịch bản,
+    # "Video - …mp4" dài có sẵn tiếng) · "Link Đăng" (ghi link video đã ghép); cột tìm theo chữ ở dòng 1
+    "heygen_sheet": "https://docs.google.com/spreadsheets/d/1J1n-v3xuXMvFKWPxat4bQpWFnPb0V6qDyL7NK88hoq8/edit?gid=0",
+    "heygen_giay": 10.0,       # số giây đầu của video dài có tiêu đề + ảnh minh họa; 0 = suốt video (không phụ đề)
+    "heygen_anh_lech": -10,    # ảnh minh họa bắt đầu ở GIỮA tiêu đề rồi dời bấy nhiêu % chiều cao tiêu đề (âm = lên); user 05/11 chốt -10
+    "heygen_minh_hoa": True,
+    # kho ẢNH NGANG riêng của tab C Thảo (user 05/11): tab "Kho Anh Minh Hoa" trong Sheet kho
+    "heygen_kho_anh": "https://docs.google.com/spreadsheets/d/1n_rCUBFRCLi5NlDZovoDvHZd3ETCLtjKeLNPxHOAqUY/edit?gid=176216853#gid=176216853",
+    # tỉ lệ thời lượng các câu giữa (bỏ tiêu đề đầu + câu kêu gọi cuối), user 05/11 chốt: người nói 10-15%, video dọc 35%,
+    # ảnh ngang = phần còn lại
+    "heygen_ti_nguoi": 12,
+    "heygen_ti_video": 35,
+    "heygen_sub_de": True,     # phụ đề đè lên đoạn có ảnh / video minh họa (tick) | không hiện ở các đoạn đó (user 05/11)
+    "heygen_hieu_ung": True,   # cảnh minh họa vào/ra hiệu ứng ngẫu nhiên (mờ / trượt), user 05/11
+    "heygen_sfx": True,        # tiếng hiệu ứng lúc cảnh minh họa xuất hiện (tab Âm thanh hiệu ứng), lúc kết thúc không tiếng
+    "heygen_anh_dong": True,   # ảnh ngang chuyển động nhẹ
+    "heygen_sub_mau": "b",     # mẫu chữ phụ đề tab C Thảo (viet_sub.MAU_ASS), user 05/11 chọn B
+    "heygen_sub_hoa": False,   # False = chữ thường như kịch bản (user 05/11: "không cần in hoa nữa")
+    "heygen_sub_bo_dau": True, # bỏ dấu , . : ; và số thứ tự mục trong phụ đề
+    "heygen_muc": "chat",      # độ chính xác tìm cảnh: chat | vua | long (minh_hoa.MUC_CHINH_XAC), user 05/11 chốt mặc định chặt
+    "heygen_sub": True,        # phụ đề (karaoke theo kịch bản) cho tập C Thảo HeyGen, bật/tắt riêng ở tab này (user 05/11)
+    "heygen_cach": 40,         # co_ao: mép trên tiêu đề cách cằm bấy nhiêu % chiều cao khuôn mặt (0 = sát cằm, âm = đè lên cằm)
 }
 CHE_DO_HOP_LE = ("auto", "nhe", "manh", "cpu")
 DO_PHAN_GIAI_HOP_LE = (0, 540, 720, 900)
@@ -253,6 +278,23 @@ def chuan_hoa_tuy_chon(d: dict) -> dict:
         "ld_sang": _so(d.get("ld_sang"), int, m["ld_sang"], -100, 100),
         "ld_tuong_phan": _so(d.get("ld_tuong_phan"), int, m["ld_tuong_phan"], -100, 100),
         "ld_nhiet": _so(d.get("ld_nhiet"), int, m["ld_nhiet"], -100, 100),
+        "heygen_sheet": str(d.get("heygen_sheet") if d.get("heygen_sheet") is not None else m["heygen_sheet"]).strip()[:500],
+        "heygen_giay": round(_so(d.get("heygen_giay"), float, m["heygen_giay"], 0.0, 600.0), 1),
+        "heygen_anh_lech": _so(d.get("heygen_anh_lech"), int, m["heygen_anh_lech"], -100, 300),
+        "heygen_cach": _so(d.get("heygen_cach"), int, m["heygen_cach"], -50, 150),
+        "heygen_sub": bool(d.get("heygen_sub", m["heygen_sub"])),
+        "heygen_minh_hoa": bool(d.get("heygen_minh_hoa", m["heygen_minh_hoa"])),
+        "heygen_ti_nguoi": _so(d.get("heygen_ti_nguoi"), int, m["heygen_ti_nguoi"], 0, 100),
+        "heygen_ti_video": _so(d.get("heygen_ti_video"), int, m["heygen_ti_video"], 0, 100),
+        "heygen_sub_de": bool(d.get("heygen_sub_de", m["heygen_sub_de"])),
+        "heygen_hieu_ung": bool(d.get("heygen_hieu_ung", m["heygen_hieu_ung"])),
+        "heygen_sfx": bool(d.get("heygen_sfx", m["heygen_sfx"])),
+        "heygen_anh_dong": bool(d.get("heygen_anh_dong", m["heygen_anh_dong"])),
+        "heygen_sub_mau": d.get("heygen_sub_mau") if d.get("heygen_sub_mau") in ("a", "b", "c", "d") else m["heygen_sub_mau"],
+        "heygen_sub_hoa": bool(d.get("heygen_sub_hoa", m["heygen_sub_hoa"])),
+        "heygen_sub_bo_dau": bool(d.get("heygen_sub_bo_dau", m["heygen_sub_bo_dau"])),
+        "heygen_muc": d.get("heygen_muc") if d.get("heygen_muc") in ("chat", "vua", "long") else m["heygen_muc"],
+        "heygen_kho_anh": str(d.get("heygen_kho_anh") if d.get("heygen_kho_anh") is not None else m["heygen_kho_anh"]).strip()[:500],
     }
     if tc["do_phan_giai"] not in DO_PHAN_GIAI_HOP_LE:
         tc["do_phan_giai"] = m["do_phan_giai"]
@@ -262,6 +304,41 @@ def chuan_hoa_tuy_chon(d: dict) -> dict:
 def tc_lam_dep(tc: dict) -> dict:
     """Khóa ld_* của tùy chọn -> tham số lam_dep.py (trang, son, son_mau, suc_song, sang, tuong_phan, nhiet)."""
     return lam_dep.doc_tc({k: tc.get("ld_" + k, lam_dep.MAC_DINH[k]) for k in lam_dep.KHOA})
+
+
+def args_heygen(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
+    """Tham số ghep_tieude.py cho tập C Thảo HeyGen: bố cục/màu/âm/phụ đề/chế độ máy + cài đặt cảnh minh họa (Sheet kho, AI,
+    giây mỗi cảnh, chuyển cảnh…) dùng chung tab Chỉnh sửa. Cảnh kho do AI chọn bật/tắt RIÊNG bằng heygen_minh_hoa (user 05/11
+    mang chức năng hỏi AI của tab Ghép video sang, nền phần sau = chính video dài). KHÔNG clip gốc, KHÔNG đổi tốc độ giọng
+    (lệch hình), KHÔNG làm đẹp (chỉ áp được N giây đầu -> mặt đổi màu ở giây nối)."""
+    # user 05/11 (chốt): KHÔNG phủ kín như tab Ghép video — GPT gán từng câu giữa là video dọc (kho video, Sheet kho minh
+    # họa của tab Chỉnh sửa) / ảnh ngang (heygen_kho_anh) / người nói theo tỉ lệ heygen_ti_nguoi / heygen_ti_video, mỗi cảnh
+    # đúng thời gian câu (--minh-hoa-tron)
+    tc = {**tc, "minh_hoa": bool(tc.get("heygen_minh_hoa", True)) and bool(tc.get("minh_hoa_sheet") or tc.get("heygen_kho_anh")),
+          "khong_clip_goc": False, "toc_do_giong": 1.0,
+          "lam_dep": False, "sub": bool(tc.get("heygen_sub", True))}   # phụ đề + minh họa: công tắc riêng của tab C Thảo
+    # user 05/11: tiêu đề và ảnh là HAI thứ riêng — chỉ chỉnh vị trí tiêu đề (cách cằm); ảnh luôn bám theo tiêu đề rồi phóng
+    # vừa đủ phủ kín phần dưới (layout "cover"). --khoang-cach đặt SAU args_tuy_chon -> đè giá trị tab Chỉnh sửa
+    bo_cuc = ["--khoang-cach", str(round(tc.get("heygen_cach", 40) / 100.0, 3))]
+    if tc.get("heygen_anh_lech", -10):             # ảnh: từ giữa tiêu đề dời lên/xuống; tiêu đề không đổi chỗ
+        bo_cuc += ["--anh-lech", str(round(tc.get("heygen_anh_lech", -10) / 100.0, 3))]
+    if tc["sub"]:                                  # kiểu chữ phụ đề riêng của tab C Thảo
+        bo_cuc += ["--sub-mau", tc.get("heygen_sub_mau", "b")]
+        if not tc.get("heygen_sub_hoa", False):
+            bo_cuc.append("--sub-thuong-hoa")
+        if tc.get("heygen_sub_bo_dau", True):
+            bo_cuc.append("--sub-bo-dau")
+    if tc["minh_hoa"]:
+        bo_cuc += ["--minh-hoa-tron", "--minh-hoa-kho-anh", tc.get("heygen_kho_anh") or "",
+                   "--tron-ti-le", f"{tc.get('heygen_ti_nguoi', 12)},{tc.get('heygen_ti_video', 35)}",
+                   "--tron-muc", tc.get("heygen_muc", "chat")]
+        if not tc.get("heygen_sub_de", True):
+            bo_cuc.append("--sub-tranh-minh-hoa")
+        bo_cuc += [f for k, f in (("heygen_hieu_ung", "--tron-hieu-ung"), ("heygen_sfx", "--tron-sfx"),
+                                  ("heygen_anh_dong", "--tron-anh-dong")) if tc.get(k, True)]
+        if tc.get("heygen_sfx", True):
+            bo_cuc += ["--minh-hoa-sfx-db", str(tc.get("minh_hoa_sfx_db", -4.0))]
+    return ["--video-dai", "--hook-giay", str(tc.get("heygen_giay", 10.0)), *args_tuy_chon(tc, thu_muc_minh_hoa), *bo_cuc]
 
 
 def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
@@ -462,6 +539,11 @@ class State:
         # tải lên Drive + ghi Sheet: danh sách thư mục đích (tab Cài đặt), thư mục chọn sẵn, tự tải sau khi ghép xong
         dd = d.get("drive_dich")
         self.drive_dich = [x for x in (dd if isinstance(dd, list) else DRIVE_DICH_MAC_DINH) if isinstance(x, dict) and x.get("id")]
+        # bản trước (04/11) từng chèn thư mục HeyGen vào danh sách chung -> gỡ ra; tab HeyGen có danh sách RIÊNG (user 04/11)
+        self.drive_dich = [x for x in self.drive_dich if x["id"] != HEYGEN_DICH["id"]]
+        hd = d.get("heygen_dich")
+        self.heygen_dich = [x for x in (hd if isinstance(hd, list) else [HEYGEN_DICH]) if isinstance(x, dict) and x.get("id")]
+        self.heygen_dich_chon = str(d.get("heygen_dich_chon") or (self.heygen_dich[0]["id"] if self.heygen_dich else ""))
         self.drive_dich_chon = str(d.get("drive_dich_chon") or (self.drive_dich[0]["id"] if self.drive_dich else ""))
         self.tu_tai_len = bool(d.get("tu_tai_len", True))
         self.tu_don_rac = bool(d.get("tu_don_rac", True))   # bấm "Bỏ mục đã xong" thì tập đã lên Drive + ghi Sheet được đưa file vào Thùng rác (user 26/10)
@@ -590,6 +672,7 @@ class State:
             data = {"goc_dir": self.goc_dir, "items": self.items, "tuy_chon": self.tuy_chon,
                     "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh,
                     "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len,
+                    "heygen_dich": self.heygen_dich, "heygen_dich_chon": self.heygen_dich_chon,
                     "tu_don_rac": self.tu_don_rac, "sheet_dich": self.sheet_dich}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -615,6 +698,123 @@ S = State()
 
 
 # ------------------------------------------------------------------ API
+_KHO_MAY: dict = {"ky": None, "kq": {}}
+
+
+def kho_tren_may(thu_muc: str) -> dict:
+    """Thư mục trên máy đang lưu video + ảnh minh họa đã tải về (tab Cài đặt): số video, số ảnh, dung lượng. Đếm lại chỉ
+    khi đường dẫn hoặc mtime thư mục đổi (poll mỗi giây)."""
+    d = Path(thu_muc)
+    try:
+        ky = (str(d), d.stat().st_mtime_ns) if d.is_dir() else (str(d), None)
+    except OSError:
+        ky = (str(d), None)
+    if ky == _KHO_MAY["ky"]:
+        return _KHO_MAY["kq"]
+    video = anh = byte = 0
+    if ky[1] is not None:
+        for f in d.iterdir():
+            if not f.is_file():
+                continue
+            duoi = f.suffix.lower()
+            if duoi in minh_hoa.DUOI_VIDEO:
+                video += 1
+            elif duoi in minh_hoa.DUOI_ANH:
+                anh += 1
+            else:
+                continue
+            try:
+                byte += f.stat().st_size
+            except OSError:
+                pass
+    kq = {"dir": str(d), "ton_tai": ky[1] is not None, "video": video, "anh": anh, "mb": round(byte / 1048576, 1)}
+    _KHO_MAY.update(ky=ky, kq=kq)
+    return kq
+
+
+def api_kho_may_don(_data):
+    """Tab Cài đặt — dọn kho minh họa trên máy (user 05/11: "lưu cũng không có tác dụng, cần thì tải lại"): đưa vào Thùng rác
+    các video / ảnh TẢI TỪ DRIVE (tên file = ID file Drive của một dòng có Link ở kho video / kho ảnh ngang -> tải lại
+    được). GIỮ file tự chép vào (dòng chưa có link) và file dữ liệu (vector, đếm đã dùng, tiếng hiệu ứng). Không chạy khi
+    đang ghép. Gom vào một thư mục con rồi đưa cả thư mục vào Thùng rác (một lần gọi, nhanh)."""
+    with S.lock:
+        if S.running:
+            return {"ok": False, "msg": "Đang ghép video — dừng xong rồi hãy dọn kho."}
+        d = Path(S.minh_hoa_dir)
+        nguon = [S.tuy_chon.get("minh_hoa_sheet") or "", S.tuy_chon.get("heygen_kho_anh") or ""]
+    if not d.is_dir():
+        return {"ok": False, "msg": f"Không thấy thư mục: {d}"}
+    fid_ok: set[str] = set()
+    for ng in nguon:
+        if not ng:
+            continue
+        try:
+            for r in minh_hoa._doc_dong(ng, log=lambda s: None):
+                fid = minh_hoa.drive_file_id(r["link"]) if r["link"] else None
+                if fid:
+                    fid_ok.add(fid)
+        except Exception as e:                       # noqa: BLE001
+            return {"ok": False, "msg": f"Không đọc được Sheet kho nên chưa dọn (để khỏi xóa nhầm): {e}"}
+    ds = [f for f in d.iterdir() if f.is_file() and f.suffix.lower() in minh_hoa.DUOI_VIDEO + minh_hoa.DUOI_ANH
+          and f.stem in fid_ok]
+    if not ds:
+        return {"ok": False, "msg": "Không có file nào tải từ Drive để dọn."}
+    mb = sum(f.stat().st_size for f in ds) / 1048576
+    tam = d / f"đã dọn {datetime.now():%Y%m%d_%H%M%S}"
+    try:
+        tam.mkdir()
+        for f in ds:
+            f.rename(tam / f.name)
+        _vao_thung_rac(tam)
+    except Exception as e:                           # noqa: BLE001
+        return {"ok": False, "msg": f"Dọn kho lỗi: {e} — file (nếu đã gom) nằm trong “{tam.name}” của thư mục kho."}
+    msg = f"Đã đưa {len(ds)} video / ảnh ({mb:.0f} MB) vào Thùng rác. Tập sau cần file nào app tự tải lại file đó."
+    S.log("Kho minh họa trên máy: " + msg)
+    return {"ok": True, "msg": msg}
+
+
+def api_kho_may_ds(data):
+    """Tab Cài đặt — danh sách từng video / ảnh minh họa đang lưu trên máy (thư mục video mẫu), ghép với dòng Sheet kho
+    video (tab Kho minh họa) và kho ảnh ngang (tab Kho Anh Minh Hoa) theo ID file Drive hoặc tên file -> ID, tên, kho.
+    File không thuộc dòng nào (vd ảnh tạm, file cũ) ghi "không có trong Sheet". data.moi=True: đọc lại Sheet."""
+    d = Path(S.minh_hoa_dir)
+    if not d.is_dir():
+        return {"ok": False, "msg": f"Không thấy thư mục: {d}"}
+    with S.lock:
+        kho_anh = S.tuy_chon.get("heygen_kho_anh") or ""
+        kho_video = S.tuy_chon.get("minh_hoa_sheet") or ""
+    chi_muc: dict[str, tuple[str, str, str]] = {}           # khóa (id Drive / tên không dấu) -> (ID, tên, kho)
+    for ten_kho, nguon in (("kho video", kho_video), ("kho ảnh ngang", kho_anh)):
+        if not nguon:
+            continue
+        try:
+            dong = minh_hoa._doc_dong(nguon, log=lambda s: None, moi=bool(data.get("moi")))
+        except Exception as e:                       # noqa: BLE001
+            S.log(f"Kho trên máy: không đọc được {ten_kho}: {e}")
+            continue
+        for r in dong:
+            v = (r["id"], r["ten"] or ", ".join(r["tags"][:2]), ten_kho)
+            fid = minh_hoa.drive_file_id(r["link"]) if r["link"] else None
+            if fid:
+                chi_muc.setdefault(fid, v)
+            for k in (r["ten"], Path(r["ten"]).stem if r["ten"] else "", r["id"]):
+                if k:
+                    chi_muc.setdefault(minh_hoa.khong_dau(k), v)
+    ds = []
+    for f in sorted(d.iterdir(), key=lambda x: x.name.lower()):
+        duoi = f.suffix.lower()
+        if not f.is_file() or duoi not in minh_hoa.DUOI_VIDEO + minh_hoa.DUOI_ANH:
+            continue
+        v = chi_muc.get(f.stem) or chi_muc.get(minh_hoa.khong_dau(f.name)) or chi_muc.get(minh_hoa.khong_dau(f.stem))
+        try:
+            mb = round(f.stat().st_size / 1048576, 2)
+        except OSError:
+            mb = 0
+        ds.append({"file": f.name, "loai": "video" if duoi in minh_hoa.DUOI_VIDEO else "anh", "mb": mb,
+                   "id": v[0] if v else "", "ten": v[1] if v else "", "kho": v[2] if v else "không có trong Sheet"})
+    return {"ok": True, "dir": str(d), "ds": ds}
+
+
 def state_payload(after: int) -> dict:
     S.cap_nhat_kho_mh()                             # rẻ: chỉ tính lại khi file trong thư mục video mẫu đổi
     google = {**drive_len.trang_thai(), **S.google}   # ngoài lock: có thể gọi mạng một lần (lấy email)
@@ -641,6 +841,7 @@ def state_payload(after: int) -> dict:
                     "clips": [{"ten": t, "giay": g} for t, g in kho],
                     "tong_giay": round(sum(g for _, g in kho), 1)},
             "downloads": str(thu_muc_ra()),
+            "kho_may": kho_tren_may(S.minh_hoa_dir),
             "minh_hoa": {"dir": S.minh_hoa_dir, "ton_tai": mh_dir.is_dir(), "mac_dinh": mh_dir == THU_MUC_MINH_HOA,
                          "sheet": S.tuy_chon["minh_hoa_sheet"], "bat": S.tuy_chon["minh_hoa"], "kho": dict(S.kho_mh)},
             "tuy_chon": dict(S.tuy_chon),
@@ -648,6 +849,7 @@ def state_payload(after: int) -> dict:
             "mau_giong": mau_giong(),
             "google": google,
             "drive_dich": list(S.drive_dich), "drive_dich_chon": S.drive_dich_chon, "tu_tai_len": S.tu_tai_len,
+            "heygen_dich": list(S.heygen_dich), "heygen_dich_chon": S.heygen_dich_chon,
             "tu_don_rac": S.tu_don_rac,
             "lam_dep": {"anh": S.lam_dep_anh, "ton_tai": bool(S.lam_dep_anh) and Path(S.lam_dep_anh).is_file(),
                         "san_sang": _LD_SAN_SANG[0], "ly_do": "" if _LD_SAN_SANG[0] else _LD_SAN_SANG[1]},
@@ -866,7 +1068,16 @@ def api_save_tuy_chon(data):
     d = data.get("tuy_chon") or data
     # form tab Chỉnh sửa không có ô minh_hoa_hoi_lai / khong_clip_goc (nằm ở tab Ghép video) -> giữ giá trị đang có
     tc = chuan_hoa_tuy_chon({"minh_hoa_hoi_lai": S.tuy_chon["minh_hoa_hoi_lai"],
-                             "khong_clip_goc": S.tuy_chon.get("khong_clip_goc", False), **d})
+                             "khong_clip_goc": S.tuy_chon.get("khong_clip_goc", False),
+                             "heygen_sheet": S.tuy_chon.get("heygen_sheet"), "heygen_giay": S.tuy_chon.get("heygen_giay"),
+                             "heygen_anh_lech": S.tuy_chon.get("heygen_anh_lech"), "heygen_cach": S.tuy_chon.get("heygen_cach"),
+                             "heygen_sub": S.tuy_chon.get("heygen_sub"),
+                             "heygen_minh_hoa": S.tuy_chon.get("heygen_minh_hoa"),
+                             "heygen_kho_anh": S.tuy_chon.get("heygen_kho_anh"),
+                             "heygen_ti_nguoi": S.tuy_chon.get("heygen_ti_nguoi"), "heygen_ti_video": S.tuy_chon.get("heygen_ti_video"),
+                             "heygen_muc": S.tuy_chon.get("heygen_muc"), "heygen_sub_de": S.tuy_chon.get("heygen_sub_de"),
+                             **{k: S.tuy_chon.get(k) for k in ("heygen_hieu_ung", "heygen_sfx", "heygen_anh_dong", "heygen_sub_mau",
+                                                              "heygen_sub_hoa", "heygen_sub_bo_dau")}, **d})
     with S.lock:
         sheet_doi = tc["minh_hoa_sheet"] != S.tuy_chon["minh_hoa_sheet"]
         S.tuy_chon = tc
@@ -1220,6 +1431,163 @@ def api_them_tu_sheet(data):
     return {"ok": bool(them), "msg": msg}
 
 
+def ds_dich(it=None, heygen: bool = False) -> list[dict]:
+    """Danh sách thư mục Drive nhận video: tập C Thảo HeyGen dùng danh sách RIÊNG (S.heygen_dich), tập thường dùng S.drive_dich."""
+    return S.heygen_dich if (heygen or (it is not None and it.get("loai") == "heygen")) else S.drive_dich
+
+
+def api_heygen_dich(data):
+    """Tab C Thảo HeyGen: chọn / thêm / bỏ thư mục nhận video (danh sách riêng, không đụng ô Nhận video của tab Ghép video)."""
+    hanh = str(data.get("hanh") or "chon")
+    if hanh == "them":
+        fid = drive_len.folder_id(str(data.get("link") or "").strip())
+        if not fid:
+            return {"ok": False, "msg": "Không phải link thư mục Drive."}
+        with S.lock:
+            if any(x["id"] == fid for x in S.heygen_dich):
+                return {"ok": False, "msg": "Thư mục đã có trong danh sách."}
+        try:
+            tt = drive_len.thong_tin_thu_muc(fid)
+        except Exception as e:                     # noqa: BLE001
+            return {"ok": False, "msg": f"Không đọc được thư mục (đã đăng nhập Google chưa?): {e}"}
+        with S.lock:
+            S.heygen_dich.append({"id": tt["id"], "ten": tt["ten"], "link": tt["link"]})
+            S.heygen_dich_chon = tt["id"]
+            S.save()
+        return {"ok": True, "msg": f"Đã thêm và chọn thư mục “{tt['ten']}”."}
+    i = str(data.get("id") or "")
+    with S.lock:
+        if hanh == "bo":
+            S.heygen_dich = [x for x in S.heygen_dich if x["id"] != i]
+            if S.heygen_dich_chon == i:
+                S.heygen_dich_chon = S.heygen_dich[0]["id"] if S.heygen_dich else ""
+            S.save()
+            return {"ok": True, "msg": "Đã bỏ thư mục khỏi danh sách của tab C Thảo HeyGen."}
+        if i and not any(x["id"] == i for x in S.heygen_dich):
+            return {"ok": False, "msg": "Không có thư mục này trong danh sách."}
+        S.heygen_dich_chon = i
+        S.save()
+    return {"ok": True}
+
+
+def api_heygen_doc_sheet(data):
+    """Tab C Thảo HeyGen: đọc Sheet theo TÊN cột (Tiêu đề · Link video · Link Đăng), không cố định chữ cái cột."""
+    link = str(data.get("link") or "").strip()
+    if link:
+        with S.lock:
+            if S.tuy_chon.get("heygen_sheet") != link:
+                S.tuy_chon["heygen_sheet"] = link[:500]
+                S.save()
+    try:
+        kq = drive_len.doc_lich_theo_cot(link, log=S.log)
+    except Exception as e:                         # noqa: BLE001
+        return {"ok": False, "msg": f"Không đọc được Sheet: {e}"}
+    with S.lock:
+        dang_co = {it.get("fid") for it in S.items if it.get("status") in (CHO, DANG)}
+        nho = S.sheet_dich.get(f"{kq.get('id')}|{kq.get('tab')}", "")
+        tm = next((x for x in S.heygen_dich if x["id"] == nho), None)
+    for d in kq["dong"]:
+        d["dang_co"] = bool(d.get("fid")) and d["fid"] in dang_co
+    kq.update(ok=True, link=link, dich_nho=tm["id"] if tm else "")
+    n_ok = sum(1 for d in kq["dong"] if d.get("fid") and not d.get("link_g") and not d["dang_co"])
+    kq["msg"] = (f"Sheet “{kq['tieu_de_sheet']}”: {len(kq['dong'])} dòng, {n_ok} dòng chạy được "
+                 f"(Link video có thư mục, Link Đăng trống).")
+    return kq
+
+
+def api_heygen_them(data):
+    """Thêm các dòng đã tick (tab C Thảo HeyGen) vào hàng đợi chung, đánh dấu loai=heygen; xong ghi link vào cột Link Đăng."""
+    sh = data.get("sheet") or {}
+    dich = str(data.get("dich") or "")
+    with S.lock:
+        if dich and not any(x["id"] == dich for x in S.heygen_dich):
+            dich = ""
+        if dich:
+            S.heygen_dich_chon = dich
+        dang_co = {it.get("fid") for it in S.items if it.get("status") in (CHO, DANG)}
+        them, bo = [], 0
+        for d in data.get("dong") or []:
+            fid = drive_len.folder_id(str(d.get("link_f") or ""))
+            if not fid or fid in dang_co:
+                bo += 1
+                continue
+            dang_co.add(fid)
+            it = {"id": S.next_id, "loai": "heygen", "link": str(d.get("link_f")), "fid": fid,
+                  "ten": str(d.get("tieu_de") or ""), "tieu_de": str(d.get("tieu_de") or ""), "status": CHO, "buoc": "",
+                  "loi": "", "canh_bao": "", "them_luc": datetime.now().strftime("%d/%m %H:%M"), "dich": dich, "tai_len": {},
+                  "sheet": {"id": sh.get("id"), "tab": sh.get("tab"), "dong": int(d.get("dong") or 0),
+                            "cot_g": sh.get("cot_g") or "", "link": sh.get("link") or ""}}
+            if not it["sheet"]["cot_g"]:           # không biết cột Link Đăng thì không ghi Sheet (không đoán chữ cái cột)
+                it["sheet"] = None
+            S.next_id += 1
+            S.items.append(it)
+            them.append(it["id"])
+        if sh.get("id") and dich:
+            S.sheet_dich[f"{sh.get('id')}|{sh.get('tab')}"] = dich
+        S.save()
+        ten_dich = next((x["ten"] for x in S.heygen_dich if x["id"] == dich), "")
+    if them:
+        threading.Thread(target=_kiem_tra_bo, args=(them,), daemon=True).start()
+    msg = (f"Đã thêm {len(them)} tập C Thảo HeyGen"
+           + (f" (xong sẽ tải lên “{ten_dich}” và điền cột Link Đăng)" if ten_dich else " (không tải lên Drive)")
+           + (f"; bỏ {bo} dòng trùng/không có link" if bo else "") + ".")
+    S.log(msg)
+    return {"ok": bool(them), "msg": msg}
+
+
+_SUB_XT: dict = {}                               # (mẫu, hoa, bỏ dấu, cỡ) -> data URL ảnh xem thử phụ đề
+
+
+def api_heygen_sub_xem_thu(data):
+    """Ảnh xem thử mẫu chữ phụ đề tab C Thảo (ô chọn ở tab Chỉnh sửa): dựng đúng bằng viet_sub.ghi_ass + ffmpeg trên nền
+    nửa sáng nửa tối, cỡ video 720x1280, cắt vùng quanh phụ đề. -> {anh: data URL jpg}. Nhớ theo bộ tham số."""
+    import viet_sub
+    with S.lock:
+        tc = dict(S.tuy_chon)
+    mau = data.get("mau") if data.get("mau") in viet_sub.MAU_ASS else tc.get("heygen_sub_mau", "b")
+    hoa = bool(data.get("hoa", tc.get("heygen_sub_hoa", False)))
+    bo_dau = bool(data.get("bo_dau", tc.get("heygen_sub_bo_dau", True)))
+    ky = (mau, hoa, bo_dau, tc["sub_co"], tc["sub_font"])
+    if ky not in _SUB_XT:
+        chu = "Dạ dày cần 3-4 tiếng để tiêu hóa,".split()
+        tu = [viet_sub.Tu(hien=w, khoa=viet_sub.khoa(w), start=i * 0.5, end=i * 0.5 + 0.5) for i, w in enumerate(chu)]
+        cue = viet_sub.Cue(0.0, len(tu) * 0.5, " ".join(chu), tu)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                viet_sub.ghi_ass([cue], Path(td) / "s.ass", 720, 1280, tc["sub_font"], tc["sub_co"], 45, hoa=hoa, mau=mau,
+                                 bo_dau=bo_dau)
+                out = Path(td) / "o.jpg"
+                # nền: trái sáng (áo trắng) -> phải tối, để thấy chữ trên cả hai; khung lúc từ "tiêu" đang tô vàng
+                subprocess.run([need_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                                "gradients=s=720x1280:c0=0xEDE8E0:c1=0x2F3B48:x0=0:y0=0:x1=720:y1=0:d=4", "-ss", "3.2",
+                                "-vf", "subtitles=s.ass,crop=720:240:0:900", "-frames:v", "1", "-q:v", "3", str(out)],
+                               check=True, cwd=td, creationflags=NO_WINDOW, capture_output=True, timeout=60)
+                _SUB_XT[ky] = "data:image/jpeg;base64," + base64.b64encode(out.read_bytes()).decode("ascii")
+        except Exception as e:                       # noqa: BLE001
+            return {"ok": False, "msg": f"Không dựng được ảnh xem thử phụ đề: {e}"}
+    return {"ok": True, "anh": _SUB_XT[ky], "mau": mau}
+
+
+def api_heygen_cai_dat(data):
+    """Ô 'số giây đầu có tiêu đề + ảnh' của tab C Thảo HeyGen."""
+    with S.lock:
+        moi = {k: v for k, v in (("heygen_giay", data.get("giay")), ("heygen_anh_lech", data.get("anh_lech")),
+                                 ("heygen_cach", data.get("cach")), ("heygen_sub", data.get("sub")),
+                                 ("heygen_minh_hoa", data.get("minh_hoa")), ("heygen_kho_anh", data.get("kho_anh")),
+                                 ("heygen_ti_nguoi", data.get("ti_nguoi")), ("heygen_ti_video", data.get("ti_video")),
+                                 ("heygen_muc", data.get("muc")), ("heygen_sub_de", data.get("sub_de")),
+                                 ("heygen_hieu_ung", data.get("hieu_ung")), ("heygen_sfx", data.get("sfx")),
+                                 ("heygen_anh_dong", data.get("anh_dong")), ("heygen_sub_mau", data.get("sub_mau")),
+                                 ("heygen_sub_hoa", data.get("sub_hoa")), ("heygen_sub_bo_dau", data.get("sub_bo_dau"))) if v is not None}
+        S.tuy_chon = chuan_hoa_tuy_chon({**S.tuy_chon, **moi})
+        S.save()
+        g, a, c = S.tuy_chon["heygen_giay"], S.tuy_chon["heygen_anh_lech"], S.tuy_chon["heygen_cach"]
+    bc = f"tiêu đề cách cằm {c}% chiều cao mặt, ảnh minh họa từ giữa tiêu đề lệch {a:+d}% chiều cao tiêu đề"
+    sub = ("có phụ đề" if S.tuy_chon["heygen_sub"] else "KHÔNG phụ đề") + (
+        f"; AI gán câu: người nói {S.tuy_chon['heygen_ti_nguoi']}% · video dọc {S.tuy_chon['heygen_ti_video']}% · ảnh ngang {max(0, 100 - S.tuy_chon['heygen_ti_nguoi'] - S.tuy_chon['heygen_ti_video'])}%" if S.tuy_chon["heygen_minh_hoa"] else "; không ảnh minh họa AI")
+    return {"ok": True, "msg": f"Tiêu đề + ảnh: {f'{g:g} giây đầu' if g else 'suốt video (không phụ đề)'}; {bc}; {sub}."}
+
+
 def _tai_len_muc(it, ep: bool = False) -> None:
     """Sau khi ghép xong: tải video lên thư mục Drive đích của tập (tên = tiêu đề cột D), rồi ghi link vào cột G nếu tập
     lấy từ Sheet. ep=True: bấm tay, bỏ qua công tắc tự tải. Trạng thái ở it['tai_len'] = {tt, pct, link, fid, g, loi}."""
@@ -1275,11 +1643,11 @@ def api_set_dich_muc(data):
         it = S.find(data.get("id"))
         if it is None:
             return {"ok": False, "msg": "Không thấy mục."}
-        if dich and not any(x["id"] == dich for x in S.drive_dich):
+        if dich and not any(x["id"] == dich for x in ds_dich(it)):
             return {"ok": False, "msg": "Không có thư mục này trong danh sách."}
         it["dich"] = dich
         S.save()
-        ten = next((x["ten"] for x in S.drive_dich if x["id"] == dich), "")
+        ten = next((x["ten"] for x in ds_dich(it) if x["id"] == dich), "")
     return {"ok": True, "msg": f"Tập “{(it.get('ten') or '')[:40]}”: " + (f"tải lên “{ten}”" if dich else "không tải lên Drive")}
 
 
@@ -1292,7 +1660,7 @@ def api_tai_len_lai(data):
         if (it.get("tai_len") or {}).get("tt") == "dang":
             return {"ok": False, "msg": "Đang tải lên rồi."}
         if not it.get("dich"):
-            it["dich"] = S.drive_dich_chon
+            it["dich"] = S.heygen_dich_chon if it.get("loai") == "heygen" else S.drive_dich_chon
         if not it.get("out") or not Path(it["out"]).is_file():
             return {"ok": False, "msg": "Tập này chưa có video đã ghép."}
     threading.Thread(target=_tai_len_muc, args=(it, True), daemon=True, name="tai-len").start()
@@ -1581,7 +1949,12 @@ def _kiem_tra_bo(item_ids):
         try:
             ten, files = dtm.liet_ke(dtm.folder_id(link))
             vai = {vai_tro_theo_ten(Path(n))[0] for _, n in files}
-            thieu = [TEN_VAI_TRO[v] for v in VAI_BAT_BUOC if v not in vai]
+            if it.get("loai") == "heygen":           # cần Tiêu đề + Minh họa + một video dài (.mp4/.mov)
+                thieu = [TEN_VAI_TRO[v] for v in ("tieude", "anh") if v not in vai]
+                if not any(Path(n).suffix.lower() in DUOI_VIDEO for _, n in files):
+                    thieu.append("Video (video dài có tiếng)")
+            else:
+                thieu = [TEN_VAI_TRO[v] for v in VAI_BAT_BUOC if v not in vai]
             canh_bao = f"chưa thấy file: {', '.join(thieu)}" if thieu else ""
         except Exception as e:
             ten, files, canh_bao = "", [], f"không đọc được thư mục: {e}"
@@ -1711,7 +2084,11 @@ def api_start(_data):
         cho = [it for it in S.items if it.get("status") == CHO]
         if not cho:
             return {"ok": False, "msg": "Không có mục nào đang chờ."}
-        if not kho_clip(S.goc_dir) and not S.tuy_chon.get("khong_clip_goc"):
+        chon_thu_lan = bool(_data.get("chon_thu")) if isinstance(_data, dict) else False
+        if chon_thu_lan and not S.tuy_chon.get("heygen_minh_hoa", True) and all(x.get("loai") == "heygen" for x in cho):
+            return {"ok": False, "msg": "Tập C Thảo HeyGen không cần chọn thử (không có cảnh kho) — bấm ▶ Chạy."}
+        if (any(x.get("loai") != "heygen" for x in cho) and not kho_clip(S.goc_dir)
+                and not S.tuy_chon.get("khong_clip_goc")):
             return {"ok": False, "msg": "Chưa có thư mục clip gốc (hoặc thư mục không có video)."}
         S.running = True
         S.stop_flag.clear()
@@ -1818,6 +2195,13 @@ def api_mo(data):
             return {"ok": False, "msg": f"Không thấy clip {ten or '(trống)'}."}
         _mo(p)
         return {"ok": True}
+    if loai == "file_kho":                         # một video / ảnh trong thư mục video mẫu (tab Cài đặt)
+        ten = str(data.get("ten") or "")
+        f = Path(S.minh_hoa_dir) / ten
+        if not ten or ten != Path(ten).name or not f.is_file():
+            return {"ok": False, "msg": f"Không thấy file {ten or '(trống)'}."}
+        _mo(f)
+        return {"ok": True}
     if loai == "minh_hoa":                         # thư mục video mẫu (mặc định chưa có thì tạo)
         d = Path(S.minh_hoa_dir)
         if d == THU_MUC_MINH_HOA:
@@ -1884,7 +2268,7 @@ def _doc_dong(it, s: str):
     for dau, buoc in _BUOC:
         if s.startswith(dau):
             it["buoc"] = buoc
-    m = re.match(r"^(XONG|CHỌN THỬ|Xem trước|Phụ đề|Thời lượng|Phần sau|Minh họa|Link minh họa|Âm thanh)\s*:\s*(.+)$", s)
+    m = re.match(r"^(XONG|CHỌN THỬ|Xem trước|Phụ đề|Thời lượng|Phần sau|Minh họa|Thiếu|Link minh họa|Âm thanh)\s*:\s*(.+)$", s)
     if not m:
         return
     k, v = m.group(1), m.group(2).strip()
@@ -1902,6 +2286,12 @@ def _doc_dong(it, s: str):
         it["phan_sau"] = v
     elif k == "Minh họa" and ("cảnh" in v and not v.endswith("...")):   # "3 cảnh: 12.3s ợ nóng (...)" / "không chèn cảnh nào (...)"
         it["minh_hoa"] = v
+        m3 = re.match(r"(\d+)\s+cảnh", v)             # số cảnh cho hàng đợi tab C Thảo (user 05/11: chỉ hiện số)
+        it["so_canh"] = int(m3.group(1)) if m3 else 0
+    elif k == "Thiếu":                             # "2 câu chưa có cảnh trong kho"
+        m3 = re.match(r"(\d+)", v)
+        if m3:
+            it["so_thieu"] = int(m3.group(1))
     elif k == "Phụ đề" and v.endswith("(đã đốt vào video)"):
         it["srt"] = v.split("  (")[0].strip()
     elif k == "Thời lượng":
@@ -1927,7 +2317,9 @@ def _chay_muc(it):
         # seed: cố định (tab Chỉnh sửa) > seed của lần chọn thử trước (chạy thật chọn cùng cách, chỉ khác kho đã bổ sung) > ngẫu nhiên
         seed = tc["seed"] if tc["seed"] is not None else (it.get("seed_chon_thu") or random.randrange(1, 10 ** 9))
         it.update(status=DANG, buoc="Tải Drive", loi="", bat_dau=t0, out="", srt="", preview="", phan_sau="",
-                  minh_hoa_file="", am_thanh="", seed=seed, tai_len={})
+                  minh_hoa_file="", am_thanh="", seed=seed, tai_len={}, minh_hoa="")
+        it.pop("so_canh", None)
+        it.pop("so_thieu", None)
         da_chon_thu = (not chon_thu) and bool(it.get("seed_chon_thu"))   # chạy thật sau khi đã chọn thử
         it.pop("chon_thu_xong", None)              # tóm tắt của lượt trước không được tính là kết quả lượt này
         if chon_thu:
@@ -1935,11 +2327,17 @@ def _chay_muc(it):
             it.pop("chon_thu", None)
         S.current = it["id"]
         S.save()
+    heygen = it.get("loai") == "heygen"
     kho = kho_clip(goc)
     kcg = bool(tc.get("khong_clip_goc"))
-    S.log(f"{'🔍 CHỌN THỬ' if chon_thu else '▶'} [{it['id']}] {ten}  —  " + ("KHÔNG dùng clip gốc (phần sau 100% cảnh kho)" if kcg else
+    if heygen:
+        g = tc.get("heygen_giay", 10.0)
+        S.log(f"▶ [{it['id']}] {ten}  —  C Thảo HeyGen: video dài có sẵn tiếng, tiêu đề + ảnh "
+              + (f"{g:g} giây đầu" if g else "suốt video") + ", không cảnh kho / AI")
+    else:
+        S.log(f"{'🔍 CHỌN THỬ' if chon_thu else '▶'} [{it['id']}] {ten}  —  " + ("KHÔNG dùng clip gốc (phần sau 100% cảnh kho)" if kcg else
           f"clip gốc: {Path(goc).name if goc else '(chưa có)'} ({len(kho)} clip)") + f", seed {seed}")
-    if not kho and not kcg:
+    if not kho and not kcg and not heygen:
         S.log(f"✗ [{it['id']}] thư mục clip gốc trống hoặc không tồn tại")
         return _ket_thuc(it, LOI, "Không có clip gốc (chọn lại thư mục clip).", t0)
 
@@ -1958,7 +2356,9 @@ def _chay_muc(it):
         return _ket_thuc(it, LOI, f"Tải Drive lỗi: {e}", t0)
 
     # 2) ghép bằng ghep_tieude.py (tiến trình riêng: ffmpeg/whisper nặng, lỗi không kéo sập server)
-    tham_so = args_tuy_chon(tc, S.minh_hoa_dir)
+    tham_so = args_heygen(tc, S.minh_hoa_dir) if heygen else args_tuy_chon(tc, S.minh_hoa_dir)
+    if heygen:
+        goc = ""                                   # phần sau = chính video dài, không dùng clip gốc
     if da_chon_thu and "--minh-hoa-hoi-lai" in tham_so:
         # user 23/10: đã bấm Chọn thử trước thì lần Chạy thật KHÔNG hỏi GPT từ khóa lại (dùng lại trả lời + seed của lần chọn
         # thử, chỉ chọn lại cảnh với kho đã bổ sung rồi AI soát thêm một lần); chưa chọn thử thì vẫn hỏi lại như cài đặt
@@ -2055,16 +2455,21 @@ def _cap_nhat_kho_dau_luot() -> None:
     S.lam_moi_kho_mh(moi=True)                     # đồng bộ, trong thread worker
 
 
+def _thu_duoc(x) -> bool:
+    """Chọn thử áp cho tập thường, và tập C Thảo HeyGen khi tab đó đang bật cảnh minh họa AI."""
+    return x.get("loai") != "heygen" or bool(S.tuy_chon.get("heygen_minh_hoa", True))
+
+
 def _worker():
     xong = loi = thu = 0
     da_thu: set = set()                            # chọn thử: mục đã làm trong lượt này (về lại chờ nên không được lấy lại)
     with S.lock:                                   # chọn thử: bỏ qua tập đã chọn thử xong (dừng rồi bấm lại thì chạy TIẾP, không
-        lam_lai = S.chon_thu and all(x.get("chon_thu") for x in S.items if x.get("status") == CHO)   # từ đầu); tất cả đã
+        lam_lai = S.chon_thu and all(x.get("chon_thu") for x in S.items if x.get("status") == CHO and _thu_duoc(x))   # từ đầu); tất cả đã
                                                    # chọn thử thì mới chọn lại cả lượt (user 26/10)
 
     def _cho(x) -> bool:
         return (x.get("status") == CHO and x.get("id") not in da_thu
-                and (not S.chon_thu or lam_lai or not x.get("chon_thu")))
+                and (not S.chon_thu or (_thu_duoc(x) and (lam_lai or not x.get("chon_thu")))))
 
     try:
         _cap_nhat_kho_dau_luot()
@@ -2156,6 +2561,13 @@ ROUTES = {
     "/api/drive_dich_an": api_drive_dich_an,
     "/api/doc_sheet": api_doc_sheet,
     "/api/them_tu_sheet": api_them_tu_sheet,
+    "/api/heygen_doc_sheet": api_heygen_doc_sheet,
+    "/api/heygen_them": api_heygen_them,
+    "/api/heygen_dich": api_heygen_dich,
+    "/api/heygen_sub_xem_thu": api_heygen_sub_xem_thu,
+    "/api/kho_may_ds": api_kho_may_ds,
+    "/api/kho_may_don": api_kho_may_don,
+    "/api/heygen_cai_dat": api_heygen_cai_dat,
     "/api/tai_len_lai": api_tai_len_lai,
     "/api/set_dich_muc": api_set_dich_muc,
     "/api/add_links": api_add_links,

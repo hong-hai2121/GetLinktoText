@@ -32,7 +32,7 @@ body{margin:0;display:flex;background:var(--bg);color:var(--fg);font:14px/1.5 "S
 /* icon menu: ô tròn-vuông màu tươi, nét trắng đơn giản (SVG, không dùng ký tự ▶ ✂ ◉ hiển thị mỗi máy một kiểu) */
 .nav .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
 .nav .ic svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.ic-ghep{background:#ff4d6d} .ic-cs{background:#38bdf8} .ic-ld{background:#f472b6} .ic-ai{background:#a78bfa}
+.ic-hg{background:#f59e0b} .ic-ghep{background:#ff4d6d} .ic-cs{background:#38bdf8} .ic-ld{background:#f472b6} .ic-ai{background:#a78bfa}
 .ic-log{background:#fbbf24} .ic-cd{background:#34d399}
 .nav button.active .ic{box-shadow:0 0 0 2px rgba(255,255,255,.35)}
 /* tab Làm đẹp */
@@ -149,7 +149,8 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
     <div><h1>GHÉP VIDEO<br>FLOW</h1><p>hook · tiêu đề · clip · giọng đọc</p></div>
   </div>
   <nav class="nav">
-    <button data-tab="ghep" class="active"><span class="ic ic-ghep"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="#fff" stroke="none"/></svg></span>Ghép video<span class="cnt" id="cntGhep"></span></button>
+    <button data-tab="heygen" class="active"><span class="ic ic-hg"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z" fill="#fff" stroke="none"/></svg></span>C Thảo HeyGen<span class="cnt" id="cntHg"></span></button>
+    <button data-tab="ghep"><span class="ic ic-ghep"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="#fff" stroke="none"/></svg></span>Ghép video<span class="cnt" id="cntGhep"></span></button>
     <button data-tab="chinh-sua"><span class="ic ic-cs"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.2" fill="#38bdf8"/><circle cx="15" cy="12" r="2.2" fill="#38bdf8"/><circle cx="8" cy="17" r="2.2" fill="#38bdf8"/></svg></span>Chỉnh sửa<span class="cnt" id="cntCs"></span></button>
     <button data-tab="lam-dep"><span class="ic ic-ld"><svg viewBox="0 0 24 24"><path d="M12 3.5c.6 4.4 3.3 7.1 7.5 8.5-4.2 1.4-6.9 4.1-7.5 8.5-.6-4.4-3.3-7.1-7.5-8.5 4.2-1.4 6.9-4.1 7.5-8.5z" fill="#fff" stroke="none"/></svg></span>Làm đẹp<span class="cnt" id="cntLd"></span></button>
     <button data-tab="ai"><span class="ic ic-ai"><svg viewBox="0 0 24 24"><path d="M5 6.5h14v10H10l-4.5 3.5v-3.5H5z"/><path d="M9 11.5h.01M12 11.5h.01M15 11.5h.01" stroke-width="3"/></svg></span>Kết nối AI<span class="cnt" id="cntAi"></span></button>
@@ -168,8 +169,83 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
   </div>
   <div class="content">
 
+  <!-- ===================== C THẢO HEYGEN (user 04/11/2026) ===================== -->
+  <section class="tab active" id="tab-heygen">
+    <div class="card">
+      <h3>1. Sheet C Thảo <small>tìm cột theo tên ở dòng 1: “Tiêu đề” · “Link video” (thư mục Drive) · “Link Đăng” (tool điền link video đã ghép)</small></h3>
+      <div class="body">
+        <div class="row">
+          <input id="hgSheet" type="text" class="grow" placeholder="https://docs.google.com/spreadsheets/d/…" spellcheck="false">
+          <button class="btn" onclick="api('/api/mo',{loai:'url',url:$('hgSheet').value})">Mở Sheet</button>
+          <button class="btn primary" onclick="hgDoc()">Đọc Sheet</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted">Nhận video:</span>
+          <select id="hgDich" style="width:auto;min-width:160px;font-weight:600" title="Ghép xong tải video lên thư mục Drive này rồi điền link vào cột Link Đăng" onchange="api('/api/heygen_dich',{id:this.value})"></select>
+          <button class="btn link sm" onclick="$('hgDichThem').style.display = $('hgDichThem').style.display ? '' : 'none'" title="Danh sách riêng của tab này, không liên quan ô Nhận video của tab Ghép video">thêm / bớt</button>
+          <span class="spacer"></span>
+          <span class="muted">Tiêu đề + ảnh minh họa hiện</span>
+          <input type="number" id="hgGiay" min="0" step="1" style="width:64px" onchange="hgLuuGiay()">
+          <span class="muted">giây đầu (0 = suốt video, khi đó không có phụ đề)</span>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted" title="Tiêu đề căn giữa khung. Ảnh minh họa tự bám theo tiêu đề (từ giữa tiêu đề) và phóng vừa đủ phủ kín trái, phải, xuống đáy">Tiêu đề: mép trên cách cằm</span>
+          <input type="number" id="hgCach" min="-50" max="150" step="1" style="width:60px" onchange="hgLuuCach()" title="Mép trên tiêu đề cách cằm bấy nhiêu % chiều cao khuôn mặt. 0 = sát cằm, số âm = đè lên cằm, số lớn = thấp xuống ngực. Mặc định 40">
+          <span class="muted">% chiều cao mặt</span>
+          <span class="muted" style="margin-left:14px">Ảnh minh họa:</span>
+          <span class="muted">bắt đầu từ giữa tiêu đề, lệch</span>
+          <input type="number" id="hgAnhLech" min="-100" max="300" step="1" style="width:60px" onchange="hgLuuAnh()" title="Mép trên ảnh minh họa dời khỏi GIỮA tiêu đề bấy nhiêu % chiều cao tiêu đề. Âm = lên cao hơn, dương = xuống thấp hơn, 0 = đúng giữa tiêu đề. Ảnh luôn phủ kín trái/phải/đáy. Mặc định -10">
+          <span class="muted">% chiều cao tiêu đề</span>
+          <span class="spacer"></span>
+          <label class="sw" title="Bật: GPT gán từng câu (bỏ đoạn tiêu đề đầu và câu kêu gọi cuối) là video dọc full khung (kho video, thẻ 4 tab Ghép video) / ảnh ngang (kho ảnh ngang bên dưới) / người nói, theo tỉ lệ ở dòng dưới; mỗi cảnh đúng từ đầu tới cuối câu. Tắt: chỉ tiêu đề + ảnh + phụ đề"><input type="checkbox" id="hgMh" onchange="hgDatMh(this)"> Minh họa AI</label>
+          <label class="sw" title="Bật: đốt phụ đề theo kịch bản (sau đoạn có tiêu đề). Tắt: video không có phụ đề. Riêng tab này, không đổi tab Chỉnh sửa"><input type="checkbox" id="hgSub" onchange="hgDatSub(this)"> Phụ đề</label>
+          <label class="sw" title="Tick: phụ đề vẫn hiện đè lên đoạn có ảnh / video minh họa. Không tick: đoạn nào có ảnh hoặc video minh họa thì không hiện phụ đề"><input type="checkbox" id="hgSubDe" onchange="hgDatSubDe(this)"> Phụ đề đè lên minh họa</label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted" title="Sheet kho ẢNH NGANG riêng của tab này (cột ID · Tên ảnh · Từ khóa · Mô tả cảnh · Link Drive). Dòng chưa có link thì chép ảnh trùng Tên ảnh / ID vào thư mục video mẫu">Kho ảnh ngang:</span>
+          <input id="hgKhoAnh" type="text" class="grow" placeholder="link tab Kho Anh Minh Hoa" spellcheck="false" onchange="hgLuuKho()">
+          <button class="btn" onclick="api('/api/mo',{loai:'url',url:$('hgKhoAnh').value})">Mở</button>
+        </div>
+        <div class="row" style="margin-top:8px"><span class="muted">Tỉ lệ minh họa, hiệu ứng cảnh, mẫu chữ phụ đề, độ chính xác tìm cảnh:</span>
+          <button class="btn link sm" onclick="moTab('chinh-sua')">chỉnh ở tab Chỉnh sửa, nhóm C Thảo HeyGen →</button></div>
+        <div id="hgDichThem" class="row" style="display:none;margin-top:8px">
+          <input id="hgDichLink" type="text" class="grow" placeholder="dán link thư mục Drive để thêm vào danh sách nhận video của tab này" spellcheck="false">
+          <button class="btn" onclick="hgDichThem()">+ Thêm</button>
+          <button class="btn danger" onclick="hgDichBo()" title="Bỏ thư mục đang chọn khỏi danh sách của tab này">Bỏ thư mục đang chọn</button>
+        </div>
+        <div id="hgPanel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+          <div class="row"><b id="hgTen"></b><span class="muted" id="hgTab"></span><span class="spacer"></span>
+            <label class="sw"><input type="checkbox" id="hgTatCa" onchange="hgTickTatCa(this.checked)"> chọn mọi dòng chạy được</label>
+            <button class="btn link sm" onclick="$('hgPanel').style.display='none'">đóng</button></div>
+          <div id="hgDong" style="max-height:280px;overflow:auto;margin-top:6px;font-size:13px"></div>
+          <div class="row" style="margin-top:8px"><span class="muted" id="hgCotNote"></span><span class="spacer"></span>
+            <button class="btn primary" onclick="hgThem()">+ Thêm dòng đã chọn vào hàng đợi</button></div>
+        </div>
+        <p class="hint">Mỗi thư mục Drive cần: <b>Tiêu đề - …png</b>, <b>Minh họa - …jpg</b>, một video dài có sẵn tiếng (<b>Video - …mp4</b>); có <b>Kịch bản - …docx</b> thì làm phụ đề. Không dùng clip gốc; bật “Minh họa AI” thì GPT gán từng câu là video dọc full khung / ảnh ngang dải dưới / người nói theo tỉ lệ ở trên, mỗi cảnh đúng thời gian câu; làm đẹp và đổi tốc độ giọng không áp cho loại này. Bố cục, màu, âm lượng, kiểu phụ đề lấy theo tab Chỉnh sửa.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>2. Hàng đợi C Thảo HeyGen <small id="hgSum"></small>
+        <span class="spacer"></span>
+        <label class="sw" title="Tắt: tập đã hỏi AI rồi thì chạy lại chỉ ghép lại với câu trả lời cũ. Bật: hỏi AI mới mỗi lần chạy. Dùng chung với ô cùng tên ở tab Ghép video"><input type="checkbox" id="hgHoiLai" onchange="datHoiLai(this)"> Hỏi GPT mới khi chạy</label>
+        <button id="hgChonThu" class="btn sm" onclick="api('/api/chon_thu')" title="Chạy các mục chờ ở chế độ chọn thử: tải Drive, lấy mốc lời nói, AI chọn cảnh + soát lại, ghi tab Thiếu và file ghi chú; KHÔNG dựng video, mục vẫn chờ. Bổ sung kho xong thì bấm ▶ Chạy">🔍 Chọn thử</button>
+        <button id="hgStart" class="btn blue sm" onclick="api('/api/start')" title="Chạy hàng đợi chung (cùng nút ▶ Chạy ở tab Ghép video): mọi tập đang chờ chạy lần lượt">▶ Chạy</button>
+        <button id="hgStopSau" class="btn sm" onclick="api('/api/stop_sau')">⏸ Dừng sau tập này</button>
+        <button id="hgStop" class="btn sm danger" onclick="api('/api/stop')">■ Dừng ngay</button>
+        <button class="btn sm" onclick="api('/api/retry',{})">↻ Chạy lại mục lỗi</button>
+        <button class="btn sm" onclick="api('/api/clear_done')">Bỏ mục đã xong</button>
+      </h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Tập</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
+          <tbody id="hgBody"><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== GHÉP VIDEO ===================== -->
-  <section class="tab active" id="tab-ghep">
+  <section class="tab" id="tab-ghep">
     <div><!-- thẻ 1 (thu gọn, 1 hàng) rồi thẻ 2 xuống hàng cho rộng (user 31/10), không chia 2 cột nữa -->
       <div class="card gon" id="cardGoc">
         <h3>1. Thư mục clip gốc <small id="gocTom" title="Tóm tắt kho clip gốc; bấm “chi tiết” để xem/sửa"></small>
@@ -275,6 +351,42 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
 
   <!-- ===================== CHỈNH SỬA ===================== -->
   <section class="tab" id="tab-chinh-sua">
+    <div class="card" id="cardTcHeygen">
+      <h3>C Thảo HeyGen <small>chỉ áp cho tab C Thảo HeyGen · đổi ô nào lưu ngay ô đó, không cần bấm Lưu tùy chọn</small>
+        <span class="spacer"></span><button class="btn link sm" onclick="moTab('heygen')">← về tab C Thảo HeyGen</button></h3>
+      <div class="body">
+        <div class="row" style="margin-top:8px" title="Chia theo thời lượng các câu giữa (bỏ đoạn tiêu đề đầu và câu kêu gọi cuối). GPT gán loại từng câu theo tỉ lệ này; hai video dọc không đứng liền nhau">
+          <span class="muted">Tỉ lệ minh họa:</span>
+          <span class="muted">người nói</span><input type="number" id="hgTiNguoi" min="0" max="100" step="1" style="width:56px" onchange="hgLuuTi()"><span class="muted">%</span>
+          <span class="muted" style="margin-left:8px">video dọc</span><input type="number" id="hgTiVideo" min="0" max="100" step="1" style="width:56px" onchange="hgLuuTi()"><span class="muted">%</span>
+          <span class="muted" style="margin-left:8px">ảnh ngang</span><b id="hgTiAnh"></b>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted">Hiệu ứng cảnh:</span>
+          <label class="sw" title="Cảnh minh họa vào/ra bằng hiệu ứng ngẫu nhiên (mờ dần, trượt trái, trượt phải, trượt lên/xuống), gọn trong thời gian câu. Tắt: chỉ mờ 0,25s"><input type="checkbox" class="hgHu" data-k="hieu_ung"> Hiệu ứng vào/ra</label>
+          <label class="sw" title="Tiếng hiệu ứng lúc cảnh minh họa XUẤT HIỆN, lấy từ tab Âm thanh hiệu ứng của Sheet kho, nhỏ hơn giọng theo tab Chỉnh sửa (mặc định -4 dB). Lúc kết thúc không có tiếng"><input type="checkbox" class="hgHu" data-k="sfx"> Tiếng khi xuất hiện</label>
+          <label class="sw" title="Ảnh ngang chuyển động nhẹ (phóng to / thu nhỏ / trượt chậm) thay vì đứng yên"><input type="checkbox" class="hgHu" data-k="anh_dong"> Ảnh chuyển động</label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted" title="Kiểu chữ phụ đề của riêng tab này. B: Segoe UI Black, viền mỏng. C: nền đen mờ, không viền. D: Bahnschrift, viền mảnh + bóng. A: Arial viền dày (kiểu cũ)">Mẫu chữ phụ đề:</span>
+          <select id="hgSubMau" style="width:auto;min-width:230px" onchange="hgDatSubKieu({sub_mau:this.value})">
+            <option value="b">B — Segoe UI Black, viền mỏng</option>
+            <option value="c">C — nền đen mờ, không viền</option>
+            <option value="d">D — Bahnschrift, viền mảnh + bóng</option>
+            <option value="a">A — Arial viền dày (kiểu cũ)</option>
+          </select>
+          <label class="sw" style="margin-left:10px" title="Tick: phụ đề IN HOA. Không tick: chữ thường như kịch bản"><input type="checkbox" id="hgSubHoa" onchange="hgDatSubKieu({sub_hoa:this.checked})"> IN HOA</label>
+          <label class="sw" title="Bỏ dấu , . : ; trong phụ đề (giữ ? và !) và ẩn số thứ tự mục 1. 2. 3."><input type="checkbox" id="hgSubBoDau" onchange="hgDatSubKieu({sub_bo_dau:this.checked})"> Bỏ dấu câu</label>
+          <img id="hgSubAnh" alt="xem thử phụ đề" title="Xem thử mẫu chữ đang chọn (nền trái sáng, phải tối)" style="height:96px;border-radius:8px;border:1px solid var(--border);margin-left:10px;display:none">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted" title="Chặt: chỉ khớp trùng / chứa trọn từ khóa, bỏ từ khóa quá chung, cảnh phải hợp nghĩa cả câu, video ≤ 6s, không đứng hình. Vừa: thêm khớp gần ≥ 85%, video ≤ 8s. Lỏng: như cũ. Câu không khớp thì để người nói + ghi tab Thiếu">Độ chính xác tìm cảnh:</span>
+          <label class="sw"><input type="radio" name="hgMuc" value="chat" onchange="hgDatMuc(this.value)"> Chặt</label>
+          <label class="sw"><input type="radio" name="hgMuc" value="vua" onchange="hgDatMuc(this.value)"> Vừa</label>
+          <label class="sw"><input type="radio" name="hgMuc" value="long" onchange="hgDatMuc(this.value)"> Lỏng</label>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <h3>Tùy chọn chỉnh sửa <small>áp dụng chung cho mọi tập chạy từ giờ</small>
         <span class="spacer"></span>
@@ -495,8 +607,29 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           Video đã xong: <b id="cdThuMucDone"></b> · <button class="btn link sm" onclick="api('/api/mo',{loai:'done'})">mở</button> — mỗi tập một thư mục con gồm video, ảnh bố cục, phụ đề và file <code>&lt;tên&gt;_minh_hoa_&lt;stamp&gt;.txt</code> (cảnh minh họa nào ở mốc nào, dùng Link Drive nào).</p>
       </div>
     </div>
-    <div class="card">
-      <h3>Google Drive &amp; Sheet lịch đăng <small>tải video đã ghép lên Drive, điền link vào cột G — bằng tài khoản Google của bạn, không cần Claude</small></h3>
+    <div class="card" id="cardKhoMay">
+      <h3>Kho minh họa trên máy <small>video minh họa (kho video) và ảnh minh họa (kho ảnh ngang) đã tải về để ghép</small></h3>
+      <div class="body">
+        <div class="row">
+          <span class="muted" style="width:150px">Thư mục đang lưu</span>
+          <b id="kmDir" class="grow" style="word-break:break-all"></b>
+          <button class="btn blue" onclick="api('/api/mo',{loai:'minh_hoa'})">📁 Mở thư mục</button>
+          <button class="btn" onclick="chonThuMucMh()" title="Đổi sang thư mục khác (dùng chung với thẻ 4 tab Ghép video)">Đổi…</button>
+          <button class="btn sm" onclick="saoChep($('kmDir').textContent)">sao chép</button>
+        </div>
+        <div class="row" style="margin-top:8px"><span class="muted" style="width:150px">Đang có</span><span id="kmDem"></span></div>
+        <div class="row" style="margin-top:8px"><span class="muted" style="width:150px">Sheet kho</span>
+          <button class="btn sm" onclick="api('/api/mo',{loai:'url',url:(state.minh_hoa||{}).sheet||''})">Mở kho video</button>
+          <button class="btn sm" onclick="api('/api/mo',{loai:'url',url:(state.tuy_chon||{}).heygen_kho_anh||''})">Mở kho ảnh ngang</button></div>
+        <div class="row" style="margin-top:8px"><span class="muted" style="width:150px">Dọn kho</span>
+          <button class="btn sm danger" onclick="kmDon()" title="Đưa vào Thùng rác các video / ảnh ĐÃ TẢI TỪ DRIVE (dòng Sheet có Link Drive). Cần lại thì app tự tải lại khi ghép. Giữ nguyên file bạn tự chép vào (dòng chưa có link) và các file dữ liệu của app">🗑 Dọn file đã tải từ Drive…</button>
+          <span class="muted">đưa vào Thùng rác, cần thì app tự tải lại · hoặc bấm “Mở thư mục” để tự xóa</span></div>
+        <p class="hint">Clip và ảnh có Link Drive được tải về đây một lần (tên file = ID Drive), lần sau dùng lại không tải nữa. Dòng Sheet chưa có link thì chép file vào thư mục này, đặt tên trùng Tên clip / Tên ảnh hoặc ID (vd <b>AN12.jpg</b>) là tool tự dùng.</p>
+      </div>
+    </div>
+    <div class="card gon" id="cardGg">
+      <h3>Google Drive &amp; Sheet lịch đăng <small id="ggTom"></small><span class="spacer"></span>
+        <button class="btn link sm" id="btnGgGon" onclick="ggGon()">▸ chi tiết</button></h3>
       <div class="body">
         <div class="row">
           <span id="ggTt" class="chip">…</span>
@@ -593,6 +726,7 @@ let seq = 0, logLines = [], state = null, toastT = 0, busy = false;
 let lastItemsKey = '', gocDirDirty = false, tcDirty = false, tcLoaded = false, cdDirty = false, lastAiKey = '', lastXtKey = '', lastS = null;
 let aiChon = 'claude', aiBusy = false;
 const TAB_INFO = {
+  'heygen': ['C Thảo HeyGen', 'Video dài có sẵn tiếng + tiêu đề + ảnh minh họa + ảnh ngang AI chọn câu nổi bật + phụ đề — không clip gốc'],
   'ghep': ['Ghép video', 'Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề'],
   'chinh-sua': ['Chỉnh sửa', 'Bố cục · màu · âm thanh · phụ đề · phần sau · render — áp cho mọi tập'],
   'lam-dep': ['Làm đẹp', 'Làm trắng da · son môi · sức sống · ánh sáng — chỉnh theo ảnh mẫu, chỉ áp cho clip hook'],
@@ -654,7 +788,7 @@ function moTab(name){
   if (name === 'lam-dep' && $('ldAnh').style.display === 'none') ldHen(50);   // mở tab lần đầu -> tính ảnh xem thử
 }
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => moTab(b.dataset.tab));
-const tabTuHash = () => moTab(TAB_INFO[location.hash.slice(1)] ? location.hash.slice(1) : 'ghep');
+const tabTuHash = () => moTab(TAB_INFO[location.hash.slice(1)] ? location.hash.slice(1) : 'heygen');   // mở app mặc định vào tab C Thảo HeyGen (user 05/11)
 window.addEventListener('hashchange', tabTuHash);   // app_gui.py --tab x mở thẳng tab; đổi #hash cũng đổi tab
 tabTuHash();
 
@@ -706,7 +840,7 @@ async function themTuSheet(tuDong){
 }
 /* thư mục Drive đích của từng tập: tên (đã/đang tải) hoặc ô chọn để đổi trước khi tải */
 function dichCell(it){
-  const dd = (state && state.drive_dich) || [], t = it.tai_len || {}, ten = (dd.find(x => x.id === it.dich) || {}).ten;
+  const dd = (state && (it.loai === 'heygen' ? state.heygen_dich : state.drive_dich)) || [], t = it.tai_len || {}, ten = (dd.find(x => x.id === it.dich) || {}).ten;
   if (t.tt === 'xong' || t.tt === 'dang' || it.status === 'dang') return ten ? `<div class="muted">→ ${esc(ten)}</div>` : '';
   return `<div class="muted" style="margin-top:3px">→ <select style="width:auto;font-size:12px;padding:1px 4px" title="Thư mục Drive nhận video của tập này" onchange="api('/api/set_dich_muc',{id:${it.id},dich:this.value})"><option value="">(không tải lên)</option>${dd.filter(x => !x.an || x.id === it.dich).map(x => `<option value="${esc(x.id)}" ${x.id === it.dich ? 'selected' : ''}>${esc(x.ten)}${x.an ? ' (ẩn)' : ''}</option>`).join('')}</select></div>`;
 }
@@ -799,11 +933,20 @@ function stCell(it, now){
   if (it.status === 'xong') return `<span class="chip ok">✓ Xong</span><div class="muted">làm ${fmt(it.giay_chay||0)}${it.thoi_luong ? ` · video ${fmt(it.thoi_luong)}` : ''}</div>` + tlCell(it);
   if (it.status === 'loi') return `<span class="chip bad">✗ Lỗi</span><div class="err-t" style="cursor:copy" title="Bấm để sao chép lỗi" onclick="saoChep(this.textContent)">${esc(it.loi)}</div>`;
   return `<span class="chip">Chờ</span>` + (it.loi ? `<div class="muted" style="cursor:copy" title="Bấm để sao chép" onclick="saoChep(this.textContent)">${esc(it.loi)}</div>` : '')
-    + (it.chon_thu ? `<div class="muted" style="white-space:normal;max-width:260px" title="Đã chọn thử, chưa dựng video — bổ sung kho rồi bấm ▶ Chạy">🔍 chọn thử ${esc(it.chon_thu.luc)}: ${esc(it.chon_thu.tom_tat)}</div>` : '') + tlCell(it);
+    + (it.chon_thu ? `<div class="muted" style="white-space:normal;max-width:260px" title="Đã chọn thử, chưa dựng video — bổ sung kho rồi bấm ▶ Chạy">🔍 chọn thử ${esc(it.chon_thu.luc)}${it.loai === 'heygen' ? '' : ': ' + esc(it.chon_thu.tom_tat)}</div>` : '') + tlCell(it);
 }
 const clipMo = new Set();        // id các mục đang mở "đầy đủ" ô Clip phần sau (mặc định thu gọn — nội dung dài, user 23/10)
 function clipToggle(id){ if (clipMo.has(id)) clipMo.delete(id); else clipMo.add(id); lastItemsKey = ''; if (lastS) renderItems(lastS); }
+/* tab C Thảo (user 05/11): hàng đợi chỉ hiện SỐ cảnh và SỐ câu thiếu; chi tiết xem khi rê chuột hoặc ở file link minh họa */
+function hgTomCanh(it){
+  let n = it.so_canh, th = it.so_thieu;
+  if (n == null && it.minh_hoa){ const m = String(it.minh_hoa).match(/^(\d+)\s+cảnh/); n = m ? +m[1] : 0; }
+  if (th == null && it.chon_thu && it.chon_thu.tom_tat){ const m = String(it.chon_thu.tom_tat).match(/(\d+)\s+thiếu/); if (m) th = +m[1]; }
+  if (n == null && th == null) return '';
+  return `<span class="chip ${n ? 'ok' : ''}" title="${esc(it.minh_hoa || '')}">${n || 0} cảnh</span>` + (th == null ? '' : ` <span class="chip ${th ? 'warn' : ''}" title="Số câu AI muốn minh họa nhưng kho chưa có cảnh khớp (đã ghi tab Thiếu)">${th} thiếu</span>`);
+}
 function clipCell(it){
+  if (it.loai === 'heygen') return '<span class="chip warn">🎬 C Thảo HeyGen</span>' + (hgTomCanh(it) ? `<div style="margin-top:3px">${hgTomCanh(it)}</div>` : '<div class="muted">video dài có tiếng, không clip gốc</div>');
   if (!it.phan_sau) return `<span class="muted">${it.status === 'cho' ? 'xáo ngẫu nhiên khi chạy' : it.status === 'dang' ? 'đang xáo…' : '—'}</span>`;
   const mo = clipMo.has(it.id), dau = s => (String(s).match(/^([^:]{1,40}):/) || [])[1] || String(s).slice(0, 40);
   const nut = `<button class="btn link" style="padding:0 4px;margin-left:4px" onclick="clipToggle(${it.id})">${mo ? '▾ Thu gọn' : '▸ Đầy đủ'}</button>`;
@@ -870,6 +1013,112 @@ function renderItems(s){
   $('btnStart').disabled = s.running || !c('cho'); $('btnStop').disabled = !s.running || s.stopping; $('btnChonThu').disabled = s.running || !c('cho');
   const bss = $('btnStopSau'); bss.disabled = !s.running || s.stopping; bss.textContent = sauTap ? '↩ Hủy dừng sau tập' : '⏸ Dừng sau tập này'; bss.className = 'btn sm' + (sauTap ? ' blue' : '');
   $('btnTiepNgay').style.display = (s.running && nghi > 0 && !s.stopping) ? '' : 'none';
+}
+
+/* ---------- tab C Thảo HeyGen ---------- */
+let hgDocKq = null, hgSheetDirty = false, hgGiayDirty = false, hgKey = '';
+$('hgSheet').addEventListener('input', () => hgSheetDirty = true);
+$('hgSheet').addEventListener('keydown', e => { if (e.key === 'Enter') hgDoc(); });
+$('hgGiay').addEventListener('input', () => hgGiayDirty = true);
+async function hgDichThem(){ const link = $('hgDichLink').value.trim(); if (!link) return toast('Dán link thư mục Drive trước.', true);
+  const j = await api('/api/heygen_dich', {hanh: 'them', link}); if (j.ok) $('hgDichLink').value = ''; }
+async function hgDichBo(){ const id = $('hgDich').value; if (!id) return; if (confirm('Bỏ thư mục đang chọn khỏi danh sách của tab C Thảo HeyGen?')) api('/api/heygen_dich', {hanh: 'bo', id}); }
+let hgAnhGui = false;
+$('hgAnhLech').addEventListener('input', () => hgAnhGui = true);
+async function hgLuuAnh(){ const j = await api('/api/heygen_cai_dat', {anh_lech: $('hgAnhLech').value}); if (j.ok) hgAnhGui = false; }
+async function hgDatSubDe(el){ hgSubGui = true; try{ const j = await api('/api/heygen_cai_dat', {sub_de: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hgSubGui = false; } }
+let hgSubKieuGui = false;
+async function hgDatSubKieu(d){ hgSubKieuGui = true; try{ await api('/api/heygen_cai_dat', d); } finally{ hgSubKieuGui = false; } hgSubXemThu(); }
+let hgSubXtKy = '';
+async function hgSubXemThu(){   // ảnh xem thử theo mẫu / IN HOA / bỏ dấu đang chọn
+  const d = {mau: $('hgSubMau').value, hoa: $('hgSubHoa').checked, bo_dau: $('hgSubBoDau').checked}, ky = JSON.stringify(d);
+  if (ky === hgSubXtKy) return; hgSubXtKy = ky;
+  try{ const j = await (await fetch('/api/heygen_sub_xem_thu', {method:'POST', headers:{'Content-Type':'application/json'}, body: ky})).json();
+    if (j.ok){ $('hgSubAnh').src = j.anh; $('hgSubAnh').style.display = ''; } else hgSubXtKy = ''; }catch(e){ hgSubXtKy = ''; }
+}
+let hgHuGui = false;
+document.querySelectorAll('.hgHu').forEach(el => el.onchange = async () => { hgHuGui = true; try{ const j = await api('/api/heygen_cai_dat', {[el.dataset.k]: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hgHuGui = false; } });
+let hgSubGui = false, hgMhGui = false, hgKhoDirty = false, hgTiDirty = false, hgMucGui = false;
+async function hgDatMuc(v){ hgMucGui = true; try{ await api('/api/heygen_cai_dat', {muc: v}); } finally{ hgMucGui = false; } }
+['hgTiNguoi', 'hgTiVideo'].forEach(id => $(id).addEventListener('input', () => { hgTiDirty = true; hgTiAnhVe(); }));
+function hgTiAnhVe(){ $('hgTiAnh').textContent = Math.max(0, 100 - (+$('hgTiNguoi').value || 0) - (+$('hgTiVideo').value || 0)) + '%'; }
+async function hgLuuTi(){ const j = await api('/api/heygen_cai_dat', {ti_nguoi: $('hgTiNguoi').value, ti_video: $('hgTiVideo').value}); if (j.ok) hgTiDirty = false; }
+$('hgKhoAnh').addEventListener('input', () => hgKhoDirty = true);
+async function hgLuuKho(){ const j = await api('/api/heygen_cai_dat', {kho_anh: $('hgKhoAnh').value}); if (j.ok) hgKhoDirty = false; }
+async function hgDatMh(el){ hgMhGui = true; try{ const j = await api('/api/heygen_cai_dat', {minh_hoa: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hgMhGui = false; } }
+async function hgDatSub(el){ hgSubGui = true; try{ const j = await api('/api/heygen_cai_dat', {sub: el.checked}); if (!j.ok) el.checked = !el.checked; } finally{ hgSubGui = false; } }
+let hgCachDirty = false;
+$('hgCach').addEventListener('input', () => hgCachDirty = true);
+async function hgLuuCach(){ const j = await api('/api/heygen_cai_dat', {cach: $('hgCach').value}); if (j.ok) hgCachDirty = false; }
+async function hgLuuGiay(){ const j = await api('/api/heygen_cai_dat', {giay: $('hgGiay').value}); if (j.ok) hgGiayDirty = false; }
+async function hgDoc(){
+  const link = $('hgSheet').value.trim(); if (!link) return toast('Dán link Google Sheet trước.', true);
+  $('hgPanel').style.display = ''; $('hgTen').textContent = ''; $('hgTab').textContent = ''; $('hgDong').innerHTML = '<span class="muted">đang đọc Sheet…</span>';
+  const j = await api('/api/heygen_doc_sheet', {link}); hgSheetDirty = false;
+  if (!j.ok){ hgDocKq = null; $('hgDong').innerHTML = `<span class="chip bad">${esc(j.msg || 'không đọc được Sheet')}</span>`; return; }
+  hgDocKq = j; $('hgTen').textContent = j.tieu_de_sheet; $('hgTab').textContent = ` · tab “${j.tab}” · ${j.dong.length} dòng`;
+  $('hgCotNote').textContent = `Link video = cột ${j.cot_f}, Link Đăng = cột ${j.cot_g}. Ghép xong tải lên thư mục ở ô “Nhận video” rồi điền link vào cột ${j.cot_g}.`;
+  $('hgDong').innerHTML = j.dong.map(d => { const ok = !!d.fid, da = !!d.link_g, chay = ok && !da && !d.dang_co;
+    const chip = !ok ? '<span class="chip warn">Link video trống</span>' : da ? `<span class="chip ok" title="${esc(d.link_g)}">đã có Link Đăng</span>` : d.dang_co ? '<span class="chip run">đã trong hàng đợi</span>' : '<span class="chip">chạy được</span>';
+    return `<label class="sw" style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><input type="checkbox" data-dong="${d.dong}" ${ok ? '' : 'disabled'} ${chay ? 'checked' : ''}><span class="muted" style="min-width:52px">dòng ${d.dong}</span><span class="grow">${esc(d.tieu_de || '(không có tiêu đề)')}</span>${chip}</label>`; }).join('') || '<span class="muted">không có dòng nào có tiêu đề / link video</span>';
+  $('hgTatCa').checked = true;
+  if (j.dich_nho){ $('hgDich').value = j.dich_nho; api('/api/heygen_dich', {id: j.dich_nho}); }
+}
+function hgTickTatCa(bat){ document.querySelectorAll('#hgDong input[type=checkbox]:not(:disabled)').forEach(c => { const d = hgDocKq && hgDocKq.dong.find(x => x.dong === +c.dataset.dong); c.checked = !!(bat && d && !d.link_g && !d.dang_co); }); }
+async function hgThem(){
+  if (!hgDocKq) return toast('Đọc Sheet trước.', true);
+  const chon = [...document.querySelectorAll('#hgDong input[type=checkbox]:checked')].map(c => +c.dataset.dong);
+  const dong = hgDocKq.dong.filter(d => chon.includes(d.dong));
+  if (!dong.length) return toast('Chưa tick dòng nào.', true);
+  const j = await api('/api/heygen_them', {sheet: {id: hgDocKq.id, tab: hgDocKq.tab, cot_g: hgDocKq.cot_g, link: hgDocKq.link}, dong, dich: $('hgDich').value});
+  if (j.ok){ $('hgPanel').style.display = 'none'; hgDocKq = null; }
+}
+function renderHeygen(s){
+  const tc = s.tuy_chon || {};
+  if (!hgSheetDirty && document.activeElement !== $('hgSheet')) $('hgSheet').value = tc.heygen_sheet || '';
+  if (!hgGiayDirty && document.activeElement !== $('hgGiay')) $('hgGiay').value = tc.heygen_giay ?? 10;
+  if (!hgCachDirty && document.activeElement !== $('hgCach')) $('hgCach').value = tc.heygen_cach ?? 40;
+  if (!hgAnhGui && document.activeElement !== $('hgAnhLech')) $('hgAnhLech').value = tc.heygen_anh_lech ?? -10;
+  if (!hgSubGui){ $('hgSub').checked = tc.heygen_sub !== false; $('hgSubDe').checked = tc.heygen_sub_de !== false; $('hgSubDe').disabled = tc.heygen_sub === false; }
+  if (!hgMhGui) $('hgMh').checked = tc.heygen_minh_hoa !== false;
+  if (!hgSubKieuGui){ if (document.activeElement !== $('hgSubMau') && !document.getElementById('selMenu')) $('hgSubMau').value = tc.heygen_sub_mau || 'b';
+    $('hgSubHoa').checked = !!tc.heygen_sub_hoa; $('hgSubBoDau').checked = tc.heygen_sub_bo_dau !== false;
+    if (document.getElementById('tab-chinh-sua').classList.contains('active')) hgSubXemThu(); }
+  if (!hgHuGui) document.querySelectorAll('.hgHu').forEach(el => { el.checked = tc['heygen_' + el.dataset.k] !== false; });
+  if (!hgMucGui) document.querySelectorAll('input[name=hgMuc]').forEach(r => { r.checked = r.value === (tc.heygen_muc || 'chat'); });
+  if (!hgKhoDirty && document.activeElement !== $('hgKhoAnh')) $('hgKhoAnh').value = tc.heygen_kho_anh || '';
+  if (!hgTiDirty && ![$('hgTiNguoi'), $('hgTiVideo')].includes(document.activeElement)){ $('hgTiNguoi').value = tc.heygen_ti_nguoi ?? 12; $('hgTiVideo').value = tc.heygen_ti_video ?? 35; hgTiAnhVe(); }
+  $('hgChonThu').disabled = s.running || !s.items.some(x => x.loai === 'heygen' && x.status === 'cho') || tc.heygen_minh_hoa === false;
+  if (!hoiLaiDangGui) $('hgHoiLai').checked = !!tc.minh_hoa_hoi_lai;
+  // danh sách RIÊNG của tab này (user 04/11), không dính ô “Nhận video” của tab Ghép video
+  const sel = $('hgDich'), dd = s.heygen_dich || [];
+  if (document.activeElement !== sel){
+    const k = JSON.stringify(dd);
+    if (sel.dataset.k !== k){ sel.dataset.k = k;
+      sel.innerHTML = '<option value="">(không tải lên Drive)</option>' + dd.map(d => `<option value="${esc(d.id)}">${esc(d.ten)}</option>`).join(''); }
+    sel.value = s.heygen_dich_chon || '';
+  }
+  const items = s.items.filter(x => x.loai === 'heygen');
+  const key = JSON.stringify([items, s.running, s.stopping]);
+  if (key !== hgKey){
+    hgKey = key;
+    $('hgBody').innerHTML = items.length ? items.map((it, i) => `
+      <tr class="${it.status}">
+        <td class="num">${i + 1}</td>
+        <td><div class="ten${it.ten ? '' : ' cho-ten'}">${esc(it.ten || 'đang lấy tên thư mục…')}</div>
+            <div class="lnk"><a onclick="api('/api/mo',{loai:'url',url:'${esc(it.link)}'})">${esc(it.link)}</a></div>
+            ${it.canh_bao ? `<div class="warn-t">⚠ ${esc(it.canh_bao)}</div>` : ''}
+            ${hgTomCanh(it) ? `<div style="margin-top:4px">${hgTomCanh(it)}</div>` : ''}</td>
+        <td class="st">${stCell(it, s.now)}</td>
+        <td>${kqCell(it)}</td>
+        <td style="white-space:nowrap;text-align:right">${actCell(it)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="empty">Chưa có tập nào — đọc Sheet ở thẻ 1 rồi thêm dòng.</td></tr>';
+  }
+  const c = st => items.filter(x => x.status === st).length;
+  $('hgSum').textContent = items.length ? `${items.length} tập · ${c('cho')} chờ · ${c('dang')} đang làm · ${c('xong')} xong · ${c('loi')} lỗi` : '';
+  $('cntHg').innerHTML = items.length ? `<b>${c('cho') + c('dang')}</b>/${items.length}` : '';
+  $('hgStart').disabled = s.running || !s.items.some(x => x.status === 'cho'); $('hgStop').disabled = !s.running || s.stopping;
+  $('hgStopSau').disabled = !s.running || s.stopping; $('hgStopSau').textContent = s.dung_sau_tap ? '↩ Hủy dừng sau tập' : '⏸ Dừng sau tập này';
 }
 
 /* ---------- tab Chỉnh sửa ---------- */
@@ -1096,6 +1345,20 @@ function renderCaiDat(c){
 
 /* ---------- Google Drive & Sheet (tab Cài đặt) ---------- */
 let ggKey = '';
+/* thẻ Google thu gọn được (user 05/11), mặc định thu gọn, nhớ trong localStorage */
+let ggGonBat = true; try{ ggGonBat = localStorage.getItem('ggGon') !== '0'; } catch(e){}
+function apGgGon(){ $('cardGg').classList.toggle('gon', ggGonBat); $('btnGgGon').textContent = ggGonBat ? '▸ chi tiết' : '▾ thu gọn'; }
+function ggGon(){ ggGonBat = !ggGonBat; try{ localStorage.setItem('ggGon', ggGonBat ? '1' : '0'); } catch(e){} apGgGon(); }
+apGgGon();
+async function kmDon(){
+  if (!confirm('Đưa các video / ảnh minh họa đã tải từ Drive vào Thùng rác? Khi ghép tập sau, app tự tải lại những file cần dùng.')) return;
+  toast('Đang dọn kho trên máy…'); await api('/api/kho_may_don', {});
+}
+function renderKhoMay(k){
+  if (!k) return;
+  $('kmDir').textContent = k.dir || '(chưa có)';
+  $('kmDem').innerHTML = k.ton_tai ? `<b>${k.video}</b> video · <b>${k.anh}</b> ảnh · ${k.mb} MB` : '<span class="chip bad">Không thấy thư mục này</span>';
+}
 function renderGoogle(s){
   const g = s.google || {}, k = JSON.stringify([g, s.drive_dich, s.drive_dich_chon, s.tu_tai_len, s.tu_don_rac]);
   if (k === ggKey) return; ggKey = k;
@@ -1103,6 +1366,7 @@ function renderGoogle(s){
   if (g.dang){ tt.className = 'chip run'; tt.innerHTML = '<span class="spin"></span> đang chờ bạn đăng nhập trên trình duyệt…'; }
   else if (g.da_dang_nhap){ tt.className = 'chip ok'; tt.textContent = '✓ đã đăng nhập ' + (g.email || ''); }
   else { tt.className = 'chip warn'; tt.textContent = g.co_client ? 'chưa đăng nhập Google' : 'thiếu client_secret.json cạnh app'; }
+  $('ggTom').textContent = g.da_dang_nhap ? '✓ đã đăng nhập ' + (g.email || '') + ` · ${(s.drive_dich || []).length} thư mục nhận video` : 'chưa đăng nhập Google';
   $('btnGgDn').disabled = !!g.dang || !g.co_client; $('btnGgDx').disabled = !g.da_dang_nhap; $('ggLoi').textContent = g.loi || ''; $('ggToken').textContent = g.token || '';
   const cl = g.client || {}; $('ggClient').textContent = cl.co ? `dự án ${cl.project || '?'}` : 'chưa có';
   $('cdTuTaiLen').checked = !!s.tu_tai_len; $('cdTuDonRac').checked = s.tu_don_rac !== false;
@@ -1128,7 +1392,7 @@ async function tick(){
     if (s.log_seq < seq){ seq = 0; logLines = []; }
     seq = s.log_seq; state = s;
     $('sDot').className = 'dot on';
-    renderGoc(s.goc); renderKcg(s.tuy_chon); renderMinhHoa(s.minh_hoa); renderItems(s); renderLog(s.logs); renderXemTruoc(s.xem_truoc); renderAi(s.ai); renderCaiDat(s.cai_dat); renderLamDep(s.lam_dep); renderMauGiong(s.mau_giong); renderGoogle(s);
+    renderGoc(s.goc); renderKcg(s.tuy_chon); renderMinhHoa(s.minh_hoa); renderItems(s); renderHeygen(s); renderKhoMay(s.kho_may); renderLog(s.logs); renderXemTruoc(s.xem_truoc); renderAi(s.ai); renderCaiDat(s.cai_dat); renderLamDep(s.lam_dep); renderMauGiong(s.mau_giong); renderGoogle(s);
     if (!hoiLaiDangGui) $('mhHoiLai').checked = !!(s.tuy_chon && s.tuy_chon.minh_hoa_hoi_lai);
     if (!tcDirty && !TC_IDS.some(id => document.activeElement === $(id))){ tcFill(s.tuy_chon); tcLoaded = true; }
   }catch(e){ $('sDot').className = 'dot'; $('sTxt').textContent = 'mất kết nối server'; $('chipRun').className = 'chip bad'; $('chipRun').textContent = 'Mất kết nối server'; }

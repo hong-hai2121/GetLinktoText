@@ -369,6 +369,61 @@ def doc_lich(link: str, log: Callable[[str], None] = print) -> dict:
             "cot_f": COT_LINK_NGUYEN_LIEU, "cot_g": COT_LINK_VIDEO}
 
 
+def _chu_cot(i: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA."""
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _chuan_tieu_de(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(s or "")).replace("đ", "d").replace("Đ", "D")
+    return " ".join("".join(c for c in s if unicodedata.category(c) != "Mn").lower().split())
+
+
+# tab C Thảo HeyGen: tìm cột theo CHỮ ở dòng tiêu đề (không cố định chữ cái cột), Sheet đổi thứ tự cột vẫn đúng
+COT_HEYGEN = {"tieu_de": "Tiêu đề", "link_vao": "Link video", "link_ra": "Link Đăng"}
+
+
+def doc_lich_theo_cot(link: str, log: Callable[[str], None] = print) -> dict:
+    """Đọc Sheet có dòng 1 là tiêu đề cột (STT · Tiêu đề · Nội dung kịch bản · Ghi chú · Link video · Link Đăng):
+    tìm cột theo tên ở COT_HEYGEN -> {id, gid, tab, tieu_de_sheet, cot_vao, cot_ra, dong: [{dong, tieu_de, link_f, fid,
+    link_g}]} (link_f = Link video = thư mục Drive nguyên liệu, link_g = Link Đăng = nơi ghi link video đã ghép)."""
+    sid, gid = sheet_id_gid(link)
+    if not sid:
+        raise RuntimeError("Không phải link Google Sheet.")
+    c = creds()
+    if not c:
+        raise RuntimeError("Chưa đăng nhập Google (tab Cài đặt → Đăng nhập).")
+    sh = _sheets(c)
+    tab, tieu_de = _tab(sh, sid, gid)
+    r = sh.spreadsheets().values().get(spreadsheetId=sid, range=f"'{tab}'").execute()
+    rows = r.get("values", [])
+    if not rows:
+        raise RuntimeError(f"Tab “{tab}” trống.")
+    dau = [_chuan_tieu_de(x) for x in rows[0]]
+    vi_tri = {}
+    for k, ten in COT_HEYGEN.items():
+        if _chuan_tieu_de(ten) not in dau:
+            raise RuntimeError(f"Không thấy cột “{ten}” ở dòng 1 của tab “{tab}” (đang có: {', '.join(rows[0])}).")
+        vi_tri[k] = dau.index(_chuan_tieu_de(ten))
+    dong = []
+    for i, row in enumerate(rows[1:], start=2):
+        lay = lambda k: (row[vi_tri[k]].strip() if vi_tri[k] < len(row) and row[vi_tri[k]] else "")   # noqa: E731
+        td, lf, lg = lay("tieu_de"), lay("link_vao"), lay("link_ra")
+        if not td and not lf:
+            continue
+        dong.append({"dong": i, "tieu_de": td, "link_f": lf, "fid": folder_id(lf) if lf else None, "link_g": lg})
+    cot_vao, cot_ra = _chu_cot(vi_tri["link_vao"]), _chu_cot(vi_tri["link_ra"])
+    log(f"Sheet “{tieu_de}” tab “{tab}”: {len(dong)} dòng; “{COT_HEYGEN['link_vao']}” = cột {cot_vao}, "
+        f"“{COT_HEYGEN['link_ra']}” = cột {cot_ra}")
+    return {"id": sid, "gid": gid, "tab": tab, "tieu_de_sheet": tieu_de, "dong": dong, "cot_f": cot_vao, "cot_g": cot_ra}
+
+
 def ghi_o(sid: str, tab: str, dong: int, cot: str, gia_tri: str) -> None:
     c = creds()
     if not c:

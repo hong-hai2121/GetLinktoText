@@ -58,9 +58,14 @@ def doc_kich_ban(path: Path) -> str:
         from xml.etree import ElementTree as ET
         w = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
         root = ET.fromstring(zipfile.ZipFile(path).read("word/document.xml"))
-        paras = ["".join(x.text or "" for x in p.iter(w + "t")) for p in root.iter(w + "p")]
+        # xuống dòng mềm (w:br / w:cr) và tab trong cùng đoạn = khoảng trắng; trước đây bị nối liền -> "ngủ.Hôm nay" (05/11)
+        paras = ["".join((x.text or "") if x.tag == w + "t" else " " for x in p.iter()
+                         if x.tag in (w + "t", w + "br", w + "cr", w + "tab")) for p in root.iter(w + "p")]
     else:
         paras = path.read_text(encoding="utf-8-sig").splitlines()
+    # dấu câu dính liền chữ / số sau (chữ trước dấu): "ngủ.Hôm" -> "ngủ. Hôm", "ngay:1." -> "ngay: 1." để tách câu đúng
+    # (user 05/11: câu "thả tim" bị gộp với câu sau). Số thập phân "3.5" (số trước dấu) giữ nguyên.
+    paras = [re.sub(r"(?<=[^\W\d_])([.!?:;…])(?=[^\W_])", r"\1 ", p) for p in paras]
     paras = [p.strip() for p in paras if p.strip()]
     noi_dung = [re.sub(r"^\s*nội dung(?:\s+quay)?\s*:\s*", "", p, flags=re.I)
                 for p in paras if re.match(r"^\s*nội dung", p, re.I)]
@@ -278,14 +283,43 @@ def _ts_ass(t: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+# mẫu chữ phụ đề karaoke (user 05/11 chọn B cho tab C Thảo): font (None = theo tham số font), hệ số cỡ chữ so với `co`,
+# đậm, kiểu viền (1 = viền + bóng, 4 = nền hộp mờ của libass), viền, bóng (thang 288), màu viền, màu bóng / nền, giãn chữ
+MAU_ASS = {
+    "a": dict(font=None, he_so=1.0, dam=-1, kieu=1, vien=None, bong=1.0, mau_vien="&H00000000", mau_nen="&H80000000", gian=0),
+    "b": dict(font="Segoe UI Black", he_so=12.5 / 11, dam=0, kieu=1, vien=1.0, bong=0.6, mau_vien="&H00101010",
+              mau_nen="&HA0000000", gian=0.5),
+    "c": dict(font="Segoe UI Semibold", he_so=12.5 / 11, dam=-1, kieu=4, vien=0, bong=1.6, mau_vien="&H00000000",
+              mau_nen="&H70000000", gian=0),
+    "d": dict(font="Bahnschrift", he_so=13 / 11, dam=-1, kieu=1, vien=0.8, bong=0.9, mau_vien="&H00000000",
+              mau_nen="&H90000000", gian=0.5),
+}
+_SO_MUC = re.compile(r"^\(?\d{1,2}[.)]$")          # "1." "2)" đứng lẻ = số thứ tự mục liệt kê
+_HET_CAU = (".", "!", "?", ":", ";", "…")
+
+
+def chu_sach(hien: str) -> str:
+    """Chữ hiển thị của một từ khi bỏ dấu câu (user 05/11): bỏ , . : ; … và ngoặc kép ở hai đầu, GIỮ ? và ! và dấu
+    trong từ (3-4, 15-20cm, 3.5)."""
+    s = hien.strip().strip('"“”‘’\'')
+    s = re.sub(r"^[,.:;…]+", "", s)
+    s = re.sub(r"[,.:;…]+(?=[?!]*$)", "", s)
+    return s.strip('"“”‘’\'')
+
+
 def ghi_ass(cues: list[Cue], path: Path, W: int, H: int, font: str = "Arial", co: float = 11, le_duoi: int = 45,
-            hoa: bool = True, mau_nhan: str = MAU_NHAN, vien: float = VIEN_KARAOKE) -> int:
+            hoa: bool = True, mau_nhan: str = MAU_NHAN, vien: float = VIEN_KARAOKE, mau: str = "a",
+            bo_dau: bool = False) -> int:
     """Phụ đề ASS kiểu karaoke: cả câu chữ trắng viền đen đậm (IN HOA nếu `hoa`), TỪ ĐANG ĐỌC tô màu `mau_nhan`.
     Mỗi từ một dòng Dialogue [mốc từ, mốc từ kế) chứa nguyên câu, chỉ từ đó mang thẻ màu -> chữ đứng yên, màu chạy.
     PlayRes = kích thước video; cỡ chữ / lề / viền quy từ thang 288 (giống force_style) để cùng số thì cùng cỡ.
     Trả về số dòng Dialogue."""
+    m = MAU_ASS.get(mau, MAU_ASS["a"])
     ky, kx = H / 288, W / 384
-    size, outline, shadow = round(co * ky), round(vien * ky), round(1 * ky)
+    size = round(co * m["he_so"] * ky)
+    outline = round((vien if m["vien"] is None else m["vien"]) * ky)
+    shadow = round(m["bong"] * ky)
+    font = m["font"] or font
     mv, ml = round(le_duoi * ky), round(25 * kx)
     dong = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0",
@@ -294,22 +328,35 @@ def ghi_ass(cues: list[Cue], path: Path, W: int, H: int, font: str = "Arial", co
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
         "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
         "MarginR, MarginV, Encoding",
-        f"Style: Sub,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,"
-        f"{outline},{shadow},2,{ml},{ml},{mv},1",
+        f"Style: Sub,{font},{size},&H00FFFFFF,&H00FFFFFF,{m['mau_vien']},{m['mau_nen']},{m['dam']},0,0,0,100,100,"
+        f"{m['gian']},0,{m['kieu']},{outline},{shadow},2,{ml},{ml},{mv},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
     def chu(s: str) -> str:
+        s = chu_sach(s) if bo_dau else s
         s = s.upper() if hoa else s
         return s.replace("{", "(").replace("}", ")")      # ngoặc nhọn là thẻ ASS
 
     n = 0
+    truoc_het_cau = True                               # từ liền trước (kể cả ở câu phụ đề trước) kết thúc một câu
     for c in cues:
-        ws = [t for t in c.tu if t.start is not None]
+        tat_ca = list(c.tu)
+        if bo_dau:                                     # ẩn số thứ tự mục "1." "2." đứng ngay sau chỗ hết câu
+            giu = []
+            for t in tat_ca:
+                la_so_muc = bool(_SO_MUC.match(t.hien.strip())) and truoc_het_cau
+                truoc_het_cau = t.hien.rstrip('"”’)').endswith(_HET_CAU)
+                if not la_so_muc:
+                    giu.append(t)
+            tat_ca = [t for t in giu if chu_sach(t.hien)]
+            if not tat_ca:
+                continue
+        ws = [t for t in tat_ca if t.start is not None]
         if not ws:
-            dong.append(f"Dialogue: 0,{_ts_ass(c.start)},{_ts_ass(c.end)},Sub,,0,0,0,,{chu(c.text)}")
+            dong.append(f"Dialogue: 0,{_ts_ass(c.start)},{_ts_ass(c.end)},Sub,,0,0,0,,{chu(' '.join(t.hien for t in tat_ca) if bo_dau else c.text)}")
             n += 1
             continue
         tu_hien = [chu(t.hien) for t in ws]

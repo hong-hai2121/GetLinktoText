@@ -104,7 +104,7 @@ def main():
     global _WINDOW, _HTTPD
     ap = argparse.ArgumentParser(description="Cửa sổ Ghép video Flow")
     ap.add_argument("--chup", help="(kiểm thử) chụp cửa sổ ra file PNG sau 6s rồi thoát")
-    ap.add_argument("--tab", help="mở sẵn tab: ghep | chinh-sua | ai | nhat-ky | cai-dat")
+    ap.add_argument("--tab", help="mở sẵn tab (mặc định heygen): heygen | ghep | chinh-sua | ai | nhat-ky | cai-dat")
     args = ap.parse_args()
     _icon_dock_mac(ICO)                           # trước khi AppKit khởi tạo (webview.screens) để Dock nhận tên
 
