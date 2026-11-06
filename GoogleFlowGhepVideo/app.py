@@ -553,6 +553,8 @@ class State:
         self.google = {"dang": False, "loi": ""}      # đang chờ user đăng nhập trên trình duyệt
         self.kho_mh_dong: list[dict] | None = None   # các dòng Sheet kho đã đọc (None = chưa đọc được)
         self.kho_mh = {"dong": [], "co": 0, "chua_tai": 0, "thieu": 0, "thu_muc": "", "luc": "", "loi": "", "dang": ""}
+        # kho ẢNH NGANG của tab C Thảo (user 06/11: bấm Chạy phải cập nhật cả 2 kho + thấy trạng thái vector ở tab C Thảo)
+        self.kho_anh = {"dong": 0, "co_link": 0, "luc": "", "loi": "", "dang": "", "vector": {}}
         self._kho_mh_ky = None                        # chữ ký file trong thư mục lúc tính trạng thái lần cuối
         self.items = d.get("items", []) if isinstance(d.get("items"), list) else []
         for it in self.items:                      # lần trước tắt giữa chừng -> làm lại
@@ -585,7 +587,7 @@ class State:
         self.ai_dang_hoi: set[str] = set()
         self.ai_loi_xac_thuc: dict[str, str] = {}
         threading.Thread(target=self._vong_do_ai, daemon=True, name="do-ai").start()
-        threading.Thread(target=self.lam_moi_kho_mh, daemon=True, name="kho-mh").start()
+        threading.Thread(target=lambda: (self.lam_moi_kho_mh(), self.lam_moi_kho_anh()), daemon=True, name="kho-mh").start()
 
     # ---- kho video minh họa (thẻ 3 tab Ghép video)
     def lam_moi_kho_mh(self, moi: bool = False):
@@ -607,6 +609,25 @@ class State:
         self.cap_nhat_kho_mh()
         if dong is not None and sheet:
             _tinh_vector_kho(sheet)                    # vector nghĩa cho dòng mới (tiến trình con, model không ở lại server)
+
+    def lam_moi_kho_anh(self, moi: bool = False):
+        """Đọc (lại) Sheet kho ẢNH NGANG của tab C Thảo rồi tính vector cho dòng mới. moi=True: bỏ bản đệm CSV (12 giờ) —
+        không gọi cái này thì ghep_tieude dùng bản đệm cũ, ảnh vừa thêm vào Sheet không được thấy (lỗi tới 06/11)."""
+        with self.lock:
+            if self.kho_anh["dang"]:
+                return
+            self.kho_anh["dang"], sheet = "doc", self.tuy_chon.get("heygen_kho_anh") or ""
+        dong, loi = None, ""
+        try:
+            dong = minh_hoa._doc_dong(sheet, log=self.log, moi=moi) if sheet else []
+        except Exception as e:                       # noqa: BLE001
+            loi = str(e)
+        with self.lock:
+            if dong is not None:
+                self.kho_anh.update(dong=len(dong), co_link=sum(1 for d in dong if d["link"]))
+            self.kho_anh.update(loi=loi, luc=time.strftime("%H:%M:%S"), dang="")
+        if dong is not None and sheet:
+            _tinh_vector_kho(sheet, self.kho_anh)
 
     def cap_nhat_kho_mh(self):
         """Tính lại trạng thái theo thư mục video mẫu (không gọi mạng) khi danh sách file trong thư mục đổi."""
@@ -842,6 +863,7 @@ def state_payload(after: int) -> dict:
                     "tong_giay": round(sum(g for _, g in kho), 1)},
             "downloads": str(thu_muc_ra()),
             "kho_may": kho_tren_may(S.minh_hoa_dir),
+            "kho_anh": dict(S.kho_anh),
             "minh_hoa": {"dir": S.minh_hoa_dir, "ton_tai": mh_dir.is_dir(), "mac_dinh": mh_dir == THU_MUC_MINH_HOA,
                          "sheet": S.tuy_chon["minh_hoa_sheet"], "bat": S.tuy_chon["minh_hoa"], "kho": dict(S.kho_mh)},
             "tuy_chon": dict(S.tuy_chon),
@@ -1568,6 +1590,15 @@ def api_heygen_sub_xem_thu(data):
     return {"ok": True, "anh": _SUB_XT[ky], "mau": mau}
 
 
+def api_heygen_kho_cap_nhat(_data):
+    """Nút '↻ Cập nhật 2 kho' ở tab C Thảo: đọc lại (bỏ bản đệm) kho video + kho ảnh ngang rồi tính vector dòng mới."""
+    with S.lock:
+        if S.kho_mh["dang"] or S.kho_anh["dang"]:
+            return {"ok": False, "msg": "Đang cập nhật kho rồi, chờ một chút."}
+    threading.Thread(target=lambda: (S.lam_moi_kho_mh(True), S.lam_moi_kho_anh(True)), daemon=True, name="kho-2").start()
+    return {"ok": True, "msg": "Đang đọc lại 2 Sheet kho và cập nhật vector…"}
+
+
 def api_heygen_cai_dat(data):
     """Ô 'số giây đầu có tiêu đề + ảnh' của tab C Thảo HeyGen."""
     with S.lock:
@@ -1579,9 +1610,13 @@ def api_heygen_cai_dat(data):
                                  ("heygen_hieu_ung", data.get("hieu_ung")), ("heygen_sfx", data.get("sfx")),
                                  ("heygen_anh_dong", data.get("anh_dong")), ("heygen_sub_mau", data.get("sub_mau")),
                                  ("heygen_sub_hoa", data.get("sub_hoa")), ("heygen_sub_bo_dau", data.get("sub_bo_dau"))) if v is not None}
+        kho_anh_cu = S.tuy_chon.get("heygen_kho_anh")
         S.tuy_chon = chuan_hoa_tuy_chon({**S.tuy_chon, **moi})
         S.save()
         g, a, c = S.tuy_chon["heygen_giay"], S.tuy_chon["heygen_anh_lech"], S.tuy_chon["heygen_cach"]
+        doi_kho_anh = S.tuy_chon.get("heygen_kho_anh") != kho_anh_cu
+    if doi_kho_anh:                                # đổi link kho ảnh -> đọc ngay kho mới + vector
+        threading.Thread(target=S.lam_moi_kho_anh, args=(True,), daemon=True, name="kho-anh").start()
     bc = f"tiêu đề cách cằm {c}% chiều cao mặt, ảnh minh họa từ giữa tiêu đề lệch {a:+d}% chiều cao tiêu đề"
     sub = ("có phụ đề" if S.tuy_chon["heygen_sub"] else "KHÔNG phụ đề") + (
         f"; AI gán câu: người nói {S.tuy_chon['heygen_ti_nguoi']}% · video dọc {S.tuy_chon['heygen_ti_video']}% · ảnh ngang {max(0, 100 - S.tuy_chon['heygen_ti_nguoi'] - S.tuy_chon['heygen_ti_video'])}%" if S.tuy_chon["heygen_minh_hoa"] else "; không ảnh minh họa AI")
@@ -2416,10 +2451,12 @@ def _chay_muc(it):
     return _ket_thuc(it, LOI, ly_do, t0)
 
 
-def _tinh_vector_kho(sheet: str) -> None:
-    """Tính vector nghĩa cho các dòng kho còn thiếu (vector_kho.py --cap-nhat, tiến trình con); kết quả vào S.kho_mh['vector']."""
+def _tinh_vector_kho(sheet: str, dich: dict | None = None) -> None:
+    """Tính vector nghĩa cho các dòng kho còn thiếu (vector_kho.py --cap-nhat, tiến trình con); kết quả vào dich['vector']
+    (mặc định S.kho_mh = kho video; kho ảnh ngang truyền S.kho_anh)."""
+    dich = S.kho_mh if dich is None else dich
     with S.lock:
-        S.kho_mh["vector"] = {**(S.kho_mh.get("vector") or {}), "dang": True}
+        dich["vector"] = {**(dich.get("vector") or {}), "dang": True}
         thu_muc = S.minh_hoa_dir
     kq: dict = {}
     try:
@@ -2439,7 +2476,7 @@ def _tinh_vector_kho(sheet: str) -> None:
     kq["dang"] = False
     kq["luc"] = time.strftime("%H:%M:%S")
     with S.lock:
-        S.kho_mh["vector"] = kq
+        dich["vector"] = kq
     if kq.get("loi"):
         S.log(f"⚠ vector kho: {kq['loi']} — tìm clip chỉ còn so chữ")
 
@@ -2448,11 +2485,17 @@ def _cap_nhat_kho_dau_luot() -> None:
     """Đầu mỗi lượt Bắt đầu: đọc Sheet kho MỘT lần (bỏ bản đệm) + tính vector cho dòng mới; các tập trong lượt dùng chung
     bản đệm (CSV_TTL 12 giờ), không gọi Sheet lại từng tập (user 22/10). Bấm "Cập nhật" ở thẻ kho cũng chạy y vậy."""
     with S.lock:
-        sheet, bat = S.tuy_chon.get("minh_hoa_sheet"), S.tuy_chon.get("minh_hoa")
-    if not sheet or not bat:
-        return
-    S.log("Kho minh họa: đọc Sheet một lần cho lượt chạy này (xem có cảnh mới) + cập nhật vector…")
-    S.lam_moi_kho_mh(moi=True)                     # đồng bộ, trong thread worker
+        cho = [x for x in S.items if x.get("status") == CHO]
+        # tập C Thảo dùng CẢ kho video lẫn kho ảnh ngang (bật "Minh họa AI"); tập thường chỉ dùng kho video
+        co_hg = any(x.get("loai") == "heygen" for x in cho) and bool(S.tuy_chon.get("heygen_minh_hoa", True))
+        co_thuong = any(x.get("loai") != "heygen" for x in cho) and bool(S.tuy_chon.get("minh_hoa"))
+        sheet, sheet_anh = S.tuy_chon.get("minh_hoa_sheet"), S.tuy_chon.get("heygen_kho_anh")
+    if sheet and (co_thuong or co_hg):
+        S.log("Kho video minh họa: đọc Sheet một lần cho lượt chạy này (xem có cảnh mới) + cập nhật vector…")
+        S.lam_moi_kho_mh(moi=True)                 # đồng bộ, trong thread worker
+    if sheet_anh and co_hg:
+        S.log("Kho ảnh ngang: đọc Sheet một lần cho lượt chạy này (xem có ảnh mới) + cập nhật vector…")
+        S.lam_moi_kho_anh(moi=True)
 
 
 def _thu_duoc(x) -> bool:
@@ -2564,6 +2607,7 @@ ROUTES = {
     "/api/heygen_doc_sheet": api_heygen_doc_sheet,
     "/api/heygen_them": api_heygen_them,
     "/api/heygen_dich": api_heygen_dich,
+    "/api/heygen_kho_cap_nhat": api_heygen_kho_cap_nhat,
     "/api/heygen_sub_xem_thu": api_heygen_sub_xem_thu,
     "/api/kho_may_ds": api_kho_may_ds,
     "/api/kho_may_don": api_kho_may_don,

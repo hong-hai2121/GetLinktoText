@@ -206,8 +206,13 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <input id="hgKhoAnh" type="text" class="grow" placeholder="link tab Kho Anh Minh Hoa" spellcheck="false" onchange="hgLuuKho()">
           <button class="btn" onclick="api('/api/mo',{loai:'url',url:$('hgKhoAnh').value})">Mở</button>
         </div>
-        <div class="row" style="margin-top:8px"><span class="muted">Tỉ lệ minh họa, hiệu ứng cảnh, mẫu chữ phụ đề, độ chính xác tìm cảnh:</span>
-          <button class="btn link sm" onclick="moTab('chinh-sua')">chỉnh ở tab Chỉnh sửa, nhóm C Thảo HeyGen →</button></div>
+        <div class="row" style="margin-top:8px" title="Bấm ▶ Chạy hoặc 🔍 Chọn thử là app tự đọc lại cả 2 Sheet kho một lần đầu lượt và tính vector cho dòng mới. Vừa sửa Sheet mà muốn kiểm tra ngay thì bấm nút Cập nhật">
+          <span class="muted">Kho video:</span><span id="hgKhoV" class="muted"></span>
+          <span class="muted" style="margin-left:10px">Kho ảnh ngang:</span><span id="hgKhoA" class="muted"></span>
+          <span class="spacer"></span>
+          <button class="btn sm blue" id="hgKhoBtn" onclick="api('/api/heygen_kho_cap_nhat')" title="Đọc lại cả 2 Sheet kho (video + ảnh ngang) và tính vector cho dòng mới">↻ Cập nhật 2 kho</button>
+          <button class="btn sm" onclick="moTab('chinh-sua')" title="Tỉ lệ minh họa, hiệu ứng cảnh, mẫu chữ phụ đề, độ chính xác tìm cảnh — nhóm C Thảo HeyGen ở tab Chỉnh sửa">⚙ Tùy chỉnh</button>
+        </div>
         <div id="hgDichThem" class="row" style="display:none;margin-top:8px">
           <input id="hgDichLink" type="text" class="grow" placeholder="dán link thư mục Drive để thêm vào danh sách nhận video của tab này" spellcheck="false">
           <button class="btn" onclick="hgDichThem()">+ Thêm</button>
@@ -221,7 +226,6 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <div class="row" style="margin-top:8px"><span class="muted" id="hgCotNote"></span><span class="spacer"></span>
             <button class="btn primary" onclick="hgThem()">+ Thêm dòng đã chọn vào hàng đợi</button></div>
         </div>
-        <p class="hint">Mỗi thư mục Drive cần: <b>Tiêu đề - …png</b>, <b>Minh họa - …jpg</b>, một video dài có sẵn tiếng (<b>Video - …mp4</b>); có <b>Kịch bản - …docx</b> thì làm phụ đề. Không dùng clip gốc; bật “Minh họa AI” thì GPT gán từng câu là video dọc full khung / ảnh ngang dải dưới / người nói theo tỉ lệ ở trên, mỗi cảnh đúng thời gian câu; làm đẹp và đổi tốc độ giọng không áp cho loại này. Bố cục, màu, âm lượng, kiểu phụ đề lấy theo tab Chỉnh sửa.</p>
       </div>
     </div>
     <div class="card">
@@ -1073,6 +1077,17 @@ async function hgThem(){
   const j = await api('/api/heygen_them', {sheet: {id: hgDocKq.id, tab: hgDocKq.tab, cot_g: hgDocKq.cot_g, link: hgDocKq.link}, dong, dich: $('hgDich').value});
   if (j.ok){ $('hgPanel').style.display = 'none'; hgDocKq = null; }
 }
+/* trạng thái một kho ở tab C Thảo: số dòng · giờ đọc Sheet · vector (user 06/11) */
+function hgKhoTt(soDong, phu, k){
+  k = k || {}; const v = k.vector || {};
+  if (k.dang) return '<span class="chip run"><span class="spin"></span> đang đọc Sheet…</span>';
+  if (k.loi) return `<span class="chip bad" title="${esc(k.loi)}">không đọc được Sheet</span>`;
+  if (!k.luc) return '<span class="chip">chưa đọc</span>';
+  const vec = v.dang ? '<span class="chip run"><span class="spin"></span> đang tính vector…</span>'
+    : v.loi ? `<span class="chip warn" title="${esc(v.loi)}">vector lỗi</span>`
+    : v.tong ? `<span class="chip ok" title="Tính lúc ${esc(v.luc || '')}${v.thiet_bi ? ' bằng ' + esc(v.thiet_bi) : ''}">vector ${v.tong} chuỗi${v.moi ? `, mới ${v.moi}` : ', đủ'}</span>` : '<span class="chip">chưa có vector</span>';
+  return `<b>${soDong}</b> dòng${phu} · đọc lúc ${esc(k.luc)} ${vec}`;
+}
 function renderHeygen(s){
   const tc = s.tuy_chon || {};
   if (!hgSheetDirty && document.activeElement !== $('hgSheet')) $('hgSheet').value = tc.heygen_sheet || '';
@@ -1087,6 +1102,10 @@ function renderHeygen(s){
   if (!hgHuGui) document.querySelectorAll('.hgHu').forEach(el => { el.checked = tc['heygen_' + el.dataset.k] !== false; });
   if (!hgMucGui) document.querySelectorAll('input[name=hgMuc]').forEach(r => { r.checked = r.value === (tc.heygen_muc || 'chat'); });
   if (!hgKhoDirty && document.activeElement !== $('hgKhoAnh')) $('hgKhoAnh').value = tc.heygen_kho_anh || '';
+  { const kv = (s.minh_hoa || {}).kho || {}, ka = s.kho_anh || {};
+    $('hgKhoV').innerHTML = hgKhoTt((kv.dong || []).length, kv.co != null ? `, ${kv.co} có video` : '', kv);
+    $('hgKhoA').innerHTML = hgKhoTt(ka.dong || 0, `, ${ka.co_link || 0} có link ảnh`, ka);
+    $('hgKhoBtn').disabled = !!(kv.dang || ka.dang || (kv.vector || {}).dang || (ka.vector || {}).dang); }
   if (!hgTiDirty && ![$('hgTiNguoi'), $('hgTiVideo')].includes(document.activeElement)){ $('hgTiNguoi').value = tc.heygen_ti_nguoi ?? 12; $('hgTiVideo').value = tc.heygen_ti_video ?? 35; hgTiAnhVe(); }
   $('hgChonThu').disabled = s.running || !s.items.some(x => x.loai === 'heygen' && x.status === 'cho') || tc.heygen_minh_hoa === false;
   if (!hoiLaiDangGui) $('hgHoiLai').checked = !!tc.minh_hoa_hoi_lai;
