@@ -1726,8 +1726,10 @@ def main():
         video, tieude, anh, b, au = ask_files()
         body, audio = body or b, audio or au
     phan_sau_tu = 0.0                             # --video-dai: phần sau bắt đầu từ giây này của chính video dài
+    khoa_goc = ""                                 # nhận dạng file gốc cho bộ nhớ mốc lời nói khi nguồn là file tạm
     if args.video_dai:
         video, ten = video.resolve(), ten or vai_tro_theo_ten(video)[1]
+        khoa_goc = f"{video.name}|{video.stat().st_size}|{args.hook_giay:g}"
         video, body, audio, phan_sau_tu = tach_video_dai(video, args.hook_giay, need_ffmpeg(),
                                                          du=0.0 if args.khong_hieu_ung_ket else XFADE_GIAY_GOC)
         args.khong_clip_goc = False               # phần sau = chính video dài; cảnh kho minh họa (AI) chạy như tab Ghép video
@@ -1887,7 +1889,8 @@ def main():
                               thu_muc_model=Path(args.thu_muc_model) if args.thu_muc_model else None,
                               bo_truoc=dur, log=lambda s: print("  " + s),
                               toi_da_cau=(viet_sub.CUE_TOI_DA_HOA if karaoke and not args.sub_thuong_hoa
-                                          else 40 if karaoke else viet_sub.CUE_TOI_DA))
+                                          else 40 if karaoke else viet_sub.CUE_TOI_DA),
+                              bo_nho=thu_muc_bo or kich_ban.parent, khoa_them=khoa_goc)
         tu_khop = tk.get("tu")
         if not lam_sub:                              # chỉ cần mốc câu, không đốt phụ đề
             srt_path.unlink(missing_ok=True)

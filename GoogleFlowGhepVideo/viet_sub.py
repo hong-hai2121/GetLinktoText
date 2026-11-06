@@ -24,6 +24,7 @@ faster-whisper (kèm ctranslate2); máy không có GPU NVIDIA thì tự chạy C
 from __future__ import annotations
 
 import difflib
+import json
 import re
 import time
 import unicodedata
@@ -381,22 +382,77 @@ def force_style(font: str = "Arial", co: float = 11, le_duoi: int = 45) -> str:
             f"Alignment=2,MarginV={le_duoi},MarginL=25,MarginR=25,WrapStyle=0")
 
 
+# ============================================================== nhớ mốc lời nói
+FILE_NHO_MOC = "loi_noi_moc.json"      # trong thư mục tập: mốc từng từ đã nghe (Whisper) + thống kê khớp
+
+
+def _khoa_nho_moc(text: str, nguon, tong_dai: float, ten_model: str, khoa_them: str = "") -> str:
+    """Chữ ký một lần nghe: kịch bản + model + từng nguồn tiếng (cỡ file, độ lệch, giới hạn) + tổng thời lượng. Không dùng
+    tên / giờ sửa file vì nguồn có thể là file tạm cắt lại mỗi lần chạy (video dài HeyGen) — khi đó `khoa_them` nhận dạng
+    file gốc."""
+    import hashlib
+    phan = [text, ten_model, f"{tong_dai:.2f}", khoa_them]
+    for path, offset, gioi_han in nguon:
+        try:
+            co = Path(path).stat().st_size
+        except OSError:
+            co = -1
+        phan.append(f"{'' if khoa_them else co}|{offset:.3f}|{gioi_han if gioi_han is None else round(gioi_han, 3)}")
+    return hashlib.sha1("\n".join(phan).encode("utf-8")).hexdigest()
+
+
+def _doc_nho_moc(thu_muc: Path, khoa_nho: str, tu: list[Tu]) -> dict | None:
+    """Nạp mốc đã nhớ vào `tu` nếu đúng chữ ký và đúng số từ; -> thống kê khớp (như can_chinh) hoặc None."""
+    try:
+        d = json.loads((Path(thu_muc) / FILE_NHO_MOC).read_text(encoding="utf-8"))
+        moc = d["moc"]
+        if d.get("khoa") != khoa_nho or len(moc) != len(tu):
+            return None
+        for t, (a, b, k) in zip(tu, moc):
+            t.start, t.end, t.khop = a, b, bool(k)
+        return {**d.get("thong_ke", {}), "luc": d.get("luc", "?")}
+    except Exception:                                   # noqa: BLE001 — thiếu / hỏng file thì nghe lại
+        return None
+
+
+def _ghi_nho_moc(thu_muc: Path, khoa_nho: str, tu: list[Tu], tk: dict, log=print) -> None:
+    try:
+        Path(thu_muc).mkdir(parents=True, exist_ok=True)
+        thong_ke = {k: v for k, v in tk.items() if isinstance(v, (int, float, str))}
+        (Path(thu_muc) / FILE_NHO_MOC).write_text(json.dumps(
+            {"khoa": khoa_nho, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "thong_ke": thong_ke,
+             "moc": [[t.start, t.end, 1 if t.khop else 0] for t in tu]}, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:                              # noqa: BLE001
+        log(f"  không ghi được {FILE_NHO_MOC}: {e}")
+
+
 # ============================================================== tổng hợp
 def tao_srt(kich_ban: Path, nguon: list[tuple[Path, float, float | None]], tong_dai: float,
             out_srt: Path, ten_model: str = MODEL_MAC_DINH, thu_muc_model: Path | None = None,
-            bo_truoc: float = 0.0, log=print, toi_da_cau: int = CUE_TOI_DA) -> dict:
+            bo_truoc: float = 0.0, log=print, toi_da_cau: int = CUE_TOI_DA,
+            bo_nho: Path | None = None, khoa_them: str = "") -> dict:
     """Kịch bản + các nguồn audio -> file .srt. Trả về thống kê khớp (+ `tu` từng từ có mốc, `cues` các câu
     để ghi_ass kiểu karaoke).
     `bo_truoc`: không ghi phụ đề trước giây này (vd = thời lượng hook: 10s đầu đã có tiêu đề + ảnh
     minh họa nên để sạch). Hook vẫn được nhận diện để căn đúng mốc phần kịch bản của nó, chỉ bỏ
-    lúc ghi ra. `toi_da_cau`: số ký tự tối đa một câu phụ đề (karaoke in hoa dùng CUE_TOI_DA_HOA)."""
+    lúc ghi ra. `toi_da_cau`: số ký tự tối đa một câu phụ đề (karaoke in hoa dùng CUE_TOI_DA_HOA).
+    `bo_nho`: thư mục tập — nhớ mốc từng từ vào FILE_NHO_MOC ở đó; chạy lại cùng kịch bản + cùng tiếng (chọn thử rồi chạy
+    thật, chạy lại vì AI lỗi…) thì KHÔNG nghe lại bằng Whisper (user 06/11). `khoa_them`: chuỗi nhận dạng nguồn gốc (vd
+    tên + cỡ video dài, số giây hook) khi các file trong `nguon` là file tạm."""
     text = doc_kich_ban(kich_ban)
     tu = tach_tu(text)
     if not tu:
         raise ValueError(f"Kịch bản rỗng: {kich_ban}")
     log(f"Kịch bản: {len(tu)} từ")
-    asr = nhan_dien(nguon, ten_model, thu_muc_model, log)
-    tk = can_chinh(tu, asr, tong_dai)
+    khoa_nho = _khoa_nho_moc(text, nguon, tong_dai, ten_model, khoa_them)
+    tk = _doc_nho_moc(bo_nho, khoa_nho, tu) if bo_nho else None
+    if tk is not None:
+        log(f"Dùng lại mốc lời nói đã nghe lúc {tk.pop('luc', '?')} ({FILE_NHO_MOC}) — không nghe lại bằng Whisper")
+    else:
+        asr = nhan_dien(nguon, ten_model, thu_muc_model, log)
+        tk = can_chinh(tu, asr, tong_dai)
+        if bo_nho:
+            _ghi_nho_moc(bo_nho, khoa_nho, tu, tk, log)
     cues = gom_cau(tu, toi_da_cau)
     bo = 0
     if bo_truoc > 0:
