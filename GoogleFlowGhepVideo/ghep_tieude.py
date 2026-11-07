@@ -2052,6 +2052,13 @@ def main():
     if srt_path:
         print(f"Phụ đề   : {srt_path}  (đã đốt vào video"
               + (", karaoke in hoa, từ đang đọc tô vàng)" if srt_path.suffix.lower() == ".ass" else ")"))
+    if kq_mh.get("da_co"):
+        # dựng xong thật mới cộng "Số lần dùng" (Sheet kho + da_dung.json); chọn thử đã return ở trên nên không cộng
+        try:
+            import minh_hoa
+            print(f"Số lần dùng: {minh_hoa.cong_so_lan_dung(kq_mh['da_co'], log=lambda s: print('  ' + s))}")
+        except Exception as e:                       # noqa: BLE001 — việc phụ, không được làm hỏng video
+            print(f"Số lần dùng: không cộng được ({e})")
     print(f"XONG     : {out_path}")
 
 

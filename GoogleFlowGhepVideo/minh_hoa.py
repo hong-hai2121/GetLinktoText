@@ -93,6 +93,9 @@ class Clip:
     link: str
     thoi_luong: float = 0.0
     duong_dan: Path | None = None   # file trên máy (sau khi tải)
+    so_lan: int | None = None       # cột "Số lần dùng" trên Sheet kho (None = Sheet chưa có cột đó -> dùng da_dung.json)
+    dong: int = 0                   # số dòng trong Sheet (để cộng "Số lần dùng" đúng dòng)
+    nguon: str = ""                 # link Sheet / file CSV đã đọc ra clip này (biết tab nào mà cộng)
 
 
 def _cot(ten: str) -> str:
@@ -101,7 +104,8 @@ def _cot(ten: str) -> str:
     for khoa, mau in (("id", ("id", "ma")), ("ten", ("ten", "ten file", "ten clip")), ("tu_khoa", ("tu khoa", "tag", "tags", "keyword")),
                       ("mo_ta", ("mo ta", "mota", "noi dung")), ("loai", ("loai", "kieu", "type")),
                       ("thoi_luong", ("thoi luong", "giay", "duration")), ("link", ("link", "link drive", "drive", "url", "duong dan")),
-                      ("ghi_chu", ("ghi chu", "note"))):
+                      ("ghi_chu", ("ghi chu", "note")),
+                      ("so_lan", ("so lan dung", "so lan", "da dung", "luot dung", "lan dung"))):   # user 07/11
         if k in mau or any(k.startswith(m) for m in mau):
             return khoa
     return k
@@ -154,6 +158,7 @@ def _doc_dong(nguon: str, log: Callable[[str], None] = print, moi: bool = False)
     if not rows:
         return []
     cot = [_cot(c) for c in rows[0]]
+    co_so_lan = "so_lan" in cot                        # Sheet có cột "Số lần dùng" (tìm theo TÊN, không theo chữ cái)
     kq = []
     for i, r in enumerate(rows[1:], 2):
         d = {cot[j]: (r[j].strip() if j < len(r) else "") for j in range(len(cot))}
@@ -169,8 +174,14 @@ def _doc_dong(nguon: str, log: Callable[[str], None] = print, moi: bool = False)
             tl = float(str(d.get("thoi_luong", "")).replace(",", ".") or 0)
         except ValueError:
             tl = 0.0
+        so_lan = None
+        if co_so_lan:
+            try:
+                so_lan = int(float(str(d.get("so_lan", "")).replace(",", ".") or 0))
+            except ValueError:
+                so_lan = 0
         kq.append(dict(id=d.get("id") or f"dong{i}", ten=ten, tags=tags, mo_ta=d.get("mo_ta", ""), loai=loai,
-                       thoi_luong=tl, link=link, ghi_chu=d.get("ghi_chu", ""), dong=i))
+                       thoi_luong=tl, link=link, ghi_chu=d.get("ghi_chu", ""), dong=i, so_lan=so_lan, nguon=nguon))
     return kq
 
 
@@ -197,7 +208,8 @@ def _file_theo_ten(chi_muc: dict[str, Path], ma: str, ten: str) -> Path | None:
 
 def _lap_clip(d: dict, link: str) -> Clip:
     return Clip(id=d["id"], ten=d["ten"], tu_khoa=[khong_dau(t) for t in d["tags"]], tu_khoa_hien=d["tags"],
-                mo_ta=d["mo_ta"], loai=d["loai"], link=link, thoi_luong=d["thoi_luong"])
+                mo_ta=d["mo_ta"], loai=d["loai"], link=link, thoi_luong=d["thoi_luong"],
+                so_lan=d.get("so_lan"), dong=d.get("dong", 0), nguon=d.get("nguon", ""))
 
 
 def doc_kho(nguon: str, log: Callable[[str], None] = print, thu_muc: str | Path | None = None,
@@ -447,6 +459,74 @@ def ghi_da_dung(ids: list[str]) -> None:
         FILE_DA_DUNG.write_text(json.dumps(d, ensure_ascii=False, indent=0), encoding="utf-8")
     except Exception:          # noqa: BLE001
         pass
+
+
+def dem_da_dung(*kho: list[Clip]) -> dict[str, int]:
+    """Số lần mỗi clip đã dùng -> planner ưu tiên clip ít dùng. Clip nào Sheet kho có cột "Số lần dùng" (user 07/11) thì
+    lấy số trên Sheet (dùng chung được nhiều máy); Sheet không có cột đó thì lấy da_dung.json trên máy."""
+    d = doc_da_dung()
+    for ds in kho:
+        for c in ds or []:
+            if c.so_lan is not None:
+                d[c.id] = c.so_lan
+    return d
+
+
+def cong_so_lan_dung(clips: list[Clip], log: Callable[[str], None] = print) -> str:
+    """Sau khi DỰNG XONG video (không phải chọn thử): mỗi cảnh đã dùng cộng 1 vào cột "Số lần dùng" của đúng Sheet kho
+    (kho video / kho ảnh ngang, cột tìm theo TÊN ở dòng 1, dòng tìm theo ID rồi mới theo số dòng) + da_dung.json trên
+    máy làm dự phòng. Một clip dùng 2 cảnh trong tập = cộng 2. -> dòng thông báo."""
+    if not clips:
+        return ""
+    ghi_da_dung([c.id for c in clips])
+    theo_sheet: dict[tuple[str, str], list[Clip]] = {}
+    for c in clips:
+        m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]{20,})", c.nguon or "")
+        if not m:
+            continue
+        g = re.search(r"[#&?]gid=(\d+)", c.nguon)
+        theo_sheet.setdefault((m.group(1), g.group(1) if g else "0"), []).append(c)
+    if not theo_sheet:
+        return "kho không phải Google Sheet nên chỉ đếm trên máy"
+    gc, cach = _gspread_khach(log)
+    if gc is None:
+        return f"không cộng được 'Số lần dùng' lên Sheet ({cach}), chỉ đếm trên máy"
+    tb = []
+    for (khoa, gid), ds in theo_sheet.items():
+        try:
+            ws = gc.open_by_key(khoa).get_worksheet_by_id(int(gid))
+            rows = ws.get_all_values()
+            cot = [_cot(c) for c in (rows[0] if rows else [])]
+            if "so_lan" not in cot:
+                tb.append(f"tab '{ws.title}' chưa có cột 'Số lần dùng' (thêm tên cột đó vào dòng 1)")
+                continue
+            j_sl, j_id = cot.index("so_lan"), (cot.index("id") if "id" in cot else -1)
+            dong_theo_id = {r[j_id].strip(): i for i, r in enumerate(rows[1:], 2) if j_id >= 0 and j_id < len(r) and r[j_id].strip()}
+            them: dict[int, int] = {}
+            for c in ds:
+                dong = dong_theo_id.get(c.id) or (c.dong if 1 < c.dong <= len(rows) else 0)
+                if dong:
+                    them[dong] = them.get(dong, 0) + 1
+            cells = []
+            for dong, n in them.items():
+                r = rows[dong - 1]
+                cu = r[j_sl].strip() if j_sl < len(r) else ""
+                try:
+                    cu_n = int(float(cu.replace(",", ".") or 0))
+                except ValueError:
+                    cu_n = 0
+                cells.append(gspread_cell(dong, j_sl + 1, cu_n + n))
+            if cells:
+                ws.update_cells(cells)
+            tb.append(f"tab '{ws.title}': +{sum(them.values())} ở {len(them)} dòng")
+        except Exception as e:                       # noqa: BLE001
+            tb.append(f"tab gid {gid} lỗi: {e}")
+    return "; ".join(tb)
+
+
+def gspread_cell(row: int, col: int, value):
+    from gspread import Cell
+    return Cell(row=row, col=col, value=value)
 
 
 def khop_tu_khoa(de_xuat: list[str], kho: list[Clip], vec_nguong: float | None = None,
@@ -1695,7 +1775,7 @@ def chuan_bi(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, nha:
 
         ok, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=do_dai, kho=kho,
                                               anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
-                                              kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=doc_da_dung(),
+                                              kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=dem_da_dung(kho),
                                               toc_mh=toc_mh, canh_giay=toi_da_giay,
                                               xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
@@ -1729,7 +1809,7 @@ def chuan_bi(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, nha:
     kq["canh"] = ok
     thay: set[str] = set()
     kq["da_co"] = [cn.clip for cn in ok if cn.clip.id not in thay and not thay.add(cn.clip.id)]
-    ghi_da_dung([c.id for c in kq["da_co"]])                     # nhớ clip đã dùng để tập sau ưu tiên clip khác
+    # "Số lần dùng" cộng ở ghep_tieude sau khi dựng xong (chọn thử không cộng)
     return kq
 
 
@@ -1917,7 +1997,7 @@ def chuan_bi_noi_bat(tu, *, kho_nguon: str, tu_giay: float = 0.0, nha: str = "gp
             vector_kho.nhung([x for _, dx, _ in chon for x in dx] + [c.text for c in cau], log=lambda s: log("  " + s))
         except Exception as e:                     # noqa: BLE001
             log(f"  vector: bỏ qua ({e})")
-    dem = doc_da_dung()
+    dem = dem_da_dung(kho)
     dung_roi: set[str] = set()
     canh, thieu = [], []
     for so, de_xuat, mo_ta in chon:
@@ -1947,9 +2027,7 @@ def chuan_bi_noi_bat(tu, *, kho_nguon: str, tu_giay: float = 0.0, nha: str = "gp
         kq["thieu_sheet"] = ghi_thieu_sheet(kho_nguon, ten_bo, thieu, log)
         log("  kho ảnh thiếu: " + "; ".join(f"câu {t['cau']}: {_goi_y_thieu(t) or '?'}" for t in thieu)
             + f"  ({kq['thieu_sheet']})")
-    kq["da_co"] = [cn.clip for cn in canh]
-    if canh:
-        ghi_da_dung([cn.clip.id for cn in canh])
+    kq["da_co"] = [cn.clip for cn in canh]       # cộng "Số lần dùng" ở ghep_tieude sau khi dựng xong (không cộng khi chọn thử)
     return kq
 
 
@@ -2096,7 +2174,7 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
             vector_kho.nhung([x for _, dx, _ in nhan.values() for x in dx] + [c.text for c in cau], log=lambda s: log("  " + s))
         except Exception as e:                       # noqa: BLE001
             log(f"  vector: bỏ qua ({e})")
-    dem = doc_da_dung()
+    dem = dem_da_dung(kho_v, kho_a)
     dung_roi: set[str] = set()
 
     def _chon(loai: str, de_xuat: list[str], c: Cau) -> tuple[Clip | None, dict | None]:
@@ -2200,9 +2278,7 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
         ghi_thieu(ten_bo, thieu)
         kq["thieu_sheet"] = ghi_thieu_sheet(kho_anh or kho_video, ten_bo, thieu, log)   # tab Thiếu chung của Sheet kho
         log("  kho thiếu: " + "; ".join(f"câu {t['cau']}: {t['goi_y']}" for t in thieu) + f"  ({kq['thieu_sheet']})")
-    kq["da_co"] = [cn.clip for cn in canh]
-    if canh:
-        ghi_da_dung([cn.clip.id for cn in canh])
+    kq["da_co"] = [cn.clip for cn in canh]       # cộng "Số lần dùng" ở ghep_tieude sau khi dựng xong (không cộng khi chọn thử)
     return kq
 
 
@@ -2248,7 +2324,7 @@ def lap_ke_hoach(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, 
     if che_do == "phu_kin":
         canh, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=lambda cl: cl.thoi_luong or toi_da_giay, kho=kho,
                                                 anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
-                                                kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=doc_da_dung(),
+                                                kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=dem_da_dung(kho),
                                               toc_mh=toc_mh, canh_giay=toi_da_giay,
                                               xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
