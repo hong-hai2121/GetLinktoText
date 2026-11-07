@@ -38,6 +38,13 @@ báo cáo (kèm trả lời thô của AI) ghi <thư mục tập>\\Kế hoạch 
 NHỚ TRẢ LỜI AI (bo_nho): trả lời thô của AI được ghi vào <thư mục tập>\\gpt_minh_hoa.json kèm chữ ký câu hỏi (AI, chế độ,
 kịch bản đã đánh số câu). Chạy lại cùng kịch bản -> dùng lại, không hỏi AI (chỉ ghép lại với bộ xếp cảnh hiện tại);
 kịch bản / cách tách câu / chế độ / AI đổi -> hỏi mới. --hoi-lai (ghep_tieude: --minh-hoa-hoi-lai) ép hỏi mới và ghi đè.
+
+KẾ HOẠCH ĐÃ CHỐT (tab C Thảo, chuan_bi_tron, 07/11): câu nào dùng clip nào ghi vào <thư mục tập>\\ke_hoach_tron.json (cùng
+chữ ký trả lời AI + seed). Chạy lại (sau khi bổ sung kho) GIỮ nguyên các cảnh đó, chỉ chọn thêm cho câu còn thiếu — trước
+đây chọn lại từ đầu nên clip vừa bổ sung bị câu khác lấy, câu thiếu vẫn thiếu, câu đang có cảnh lại mất. --hoi-lai bỏ qua.
+Không còn luật "một clip chỉ dùng một lần trong video": clip đúng dùng lại được, chỉ ƯU TIÊN clip chưa dùng. Dòng Thiếu kèm
+"ly_do" (không khớp / dòng kho chưa có link / kiểm chéo nghĩa / tải lỗi) -> cột "Lý do" của tab Thiếu, không có cột thì nối
+vào ô Gợi ý.
 """
 from __future__ import annotations
 
@@ -235,7 +242,7 @@ def doc_kho(nguon: str, log: Callable[[str], None] = print, thu_muc: str | Path 
         log(f"  kho minh họa: {tu_thu_muc} dòng chưa có link, dùng file trùng tên trong {thu_muc.name}")
     if bo_link:
         log(f"  kho minh họa: {bo_link} dòng chưa có video (không link, không file trong {thu_muc.name})"
-            + (" — chế độ kế hoạch vẫn đưa cho AI chọn" if ca_chua_co else ", bỏ qua"))
+            + (" — giữ riêng, không dựng (chỉ để báo lý do thiếu / chế độ kế hoạch)" if ca_chua_co else ", bỏ qua"))
     return kq
 
 
@@ -1040,8 +1047,10 @@ def _goi_y_thieu(t: dict) -> str:
 
 def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[str], None] = print) -> str:
     """Ghi các cảnh thiếu vào tab 'Thiếu' của Sheet kho (cột theo TÊN ở dòng 1: Ngày | Tập (bộ) | Câu số | Nội dung câu |
-    Gợi ý cảnh cần quay / tìm | Image or Video | Đã bổ sung vào kho?). Cột "Image or Video" (user thêm 05/11) nhận
+    Gợi ý cảnh cần quay / tìm | Image or Video | Đã bổ sung vào kho? | Lý do). Cột "Image or Video" (user thêm 05/11) nhận
     t["loai"] = "image" | "video" (mặc định video = kho video dọc); Sheet chưa có cột đó thì ghi [image]/[video] đầu ô Gợi ý.
+    Cột "Lý do" (07/11) nhận t["ly_do"] = vì sao không chọn được clip (không khớp / dòng chưa có link / kiểm chéo nghĩa /
+    tải lỗi); Sheet chưa có cột đó thì nối " — lý do: …" vào ô Gợi ý.
     Cần service account có quyền Editor trên Sheet (chia sẻ Sheet cho email trong file khóa). Cùng tập + cùng câu đã
     có thì không ghi lại. -> dòng thông báo (ghi được hay vì sao không)."""
     if not thieu:
@@ -1056,7 +1065,7 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
         ws = gc.open_by_key(m.group(1)).worksheet(TAB_THIEU)
         da_co_rows = ws.get_all_values()
         vt = _vi_tri_cot_thieu(da_co_rows[0] if da_co_rows else [])   # cột theo TÊN ở dòng 1, không cố định chữ cái
-        co_loai = "loai" in vt
+        co_loai, co_ly_do = "loai" in vt, "ly_do" in vt
         rong = max(vt.values()) + 1
         lay = lambda r, k: (r[vt[k]] if vt[k] < len(r) else "")   # noqa: E731
         cu = {(lay(r, "tap"), str(lay(r, "cau"))) for r in da_co_rows[1:]}
@@ -1067,11 +1076,16 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
             r = [""] * rong
             loai = "image" if str(t.get("loai") or "").lower() in ("image", "anh", "ảnh") else "video"
             goi_y = _goi_y_thieu(t)
+            ly_do = str(t.get("ly_do") or "").strip()
+            if ly_do and not co_ly_do:               # Sheet chưa có cột "Lý do" -> nối vào ô Gợi ý cho người bổ sung thấy
+                goi_y += f" — lý do: {ly_do}"
             for k, v in (("ngay", time.strftime("%Y-%m-%d %H:%M")), ("tap", ten_bo), ("cau", t["cau"]),
                          ("noi_dung", t.get("text", "")), ("goi_y", goi_y if co_loai else f"[{loai}] {goi_y}")):
                 r[vt[k]] = v
             if co_loai:
                 r[vt["loai"]] = loai
+            if co_ly_do:
+                r[vt["ly_do"]] = ly_do
             rows.append(r)
         if rows:
             _ghi_dong_thieu(ws, da_co_rows, rows, [vt[k] for k in ("ngay", "tap", "cau", "noi_dung", "goi_y")])
@@ -1083,16 +1097,16 @@ def ghi_thieu_sheet(nguon: str, ten_bo: str, thieu: list[dict], log: Callable[[s
 
 
 # tên cột tab Thiếu (không dấu, chữ thường): khớp khi tiêu đề BẮT ĐẦU bằng hoặc CHỨA một mẫu -> "Tập (bộ)", "Gợi ý cảnh
-# cần quay / tìm", "Image or Video", "Đã bổ sung vào kho?" đều nhận; thứ tự xét: loai trước goi_y (cả hai có thể chứa "video")
+# cần quay / tìm", "Image or Video", "Đã bổ sung vào kho?", "Lý do" đều nhận; thứ tự xét: loai trước goi_y (cả hai có thể chứa "video")
 COT_THIEU = {"ngay": ("ngay",), "tap": ("tap", "bo"), "cau": ("cau so", "cau"), "noi_dung": ("noi dung",),
              "loai": ("image or video", "image", "anh hay video", "loai"),
-             "goi_y": ("goi y", "canh can"), "da_bo_sung": ("da bo sung",)}
+             "goi_y": ("goi y", "canh can"), "da_bo_sung": ("da bo sung",), "ly_do": ("ly do",)}
 
 
 def _vi_tri_cot_thieu(tieu_de: list[str]) -> dict[str, int]:
     """Vị trí các cột tab Thiếu theo TÊN ở dòng 1 (user 05/11: không dựa vào chữ cái cột). Thiếu tên nào thì dùng vị trí
-    mặc định Ngày | Tập | Câu số | Nội dung câu | Gợi ý cảnh | Đã bổ sung? (A-F). Khóa "loai" (cột Image or Video) CHỈ có
-    trong kết quả khi dòng 1 có cột đó."""
+    mặc định Ngày | Tập | Câu số | Nội dung câu | Gợi ý cảnh | Đã bổ sung? (A-F). Khóa "loai" (cột Image or Video) và
+    "ly_do" (cột Lý do) CHỈ có trong kết quả khi dòng 1 có cột đó."""
     mac_dinh = {"ngay": 0, "tap": 1, "cau": 2, "noi_dung": 3, "goi_y": 4, "da_bo_sung": 5}
     vt: dict[str, int] = {}
     for kieu in ("dau", "chua"):                     # ưu tiên tiêu đề bắt đầu bằng mẫu, rồi mới tới chứa mẫu
@@ -1105,8 +1119,9 @@ def _vi_tri_cot_thieu(tieu_de: list[str]) -> dict[str, int]:
                     vt[khoa] = i
                     break
     kq = {k: vt.get(k, v) for k, v in mac_dinh.items()}
-    if "loai" in vt:
-        kq["loai"] = vt["loai"]
+    for k in ("loai", "ly_do"):
+        if k in vt:
+            kq[k] = vt[k]
     return kq
 
 
@@ -1847,6 +1862,10 @@ def bao_cao_da_dung(kq: dict, *, ten_bo: str = "", video_ra: str = "", kho_nguon
          + (f" · seed {seed}" if seed is not None else ""),
          f"Kho      : {kho_nguon or '?'}",
          f"Clip tải : {Path(thu_muc_mau) if thu_muc_mau else CACHE_DIR}"]
+    kh_cu = kq.get("ke_hoach") or {}
+    if kh_cu.get("giu"):
+        L.append(f"Kế hoạch : giữ {kh_cu['giu']} cảnh đã chốt lúc {kh_cu.get('luc') or '?'} (lần chọn thử / chạy trước), "
+                 "chỉ chọn lại cho câu còn thiếu")
     phu = kq.get("phu")
     if phu and phu.get("tong"):
         L.append(f"Phủ      : {phu['kho']:.1f}/{phu['tong']:.1f}s ({phu['kho'] / phu['tong']:.0%}) bằng cảnh kho, "
@@ -1884,7 +1903,8 @@ def bao_cao_da_dung(kq: dict, *, ten_bo: str = "", video_ra: str = "", kho_nguon
     thieu = kq.get("thieu") or []
     if thieu:
         L += ["", f"KHO THIẾU — AI muốn minh họa nhưng kho chưa có cảnh khớp ({len(thieu)}):"]
-        L += [f"- câu {t['cau']}: “{t['text']}” → {_goi_y_thieu(t) or '?'}" for t in thieu]
+        L += [f"- câu {t['cau']}: “{t['text']}” → {_goi_y_thieu(t) or '?'}"
+              + (f"\n    lý do: {t['ly_do']}" if t.get("ly_do") else "") for t in thieu]
     return "\n".join(L) + "\n"
 
 
@@ -2037,7 +2057,9 @@ def chuan_bi_noi_bat(tu, *, kho_nguon: str, tu_giay: float = 0.0, nha: str = "gp
 # tối thiểu giữa CẢ CÂU NÓI và cảnh (None = không kiểm), video_max = video dọc dài tối đa (giây, None = không giới hạn),
 # dung_hinh = clip ngắn hơn câu thì giữ khung cuối (False = hết clip là về người nói)
 MUC_CHINH_XAC = {
-    "chat": dict(gan=None, vec=0.85, chung=0.02, cheo=0.45, video_max=6.0, dung_hinh=False, chua=0.67),   # cheo 0.55 thử 05/11: bỏ cả "rót nước ngọt có gas" (0,50) cho câu nước ngọt -> 0.45
+    # cheo 0.55 thử 05/11: bỏ cả "rót nước ngọt có gas" (0,50) cho câu nước ngọt -> 0.45. chua 0.67 -> 0.66 (07/11): 2/3 = 0,6667
+    # < 0,67 nên "gói mì" ⊂ "gói mì tôm", "rau xanh" ⊂ "rau xanh tươi" trượt mức CHỨA oan, mức 3 tắt, mức 4 cần ≥ 0,85 -> Thiếu
+    "chat": dict(gan=None, vec=0.85, chung=0.02, cheo=0.45, video_max=6.0, dung_hinh=False, chua=0.66),
     "vua": dict(gan=0.85, vec=0.80, chung=0.04, cheo=0.40, video_max=8.0, dung_hinh=False, chua=0.5),
     "long": dict(gan=0.75, vec=None, chung=None, cheo=None, video_max=None, dung_hinh=True, chua=None),
 }
@@ -2073,6 +2095,32 @@ Quy tắc bắt buộc:
 KỊCH BẢN:
 {kich_ban}"""
 FILE_BO_NHO_TRON = "gpt_minh_hoa_tron.json"     # trong thư mục tập: trả lời AI chế độ trộn (tách khỏi phủ kín / ảnh ngang)
+FILE_KE_HOACH_TRON = "ke_hoach_tron.json"       # trong thư mục tập: câu nào đã chốt clip nào -> chạy lại giữ nguyên, chỉ điền câu thiếu
+
+
+def _doc_ke_hoach(bo_nho: Path | None, khoa: str, seed: int | None) -> dict | None:
+    """Kế hoạch cảnh đã chốt ở lần chạy trước (chọn thử / dựng thật) nếu cùng trả lời GPT (khoa) và cùng seed; khác -> None.
+    User 07/11: chọn thử xong, bổ sung kho rồi Chạy thật phải GIỮ cảnh đã chọn, chỉ tìm thêm cho câu thiếu — trước đây chọn
+    lại từ đầu nên clip vừa bổ sung bị câu khác lấy mất, câu thiếu vẫn thiếu, câu đang có cảnh lại mất cảnh (sinh Thiếu mới)."""
+    if not bo_nho:
+        return None
+    try:
+        d = json.loads((bo_nho / FILE_KE_HOACH_TRON).read_text(encoding="utf-8"))
+    except Exception:                                  # noqa: BLE001 — chưa có / hỏng thì chọn từ đầu
+        return None
+    if not isinstance(d, dict) or d.get("khoa") != khoa or d.get("seed") != seed or not isinstance(d.get("cau"), dict):
+        return None
+    return d
+
+
+def _ghi_ke_hoach(bo_nho: Path | None, khoa: str, seed: int | None, canh: list, log: Callable[[str], None]) -> None:
+    """Chốt kế hoạch sau mỗi lần chọn (kể cả chọn thử): {"số câu": {loai, clip, ten, tu_khoa, khop}} cho các câu có cảnh riêng."""
+    if not bo_nho:
+        return
+    d = {"khoa": khoa, "seed": seed, "luc": time.strftime("%Y-%m-%d %H:%M:%S"),
+         "cau": {str(cn.cau.so): {"loai": cn.clip.loai, "clip": cn.clip.id, "ten": cn.clip.ten, "tu_khoa": cn.tu_khoa,
+                                  "khop": (cn.khop or "")[:200]} for cn in canh}}
+    _ghi_bo_nho(bo_nho, d, log, FILE_KE_HOACH_TRON)
 TRON_TOC_VIDEO = 1.2           # tốc độ chiếu clip video dọc (như tab Ghép video); clip ngắn hơn câu thì chậm dần tới 0,8
 TRON_CHAM_TOI_DA = 0.8
 
@@ -2085,7 +2133,10 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
                   ti_nguoi: int = 12, ti_video: int = 35, toc_video: float = TRON_TOC_VIDEO,
                   muc: str = "chat") -> dict:
     """Tab C Thảo HeyGen: mỗi câu giữa = video dọc (kho_video) | ảnh ngang (kho_anh) | người nói, theo nhãn GPT.
-    Câu cuối cũng được minh họa nếu GPT chọn (user 07/11). Thiếu cảnh: video -> thử kho ảnh -> người nói; ảnh -> người nói; cả hai ghi Thiếu. -> dict như chuan_bi + "loai_cau" {so: loai thực dùng}, Canh.toc_do = tốc độ chiếu video."""
+    Câu cuối cũng được minh họa nếu GPT chọn (user 07/11). Thiếu cảnh: video -> thử kho ảnh -> người nói; ảnh -> người nói; cả hai ghi Thiếu
+    (kèm "ly_do"). Kế hoạch đã chốt (ke_hoach_tron.json, cùng trả lời GPT + seed) thì giữ nguyên cảnh cũ, chỉ chọn cho câu chưa có
+    (hoi_lai=True bỏ qua). Một clip dùng được nhiều câu (bỏ luật một lần 07/11), chỉ ưu tiên clip chưa dùng.
+    -> dict như chuan_bi + "loai_cau" {so: loai thực dùng}, "ke_hoach" {giu, luc}, Canh.toc_do = tốc độ chiếu video."""
     import random as _random
     rng = _random.Random(seed)
     mc = MUC_CHINH_XAC.get(muc, MUC_CHINH_XAC["chat"])
@@ -2100,15 +2151,18 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
     kq = {"canh": [], "thieu": [], "so_cau": 0, "tu_khoa_kho": [], "kho": [], "cau": [], "da_co": [], "can_quay": [],
           "loi": "", "ai": nha, "che_do": "tron", "khong_clip_goc": False, "muc": muc}
     kho_v, kho_a = [], []
-    for ten, nguon, ds in (("video", kho_video, kho_v), ("ảnh", kho_anh, kho_a)):
+    chua_link_v, chua_link_a = [], []                # dòng có từ khóa nhưng CHƯA có Link Drive: không dựng, chỉ để báo lý do thiếu
+    for ten, nguon, ds, chua in (("video", kho_video, kho_v, chua_link_v), ("ảnh", kho_anh, kho_a, chua_link_a)):
         if not nguon:
             continue
         try:
-            ds.extend(doc_kho(nguon, log, thu_muc))
+            for c in doc_kho(nguon, log, thu_muc, ca_chua_co=True):
+                (ds if c.link else chua).append(c)
         except Exception as e:                       # noqa: BLE001
             log(f"  không đọc được kho {ten}: {e}")
     kho_v[:] = [c for c in kho_v if c.loai == "video"]   # kho video: chỉ lấy dòng video
-    for c in kho_a:                                  # kho ảnh ngang: mọi dòng là ảnh
+    chua_link_v[:] = [c for c in chua_link_v if c.loai == "video"]
+    for c in kho_a + chua_link_a:                    # kho ảnh ngang: mọi dòng là ảnh
         c.loai = "anh"
     kq["kho"] = kho_v + kho_a
     tags = tu_khoa_trong_kho(kho_v + kho_a)
@@ -2175,38 +2229,67 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
         except Exception as e:                       # noqa: BLE001
             log(f"  vector: bỏ qua ({e})")
     dem = dem_da_dung(kho_v, kho_a)
-    dung_roi: set[str] = set()
+    lan_dung: dict[str, int] = {}                    # clip đã chiếu mấy lần trong video này — chỉ để ƯU TIÊN clip chưa dùng
 
-    def _chon(loai: str, de_xuat: list[str], c: Cau) -> tuple[Clip | None, dict | None]:
-        kho = kho_v if loai == "video" else kho_a
+    def _chon(loai: str, de_xuat: list[str], c: Cau) -> tuple[Clip | None, dict | None, str]:
+        """Tìm clip cho câu trong kho `loai`. -> (clip, cách khớp, lý do khi không chọn được). Lý do ghi vào dòng Thiếu để
+        người bổ sung kho biết phải làm gì (user 07/11): dòng chưa có link -> dán link; kiểm chéo loại -> sửa từ khóa / mô tả."""
+        ten_kho = "kho video" if loai == "video" else "kho ảnh"
+        kho, chua_link = (kho_v, chua_link_v) if loai == "video" else (kho_a, chua_link_a)
+        if not kho:
+            return None, None, f"{ten_kho} trống"
         kh = khop_tu_khoa(de_xuat, kho, vec_nguong, vec_nhom, van_ban=c.text, gan_nguong=mc["gan"],
-                          bo_chung=mc["chung"], chua_phu=mc.get("chua")) if kho else None
-        nhom = [x for x in (kh["clips"] if kh else []) if x.id not in dung_roi]
-        if nhom and mc["cheo"] is not None and _vec_ok():          # kiểm chéo: cảnh phải hợp nghĩa với CẢ câu nói
+                          bo_chung=mc["chung"], chua_phu=mc.get("chua"))
+        if not kh:
+            # dòng kho có từ khóa khớp nhưng CHƯA có Link Drive -> doc_kho bỏ qua, người bổ sung tưởng kho chưa có
+            kh0 = khop_tu_khoa(de_xuat, chua_link, vec_nguong, vec_nhom, van_ban=c.text, gan_nguong=mc["gan"],
+                               chua_phu=mc.get("chua")) if chua_link else None
+            if kh0:
+                return None, None, (f"{ten_kho} có dòng [{', '.join(x.id for x in kh0['clips'][:3])}] {kh0['giai_thich']} "
+                                    "nhưng CHƯA CÓ Link Drive")
+            return None, None, f"{ten_kho}: không dòng nào khớp từ khóa"
+        nhom = list(kh["clips"])
+        if mc["cheo"] is not None and _vec_ok():          # kiểm chéo: cảnh phải hợp nghĩa với CẢ câu nói
             import vector_kho
             dc = vector_kho.diem_tung_clip(c.text, kho)
             # user 07/11: cảnh khớp ĐÚNG/CHỨA từ khóa kho (mức 1-2, chữ do người đặt tay) mà vẫn bị kiểm chéo loại —
             # câu y khoa dài ("lecithin… albumin") khó giống mô tả cảnh (lòng đỏ trứng 0,43; tép tỏi 0,33; vi khuẩn HP
             # 0,40 < 0,45) -> tab Thiếu ghi mãi dù kho đã có. Từ khóa trùng hẳn thì sàn chéo hạ 0,15; mức 3-4 giữ nguyên
-            san = mc["cheo"] - (0.15 if kh and kh.get("muc", 4) <= 2 else 0.0)
+            san = mc["cheo"] - (0.15 if kh.get("muc", 4) <= 2 else 0.0)
             loai_bo = [x for x in nhom if dc.get(x.id, 1.0) < san]
             if loai_bo:
                 log(f"  câu {c.so}: bỏ {', '.join(f'{x.id} ({dc.get(x.id, 0):.2f})' for x in loai_bo)} — không hợp nghĩa câu "
                     f"(< {san:.2f})")
             nhom = [x for x in nhom if x not in loai_bo]
-        nhom.sort(key=lambda x: (dem.get(x.id, 0), rng.random()))   # ít dùng nhất ở các tập trước
+            if not nhom:
+                return None, None, (f"{ten_kho} có [{', '.join(f'{x.id} ({dc.get(x.id, 0):.2f})' for x in loai_bo[:3])}] "
+                                    f"{kh['giai_thich']} nhưng kiểm chéo nghĩa với câu dưới {san:.2f}")
+        # user 07/11: BỎ luật "một clip chỉ dùng một lần trong video" — clip đúng thì dùng lại được, kể cả hai câu gần nhau
+        # (trước đây câu sau mất clip vì câu trước đã lấy -> ghi Thiếu dù kho có). Chỉ còn ƯU TIÊN: clip chưa dùng trong video
+        # này -> ít dùng ở các tập trước -> ngẫu nhiên theo seed
+        nhom.sort(key=lambda x: (lan_dung.get(x.id, 0), dem.get(x.id, 0), rng.random()))
+        loi_tai = []
         for x in nhom:
             try:
                 tai_clip(x, log, dung, thu_muc)
                 x.loai = loai
-                return x, kh
+                return x, kh, ""
             except Exception as e:                   # noqa: BLE001
                 log(f"  tải {x.ten or x.id} lỗi: {e}")
-        return None, None
+                loi_tai.append(f"[{x.id}] {e}")
+        return None, None, f"{ten_kho} có clip khớp ({kh['giai_thich']}) nhưng tải lỗi: {'; '.join(loi_tai)[:200]}"
 
+    # kế hoạch đã chốt lần trước (chọn thử / chạy trước, cùng trả lời GPT + seed): câu đã có cảnh thì giữ nguyên clip đó,
+    # chỉ chọn cho câu còn thiếu / chưa có cảnh -> bổ sung kho xong chạy lại không xáo cảnh, không sinh Thiếu mới (07/11)
+    ke_hoach_cu = _doc_ke_hoach(bo_nho, khoa, seed) if not hoi_lai else None
+    giu: dict[str, dict] = dict((ke_hoach_cu or {}).get("cau") or {})   # "số câu" -> {loai, clip, tu_khoa, khop}
+    if giu:
+        log(f"  giữ kế hoạch đã chốt lúc {ke_hoach_cu.get('luc') or '?'} ({len(giu)} câu đã có cảnh, {FILE_KE_HOACH_TRON}): "
+            "chỉ chọn lại cho câu thiếu / câu chưa có cảnh")
     canh, thieu, loai_cau = [], [], {}
     truoc = ""                                       # loại thực dùng của câu liền trước
     dai_clip: dict[int, float] = {}                  # id(Canh) -> độ dài clip video (để nối câu không vượt clip)
+    n_giu = 0
     for c in giua:
         if c.so in noi and canh and truoc != "nguoi_noi" and abs(canh[-1].end - cau[c.so - 2].end) < 0.05:
             # câu giải thích nối cảnh câu trước (user 05/11): kéo cảnh trước tới hết câu này, không đổi cảnh
@@ -2226,30 +2309,48 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
                 truoc = "nguoi_noi"
             continue
         loai, de_xuat, mo_ta = nhan.get(c.so, ("nguoi_noi", [], ""))
-        if loai == "video" and truoc == "video":     # chặn hai video dọc liền nhau
-            log(f"  câu {c.so}: liền sau một video dọc -> đổi sang ảnh ngang")
-            loai = "anh"
-        # thiếu video dọc -> thử ảnh ngang (vẫn thấy mặt) -> người nói; thiếu ảnh -> người nói (KHÔNG đổi sang video che mặt,
-        # để tỉ lệ video không phình khi kho ảnh còn trống)
-        thu = {"video": ["video", "anh"], "anh": ["anh"]}.get(loai, [])
         clip = kh = None
         dung_loai = "nguoi_noi"
-        for l in thu:
-            if l == "video" and truoc == "video":
-                continue
-            clip, kh = _chon(l, de_xuat, c)
-            if clip:
-                dung_loai = l
-                break
+        ly_do: list[str] = []
+        cu_kh = giu.get(str(c.so))                   # cảnh đã chốt lần trước cho câu này -> giữ nguyên nếu clip còn trong kho
+        if cu_kh and cu_kh.get("loai") in ("video", "anh") and not (cu_kh["loai"] == "video" and truoc == "video"):
+            x = next((k for k in (kho_v if cu_kh["loai"] == "video" else kho_a) if k.id == cu_kh.get("clip")), None)
+            if x is None:
+                log(f"  câu {c.so}: clip đã chốt [{cu_kh.get('clip')}] không còn trong kho -> chọn lại")
+            else:
+                try:
+                    tai_clip(x, log, dung, thu_muc)
+                    x.loai = cu_kh["loai"]
+                    clip, dung_loai, n_giu = x, cu_kh["loai"], n_giu + 1
+                    kh = {"tu_khoa_hien": str(cu_kh.get("tu_khoa") or ""),
+                          "giai_thich": f"giữ cảnh đã chốt lúc {str((ke_hoach_cu or {}).get('luc') or '?')[:16]} ({cu_kh.get('khop') or '?'})"}
+                except Exception as e:               # noqa: BLE001
+                    log(f"  câu {c.so}: clip đã chốt [{x.id}] tải lỗi ({e}) -> chọn lại")
+        if clip is None:
+            # chặn hai video dọc liền nhau: câu trước đang là video, hoặc câu kế đã chốt video -> câu này chỉ ảnh ngang
+            sau = giu.get(str(c.so + 1))
+            if loai == "video" and (truoc == "video" or (sau and sau.get("loai") == "video")):
+                log(f"  câu {c.so}: liền {'sau' if truoc == 'video' else 'trước'} một video dọc -> đổi sang ảnh ngang")
+                loai = "anh"
+            # thiếu video dọc -> thử ảnh ngang (vẫn thấy mặt) -> người nói; thiếu ảnh -> người nói (KHÔNG đổi sang video che
+            # mặt, để tỉ lệ video không phình khi kho ảnh còn trống)
+            for l in {"video": ["video", "anh"], "anh": ["anh"]}.get(loai, []):
+                clip, kh, ld = _chon(l, de_xuat, c)
+                if clip:
+                    dung_loai = l
+                    break
+                ly_do.append(ld)
         if loai != "nguoi_noi" and (clip is None or dung_loai != loai):
             thieu.append({"cau": c.so, "text": c.text, "de_xuat": de_xuat, "canh": mo_ta,
                           "loai": "video" if loai == "video" else "image",
-                          "goi_y": f"[{'video dọc' if loai == 'video' else 'ảnh ngang'}] " + (mo_ta or ", ".join(de_xuat))})
+                          "goi_y": f"[{'video dọc' if loai == 'video' else 'ảnh ngang'}] " + (mo_ta or ", ".join(de_xuat)),
+                          "ly_do": "; ".join(x for x in ly_do if x)
+                                   + (f" — tạm dùng ảnh [{clip.id}] {clip.ten}" if clip is not None else "")})
         loai_cau[c.so] = dung_loai
         truoc = dung_loai
         if clip is None:
             continue
-        dung_roi.add(clip.id)
+        lan_dung[clip.id] = lan_dung.get(clip.id, 0) + 1
         dai = c.end - c.start
         toc = 1.0
         if dung_loai == "video":
@@ -2261,13 +2362,16 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
                 dai = min(dai, mc["video_max"])
             if dai < c.end - c.start - 0.05:
                 log(f"  câu {c.so}: video {clip.id} hiện {dai:.1f}s / câu {c.end - c.start:.1f}s, phần còn lại về người nói")
-        canh.append(Canh(start=c.start, end=c.start + dai, clip=clip, cau=c, tu_khoa=kh["tu_khoa_hien"] or de_xuat[0],
+        canh.append(Canh(start=c.start, end=c.start + dai, clip=clip, cau=c,
+                         tu_khoa=kh["tu_khoa_hien"] or (de_xuat[0] if de_xuat else ""),
                          khop=kh["giai_thich"], de_xuat=de_xuat, toc_do=round(toc, 3)))
         if dung_loai == "video":
             dai_clip[id(canh[-1])] = L
             if dai < c.end - c.start - 0.05:
                 truoc = "nguoi_noi"                  # video đã hết giữa câu -> câu sau không nối được
     kq["canh"], kq["thieu"], kq["loai_cau"] = canh, thieu, loai_cau
+    kq["ke_hoach"] = {"giu": n_giu, "luc": (ke_hoach_cu or {}).get("luc", "")}
+    _ghi_ke_hoach(bo_nho, khoa, seed, canh, log)     # chốt: chạy lại (sau khi bổ sung kho) giữ nguyên các cảnh này
     gio = {k: sum(c.end - c.start for c in giua if loai_cau.get(c.so) == k) for k in ("nguoi_noi", "video", "anh")}
     kq["ti_le_thuc"] = {k: round(100 * v / tong) if tong else 0 for k, v in gio.items()}
     nhan_gpt: dict[int, str] = {}
@@ -2281,7 +2385,8 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
     if thieu:
         ghi_thieu(ten_bo, thieu)
         kq["thieu_sheet"] = ghi_thieu_sheet(kho_anh or kho_video, ten_bo, thieu, log)   # tab Thiếu chung của Sheet kho
-        log("  kho thiếu: " + "; ".join(f"câu {t['cau']}: {t['goi_y']}" for t in thieu) + f"  ({kq['thieu_sheet']})")
+        log("  kho thiếu: " + "; ".join(f"câu {t['cau']}: {t['goi_y']}" + (f" ({t['ly_do']})" if t.get("ly_do") else "")
+                                        for t in thieu) + f"  ({kq['thieu_sheet']})")
     kq["da_co"] = [cn.clip for cn in canh]       # cộng "Số lần dùng" ở ghep_tieude sau khi dựng xong (không cộng khi chọn thử)
     return kq
 

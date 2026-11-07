@@ -2396,9 +2396,10 @@ def _chay_muc(it):
         goc = ""                                   # phần sau = chính video dài, không dùng clip gốc
     if da_chon_thu and "--minh-hoa-hoi-lai" in tham_so:
         # user 23/10: đã bấm Chọn thử trước thì lần Chạy thật KHÔNG hỏi GPT từ khóa lại (dùng lại trả lời + seed của lần chọn
-        # thử, chỉ chọn lại cảnh với kho đã bổ sung rồi AI soát thêm một lần); chưa chọn thử thì vẫn hỏi lại như cài đặt
+        # thử; tab C Thảo còn giữ nguyên kế hoạch cảnh đã chốt, chỉ chọn cho câu thiếu — 07/11); chưa chọn thử thì vẫn hỏi
+        # lại như cài đặt
         tham_so.remove("--minh-hoa-hoi-lai")
-        S.log(f"   [{it['id']}] đã chọn thử trước đó → dùng lại từ khóa GPT và seed {seed}, chỉ chọn lại cảnh với kho mới")
+        S.log(f"   [{it['id']}] đã chọn thử trước đó → dùng lại từ khóa GPT, seed {seed} và cảnh đã chốt; chỉ chọn thêm cho câu thiếu")
     cmd = [python_exe(), "-u", str(TOOL), "--thu-muc", str(dest), *(["--phan-sau", goc] if goc else []), "--seed", str(seed),
            "--out", str(thu_muc_ra()), *tham_so, *(["--chon-thu"] if chon_thu else [])]
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
@@ -2541,7 +2542,7 @@ def _worker():
             S.log(f"⏹ Đã dừng ngay theo yêu cầu. {xong} xong, {loi} lỗi.")
         elif S.chon_thu:
             S.log(f"🔍 Chọn thử xong {thu} tập, {loi} lỗi — xem tab Thiếu của Sheet kho và file ghi chú từng mục; "
-                  "bổ sung kho rồi bấm ▶ Chạy (sẽ dùng lại từ khóa GPT và seed của lần chọn thử).")
+                  "bổ sung kho rồi bấm ▶ Chạy (giữ nguyên cảnh đã chọn, chỉ tìm thêm cho câu thiếu; cột Lý do cho biết vì sao thiếu).")
         elif not con:
             S.log(f"🎉 Hết hàng đợi: {xong} xong, {loi} lỗi." + (" Bấm 'Chạy lại mục lỗi' để thử lại." if loi else ""))
         else:

@@ -1988,7 +1988,9 @@ def main():
         # dừng ở đây: không tiếng chuyển cảnh, không render. Dòng "CHỌN THỬ:" cho app đọc (số cảnh, số thiếu, file ghi chú)
         thieu_mh = kq_mh.get("thieu") or []
         soat_mh = kq_mh.get("soat") or []
-        print(f"CHỌN THỬ: {len(canh_mh)} cảnh, {len(thieu_mh)} thiếu ({len(soat_mh)} AI thấy chưa hợp)"
+        giu_mh = (kq_mh.get("ke_hoach") or {}).get("giu") or 0
+        print(f"CHỌN THỬ: {len(canh_mh)} cảnh" + (f" (giữ {giu_mh} đã chốt)" if giu_mh else "")
+              + f", {len(thieu_mh)} thiếu ({len(soat_mh)} AI thấy chưa hợp)"
               + (f" — {kq_mh['thieu_sheet']}" if kq_mh.get("thieu_sheet") else "") + f" | {link_mh or ''}")
         return
     # tiếng chuyển cảnh: tab Âm thanh hiệu ứng (cùng Sheet kho), tải mp3 về thư mục video mẫu; chỉ có nghĩa khi có cảnh
