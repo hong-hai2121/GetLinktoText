@@ -2185,10 +2185,14 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
         if nhom and mc["cheo"] is not None and _vec_ok():          # kiểm chéo: cảnh phải hợp nghĩa với CẢ câu nói
             import vector_kho
             dc = vector_kho.diem_tung_clip(c.text, kho)
-            loai_bo = [x for x in nhom if dc.get(x.id, 1.0) < mc["cheo"]]
+            # user 07/11: cảnh khớp ĐÚNG/CHỨA từ khóa kho (mức 1-2, chữ do người đặt tay) mà vẫn bị kiểm chéo loại —
+            # câu y khoa dài ("lecithin… albumin") khó giống mô tả cảnh (lòng đỏ trứng 0,43; tép tỏi 0,33; vi khuẩn HP
+            # 0,40 < 0,45) -> tab Thiếu ghi mãi dù kho đã có. Từ khóa trùng hẳn thì sàn chéo hạ 0,15; mức 3-4 giữ nguyên
+            san = mc["cheo"] - (0.15 if kh and kh.get("muc", 4) <= 2 else 0.0)
+            loai_bo = [x for x in nhom if dc.get(x.id, 1.0) < san]
             if loai_bo:
                 log(f"  câu {c.so}: bỏ {', '.join(f'{x.id} ({dc.get(x.id, 0):.2f})' for x in loai_bo)} — không hợp nghĩa câu "
-                    f"(< {mc['cheo']})")
+                    f"(< {san:.2f})")
             nhom = [x for x in nhom if x not in loai_bo]
         nhom.sort(key=lambda x: (dem.get(x.id, 0), rng.random()))   # ít dùng nhất ở các tập trước
         for x in nhom:
