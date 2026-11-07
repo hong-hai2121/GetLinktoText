@@ -1975,6 +1975,7 @@ Cách dựng: MỖI câu thuộc đúng MỘT trong 3 loại, hiện đúng tron
 - "anh": ẢNH minh họa ngang ở nửa dưới khung, người nói vẫn thấy — cho câu nói về VẬT, CƠ QUAN, CON SỐ, khái niệm cần chỉ ra:
   dạ dày, van tâm vị, ly sữa, món ăn, "3-4 tiếng"...
 - "nguoi_noi": để nguyên người nói, không minh họa — cho câu giải thích chung, lời khuyên, câu chào, câu nhờ thả tim.
+  Câu kêu gọi nhắn tin ở cuối vẫn có thể là "anh" (ví dụ ảnh nhắn tin cho bác sĩ) nếu kho có cảnh hợp.
 Tỉ lệ mong muốn theo TỔNG SỐ GIÂY của các câu dưới đây (tổng {tong:.0f} giây): "nguoi_noi" khoảng {ti_nguoi}%,
 "video" khoảng {ti_video}%, "anh" khoảng {ti_anh}%.
 Quy tắc bắt buộc:
@@ -2006,7 +2007,7 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
                   ti_nguoi: int = 12, ti_video: int = 35, toc_video: float = TRON_TOC_VIDEO,
                   muc: str = "chat") -> dict:
     """Tab C Thảo HeyGen: mỗi câu giữa = video dọc (kho_video) | ảnh ngang (kho_anh) | người nói, theo nhãn GPT.
-    Câu cuối (kêu gọi) luôn người nói. Thiếu cảnh: video -> thử kho ảnh -> người nói; ảnh -> người nói; cả hai ghi Thiếu. -> dict như chuan_bi + "loai_cau" {so: loai thực dùng}, Canh.toc_do = tốc độ chiếu video."""
+    Câu cuối cũng được minh họa nếu GPT chọn (user 07/11). Thiếu cảnh: video -> thử kho ảnh -> người nói; ảnh -> người nói; cả hai ghi Thiếu. -> dict như chuan_bi + "loai_cau" {so: loai thực dùng}, Canh.toc_do = tốc độ chiếu video."""
     import random as _random
     rng = _random.Random(seed)
     mc = MUC_CHINH_XAC.get(muc, MUC_CHINH_XAC["chat"])
@@ -2036,10 +2037,12 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
     kq["tu_khoa_kho"] = tags
     cau = tach_cau(tu, tu_giay)
     kq["cau"], kq["so_cau"] = cau, len(cau)
-    if len(cau) < 2:
-        kq["loi"] = "phần sau quá ít câu"
+    if not cau:
+        kq["loi"] = "phần sau không có câu nào sau đoạn tiêu đề"
         return kq
-    giua = cau[:-1]                                  # câu cuối = kêu gọi -> luôn người nói
+    # user 07/11: câu cuối CŨNG được minh họa (GPT tự quyết); chỉ các câu rơi vào đoạn đang hiện tiêu đề (tach_cau đã bỏ
+    # câu bắt đầu trước tu_giay = hết đoạn tiêu đề) là không ghép cảnh
+    giua = list(cau)
     tong = sum(c.end - c.start for c in giua)
     ti_anh = max(0, 100 - ti_nguoi - ti_video)
     kich_ban = "\n".join(f"{c.so}. ({c.end - c.start:.1f}s) {c.text}" for c in giua)
@@ -2182,7 +2185,6 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
             dai_clip[id(canh[-1])] = L
             if dai < c.end - c.start - 0.05:
                 truoc = "nguoi_noi"                  # video đã hết giữa câu -> câu sau không nối được
-    loai_cau[cau[-1].so] = "nguoi_noi"
     kq["canh"], kq["thieu"], kq["loai_cau"] = canh, thieu, loai_cau
     gio = {k: sum(c.end - c.start for c in giua if loai_cau.get(c.so) == k) for k in ("nguoi_noi", "video", "anh")}
     kq["ti_le_thuc"] = {k: round(100 * v / tong) if tong else 0 for k, v in gio.items()}

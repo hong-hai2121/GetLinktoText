@@ -1935,7 +1935,9 @@ def main():
         # trả lời AI nhớ trong thư mục tập (cạnh kịch bản): chạy lại cùng kịch bản thì không hỏi lại, chỉ ghép lại
         bo_nho_mh = thu_muc_bo or (kich_ban.parent if kich_ban else None)
         ti = [int(float(x)) for x in (args.tron_ti_le.split(",") + ["12", "35"])[:2]]
-        kq_mh = minh_hoa.chuan_bi_tron(tu_khop, kho_video=args.minh_hoa, kho_anh=args.minh_hoa_kho_anh, tu_giay=dur,
+        # câu còn nằm trong lúc tiêu đề đang hiện (kể cả 1s hiệu ứng tiêu đề rút đi) thì không ghép cảnh (user 07/11)
+        tu_giay_tron = dur + (0.0 if args.khong_hieu_ung_ket else XFADE_GIAY_GOC)
+        kq_mh = minh_hoa.chuan_bi_tron(tu_khop, kho_video=args.minh_hoa, kho_anh=args.minh_hoa_kho_anh, tu_giay=tu_giay_tron,
                                        nha=args.minh_hoa_ai, model=args.minh_hoa_model, seed=args.seed, ten_bo=ten,
                                        log=lambda s: print("  " + s), thu_muc=args.minh_hoa_thu_muc, luu_tho=tho_mh,
                                        bo_nho=bo_nho_mh, hoi_lai=args.minh_hoa_hoi_lai,
