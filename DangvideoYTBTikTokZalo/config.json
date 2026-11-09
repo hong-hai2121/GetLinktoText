@@ -2,7 +2,7 @@
   "chrome_path": "",
   "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
   "profile_dir": "Profile 9",
-  "extension_token": "zHRVIe2RvNEqBe-6E-9jiFPEcjNFztVOPIF41LIJ7SI",
+  "extension_token": "Ch97U3l_jFXfW4eN",
   "client_name": "Đăng video YouTube",
   "connect_timeout_sec": 60,
   "channel_name": "",
@@ -23,20 +23,7 @@
     "tiktok",
     "zalo"
   ],
-  "gio_da_dung": [
-    "2026-11-02T18:00",
-    "2026-11-03T08:00",
-    "2026-11-03T18:00",
-    "2026-11-04T08:00",
-    "2026-11-04T18:00",
-    "2026-11-05T08:00",
-    "2026-11-05T18:00",
-    "2026-11-06T08:00",
-    "2026-11-06T18:00",
-    "2026-11-07T08:00",
-    "2026-11-07T18:00",
-    "2026-11-08T08:00"
-  ],
+  "gio_da_dung": [],
   "ai_backend": "chatgpt",
   "gpt_model": "",
   "platforms": {
@@ -44,7 +31,7 @@
       "browser_path": "",
       "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
       "profile_dir": "Profile 9",
-      "extension_token": "zHRVIe2RvNEqBe-6E-9jiFPEcjNFztVOPIF41LIJ7SI",
+      "extension_token": "Ch97U3l_jFXfW4eN",
       "client_name": "Đăng video YouTube"
     },
     "tiktok": {
@@ -59,7 +46,10 @@
       "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\CocCoc\\Browser\\User Data",
       "profile_dir": "Profile 12",
       "extension_token": "MBN0IOlz1x3eALhylmaKK1kuPYQUMejPF89DelOknn4",
-      "client_name": "Đăng video Zalo"
+      "client_name": "Đăng video Zalo",
+      "account": "đã đăng nhập",
+      "account_url": "https://video.zalo.me/creator/video",
+      "checked_at": "09/11 20:42"
     }
   }
 }

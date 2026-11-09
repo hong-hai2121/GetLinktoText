@@ -323,18 +323,19 @@ td.kq .er.cu{color:#b45309}
       <div class="ai-body">
         <div class="ai-steps">
           <section class="step s1">
-            <header><span class="num">1</span><h4>Chọn video</h4><small>tick nhiều video trong Downloads, và/hoặc dán nhiều link Drive</small>
+            <header><span class="num">1</span><h4>Chọn video</h4><small>tick video trong Downloads, bấm <b>Chọn video…</b> để lấy file .mp4 / .mov / .webm ở thư mục bất kỳ, và/hoặc dán nhiều link Drive</small>
               <span class="pick" id="seoPick">0 video</span></header>
             <div class="row" style="align-items:center;margin-bottom:6px">
               <span class="hint" style="margin:0">Trong Downloads:</span>
               <button class="btn mini" id="btnSeoAll">Chọn tất cả</button>
               <button class="btn mini" id="btnSeoNone">Bỏ chọn</button>
-              <button class="btn mini" id="btnSeoRefresh" title="Đọc lại thư mục Downloads" style="margin-left:auto">↻ Đọc lại</button>
+              <button class="btn mini" id="btnSeoChon" title="Mở hộp thoại chọn nhiều file video (.mp4 / .mov / .webm / .mkv / .m4v) trong Downloads hoặc thư mục khác" style="margin-left:auto">📂 Chọn video…</button>
+              <button class="btn mini" id="btnSeoRefresh" title="Đọc lại thư mục Downloads">↻ Đọc lại</button>
             </div>
             <div class="filelist" id="seoFiles"><div class="empty-s">Đang đọc Downloads…</div></div>
             <div class="or"><span>và / hoặc</span></div>
             <textarea id="seoDrive" rows="3" placeholder="dán link Google Drive, mỗi dòng một link…"></textarea>
-            <p class="hint">Video dài hơn 3 phút sẽ bị bỏ qua và lưu link lại. Các video chạy lần lượt theo thứ tự.</p>
+            <p class="hint">Video dài hơn 3 phút sẽ bị bỏ qua và lưu link lại. Các video chạy lần lượt theo thứ tự. Video không phải .mp4 (.mov / .webm…) được tự đổi sang .mp4 trước khi nhận diện, vì Zalo chỉ nhận mp4; file gốc giữ nguyên.</p>
           </section>
 
           <section class="step s2">
@@ -795,7 +796,11 @@ function dangLai(only) {
 const STAGES = ["tai", "boc", "gem", "xong"];
 const JOB_ST = {"chờ": "st-wait", "đang chạy": "st-run", "xong": "st-done", "lỗi": "st-err", "bỏ": "st-wait"};
 let seoStage = null, seoFiles = [], seoFirst = true;
-const seoPicked = new Set();           // đường dẫn video Downloads đã tick
+let seoExtra = [];                     // video chọn qua nút "Chọn video…" (Downloads hay thư mục khác), hiện đầu danh sách
+const seoPicked = new Set();           // đường dẫn video đã tick (trong Downloads + chọn qua hộp thoại)
+// danh sách hiện ở bước 1: video chọn qua hộp thoại mà Downloads chưa liệt kê, rồi tới video trong Downloads
+const danhSachHien = () => { const co = new Set(seoFiles.map(f => f.path)); return [...seoExtra.filter(f => !co.has(f.path)), ...seoFiles]; };
+const tenThuMuc = p => (p || "").replace(/[\\/][^\\/]*$/, "");
 
 const driveLinks = () => $("seoDrive").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 function updatePick() {
@@ -814,11 +819,12 @@ function daCoKeys(st) {   // video đã có từ trước (hàng đợi / danh s
 let daCoSig = "";
 function renderFiles() {
   const box = $("seoFiles");
-  if (!seoFiles.length) { box.innerHTML = '<div class="empty-s">Downloads không có video (.mp4 / .mov / .mkv / .m4v).</div>'; return; }
+  const ds = danhSachHien();
+  if (!ds.length) { box.innerHTML = '<div class="empty-s">Downloads không có video (.mp4 / .mov / .webm / .mkv / .m4v) — bấm 📂 Chọn video… để lấy từ thư mục khác.</div>'; return; }
   const daCo = daCoKeys(lastState);
-  box.innerHTML = seoFiles.map(f => `
+  box.innerHTML = ds.map(f => `
     <label class="${seoPicked.has(f.path) ? "sel" : ""}"><input type="checkbox" value="${esc(f.path)}" ${seoPicked.has(f.path) ? "checked" : ""}>
-      <span class="nm" title="${esc(f.path)}">${esc(f.name)}</span>${daCo.has(khoaVideo(f.path)) ? '<span class="daco" title="Đã có trong danh sách từ trước — chọn lại sẽ không thêm lần nữa">đã có</span>' : ""}<span class="meta">${f.size_mb} MB · ${esc(f.mtime)}</span></label>`).join("");
+      <span class="nm" title="${esc(f.path)}">${esc(f.name)}</span>${f.ngoai ? `<span class="meta" title="${esc(tenThuMuc(f.path))}">📂 ${esc(tenThuMuc(f.path).split(/[\\/]/).pop())}</span>` : ""}${daCo.has(khoaVideo(f.path)) ? '<span class="daco" title="Đã có trong danh sách từ trước — chọn lại sẽ không thêm lần nữa">đã có</span>' : ""}<span class="meta">${f.size_mb} MB · ${esc(f.mtime)}</span></label>`).join("");
   box.querySelectorAll("input").forEach(cb => cb.addEventListener("change", () => {
     cb.checked ? seoPicked.add(cb.value) : seoPicked.delete(cb.value);
     cb.closest("label").classList.toggle("sel", cb.checked);
@@ -830,17 +836,33 @@ async function loadDownloads() {
   const j = await r.json();
   if (!j.ok) return toast(j.msg, false);
   seoFiles = j.files;
-  const paths = new Set(seoFiles.map(f => f.path));
+  const paths = new Set(danhSachHien().map(f => f.path));
   [...seoPicked].forEach(p => { if (!paths.has(p)) seoPicked.delete(p); });
   renderFiles(); updatePick();
 }
 $("btnSeoRefresh").onclick = loadDownloads;
-$("btnSeoAll").onclick = () => { seoFiles.forEach(f => seoPicked.add(f.path)); renderFiles(); updatePick(); };
+$("btnSeoAll").onclick = () => { danhSachHien().forEach(f => seoPicked.add(f.path)); renderFiles(); updatePick(); };
 $("btnSeoNone").onclick = () => { seoPicked.clear(); renderFiles(); updatePick(); };
+// nút "Chọn video…": server mở hộp thoại Windows (bắt đầu ở Downloads, lọc .mp4/.mov/.webm/.mkv/.m4v), file chọn được
+// đưa vào danh sách và tick sẵn; file ngoài Downloads ghi kèm tên thư mục
+$("btnSeoChon").onclick = async () => {
+  const b = $("btnSeoChon");
+  if (b.disabled) return;
+  b.disabled = true; const cu = b.textContent; b.textContent = "Đang mở hộp thoại…";
+  try {
+    const j = await post("/api/chon_video", {});
+    if (j.ok && j.files) {
+      const co = new Set(danhSachHien().map(f => f.path)), moi = [];
+      j.files.forEach(f => { if (!co.has(f.path)) { moi.push(f); co.add(f.path); } seoPicked.add(f.path); });
+      seoExtra = [...moi, ...seoExtra];          // lần chọn mới nhất lên đầu, giữ đúng thứ tự đã chọn
+      renderFiles(); updatePick();
+    }
+  } finally { b.disabled = false; b.textContent = cu; }
+};
 $("seoDrive").addEventListener("input", updatePick);
 $("btnSeoRun").onclick = async () => {
   const sources = [...seoPicked, ...driveLinks()];
-  if (!sources.length) return toast("Tick video trong Downloads hoặc dán link Drive.", false);
+  if (!sources.length) return toast("Tick video trong Downloads, bấm Chọn video… hoặc dán link Drive.", false);
   const auto = $("seoAuto").checked, pf = selectedPlatforms();
   if (auto && !pf.length) return toast("Tự thêm vào hàng đợi: tick ít nhất một nền tảng.", false);
   if (auto) {   // tự thêm = loạt mới thay loạt cũ: xoá các mục hàng đợi KHÔNG được chọn lại; video chọn lại đã có thì giữ nguyên
@@ -851,7 +873,7 @@ $("btnSeoRun").onclick = async () => {
   const backend = (document.querySelector("input[name=aiBackend]:checked") || {}).value || "gemini";
   const j = await post("/api/tao_noi_dung", {sources, auto_add: auto, clear_queue: auto, platforms: pf, backend,
                                             times: $("times").value, start: $("start").value});
-  if (j.ok) { seoPicked.clear(); $("seoDrive").value = ""; renderFiles(); updatePick(); }
+  if (j.ok) { seoPicked.clear(); seoExtra = []; $("seoDrive").value = ""; renderFiles(); updatePick(); }
 };
 $("btnSeoStop").onclick = () => post("/api/seo_stop");
 $("btnCheckGpt").onclick = () => post("/api/check_gpt");

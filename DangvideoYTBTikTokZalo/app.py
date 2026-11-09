@@ -255,7 +255,17 @@ def state_payload(after=0):
 
 
 # ------------------------------------------------------------------ tạo nội dung bằng AI
-VIDEO_EXT = (".mp4", ".mov", ".mkv", ".m4v")
+# Đuôi video nhận ở danh sách Downloads và nút "Chọn video…". Zalo chỉ nhận mp4/mov (xem zalo_upload.py);
+# YouTube/TikTok nhận cả webm; Whisper bóc băng qua ffmpeg nên đuôi nào cũng được.
+VIDEO_EXT = (".mp4", ".mov", ".webm", ".mkv", ".m4v")
+_KHOA_HOP_THOAI = threading.Lock()      # mỗi lúc chỉ một hộp thoại chọn file (bấm đúp nút không mở hai cái)
+
+
+def _thong_tin_video(p):
+    """Một dòng cho danh sách video ở bước 1 (tên, đường dẫn, dung lượng, giờ sửa)."""
+    st = p.stat()
+    return {"name": p.name, "path": str(p), "size_mb": round(st.st_size / 1048576, 1),
+            "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m %H:%M"), "_t": st.st_mtime}
 
 
 def api_list_downloads(_data):
@@ -266,16 +276,75 @@ def api_list_downloads(_data):
     try:
         for p in folder.iterdir():
             if p.is_file() and p.suffix.lower() in VIDEO_EXT:
-                st = p.stat()
-                files.append({"name": p.name, "path": str(p), "size_mb": round(st.st_size / 1048576, 1),
-                              "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m %H:%M"),
-                              "_t": st.st_mtime})
+                files.append(_thong_tin_video(p))
     except Exception as e:
         return {"ok": False, "msg": f"Không đọc được Downloads: {e}"}
     files.sort(key=lambda f: f["_t"], reverse=True)
     for f in files:
         f.pop("_t", None)
     return {"ok": True, "files": files[:60], "folder": str(folder)}
+
+
+# Hộp thoại chọn file chạy ở một tiến trình Python con: tkinter không chịu được khi gọi từ thread của
+# ThreadingHTTPServer (mỗi request một thread), còn tiến trình riêng thì mở/đóng gọn, không dính gì server.
+_HOP_THOAI_CODE = """
+import json, sys, tkinter as tk
+from tkinter import filedialog
+bat_dau, mau = sys.argv[1], sys.argv[2]
+root = tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
+ds = filedialog.askopenfilenames(parent=root, title="Chọn video để tạo nội dung (chọn được nhiều file)",
+                                 initialdir=bat_dau,
+                                 filetypes=[("Video (" + mau.replace("*", "").replace(" ", ", ") + ")", mau),
+                                            ("MP4", "*.mp4"), ("MOV", "*.mov"), ("WebM", "*.webm"), ("Mọi file", "*.*")])
+root.destroy()
+sys.stdout.write(json.dumps(list(ds or ()), ensure_ascii=False))
+"""
+
+
+def _hop_thoai_chon_video(bat_dau):
+    """Mở hộp thoại Windows chọn nhiều file video, bắt đầu ở thư mục `bat_dau`. Trả về [đường dẫn]; [] nếu hủy."""
+    import subprocess
+    import sys
+    mau = " ".join("*" + e for e in VIDEO_EXT)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    r = subprocess.run([sys.executable, "-X", "utf8", "-c", _HOP_THOAI_CODE, bat_dau, mau],
+                       capture_output=True, timeout=1800, creationflags=flags)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or b"").decode("utf-8", "replace").strip().splitlines()[-1:] or ["lỗi tkinter"])[0]
+    out = r.stdout.decode("utf-8", "replace").strip()
+    return [str(Path(p)) for p in (json.loads(out) if out else [])]
+
+
+def api_chon_video(_data):
+    """Nút "Chọn video…" ở bước 1: hộp thoại chọn nhiều file (.mp4/.mov/.webm/.mkv/.m4v) trong Downloads hay
+    thư mục khác. Trả về cùng dạng list_downloads để giao diện đưa vào danh sách và tick sẵn."""
+    from drive_download import DOWNLOADS
+    if not _KHOA_HOP_THOAI.acquire(blocking=False):
+        return {"ok": False, "msg": "Hộp thoại chọn video đang mở — chọn xong ở đó trước."}
+    try:
+        ds = _hop_thoai_chon_video(str(DOWNLOADS))
+    except Exception as e:
+        return {"ok": False, "msg": f"Không mở được hộp thoại chọn file: {e}"}
+    finally:
+        _KHOA_HOP_THOAI.release()
+    if not ds:
+        return {"ok": True, "files": [], "msg": ""}            # bấm Cancel: không báo gì
+    downloads = Path(DOWNLOADS).resolve()
+    files, bo = [], []
+    for s in ds:
+        p = Path(s)
+        if p.is_file() and p.suffix.lower() in VIDEO_EXT:
+            f = _thong_tin_video(p)
+            f.pop("_t", None)
+            f["ngoai"] = p.resolve().parent != downloads   # ngoài Downloads -> giao diện ghi kèm thư mục
+            files.append(f)
+        else:
+            bo.append(p.name)
+    msg = f"Đã chọn {len(files)} video." if files else "Các file vừa chọn không phải video."
+    if bo:
+        msg += f" Bỏ qua {len(bo)} file không phải video ({'/'.join(e.lstrip('.') for e in VIDEO_EXT)}): " \
+               + ", ".join(bo[:4]) + ("…" if len(bo) > 4 else "")
+    return {"ok": bool(files), "files": files, "msg": msg}
 
 
 def _job_set(job, **kw):
@@ -326,6 +395,12 @@ def _seo_job(job, phien):
         if pq.is_drive(nguon):
             _job_set(job, buoc="Đang tải video từ Google Drive...")
             path = download_drive(nguon, log=S.log)
+        if Path(path).suffix.lower() != ".mp4":
+            # Zalo chỉ nhận .mp4 -> đổi ngay khi bắt đầu (file gốc giữ nguyên); ket_qua["file"] và mục hàng đợi
+            # sẽ trỏ file .mp4, còn job["nguon"] giữ đường dẫn người dùng chọn để so trùng "đã có".
+            import doi_mp4
+            _job_set(job, ten=Path(path).name, buoc="Đang đổi sang .mp4 (Zalo chỉ nhận mp4)...")
+            path = doi_mp4.dam_bao_mp4(path, log=S.log)
         if not Path(path).exists():
             raise FileNotFoundError(f"Không thấy file video: {path}")
         van_ban = job.get("nhan_dien") or ""
@@ -478,7 +553,7 @@ def api_tao_noi_dung(data):
         if s and s not in nguon_list:
             nguon_list.append(s)
     if not nguon_list:
-        return {"ok": False, "msg": "Tick video trong Downloads hoặc dán link Drive."}
+        return {"ok": False, "msg": "Tick video trong Downloads, bấm Chọn video… hoặc dán link Drive."}
     if len(nguon_list) > 50:
         return {"ok": False, "msg": "Tối đa 50 video một lần."}
     tu_dong = bool(data.get("auto_add"))
@@ -1102,8 +1177,18 @@ def api_tat_server(_data):
 
 # ------------------------------------------------------------------ worker
 def _local_file(it):
-    """Link Drive: tải về 1 lần (lưu it['file']) rồi dùng lại cho các nền tảng sau / lần chạy sau."""
+    """Link Drive: tải về 1 lần (lưu it['file']) rồi dùng lại cho các nền tảng sau / lần chạy sau.
+    File cục bộ không phải .mp4 (thêm thủ công, hàng đợi cũ): đổi sang .mp4 một lần (Zalo chỉ nhận mp4) rồi
+    đổi luôn it['link'] sang file .mp4 — kể cả khi file gốc đã bị xoá mà cạnh đó có sẵn <tên>.mp4."""
     if not pq.is_drive(it["link"]):
+        p = it["link"]
+        if Path(p).suffix.lower() != ".mp4":
+            import doi_mp4
+            moi = doi_mp4.dam_bao_mp4(p, log=S.log)
+            with S.lock:
+                it["link"] = moi
+                pq.save_queue(S.items)
+            S.log(f"  Link hàng đợi đổi sang file .mp4: {Path(moi).name}")
         return it["link"]
     f = it.get("file")
     if f and Path(f).exists():
@@ -1327,6 +1412,7 @@ ROUTES = {
     "/api/save_hashtags": api_save_hashtags,
     "/api/add_links": api_add_links,
     "/api/list_downloads": api_list_downloads,
+    "/api/chon_video": api_chon_video,
     "/api/tao_noi_dung": api_tao_noi_dung,
     "/api/seo_stop": api_seo_stop,
     "/api/check_gpt": api_check_gpt,
