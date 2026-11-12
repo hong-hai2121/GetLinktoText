@@ -1,0 +1,802 @@
+{
+ "cut_in": 19.45,
+ "talk_out": 618.06,
+ "ex": [
+  {
+   "n": 1,
+   "name": "XOAY CỔ",
+   "start": 19.44,
+   "end": 110.46,
+   "info": "khởi động · 10 vòng mỗi chiều"
+  },
+  {
+   "n": 2,
+   "name": "NGHIÊNG CỔ 2 BÊN",
+   "start": 110.46,
+   "end": 171.52,
+   "info": "mỗi bên 10 lần"
+  },
+  {
+   "n": 3,
+   "name": "CÚI – NGỬA CỔ",
+   "start": 171.52,
+   "end": 230.9,
+   "info": "5 lần"
+  },
+  {
+   "n": 4,
+   "name": "XOAY VAI",
+   "start": 230.9,
+   "end": 258.0,
+   "info": "5 vòng trước · 5 vòng sau"
+  },
+  {
+   "n": 5,
+   "name": "DÃN CƠ THANG TRÊN",
+   "start": 258.0,
+   "end": 356.14,
+   "info": "giữ 30 giây mỗi bên"
+  },
+  {
+   "n": 6,
+   "name": "DÃN CƠ NÂNG VAI",
+   "start": 356.14,
+   "end": 488.0,
+   "info": "giữ 30 giây mỗi bên"
+  },
+  {
+   "n": 7,
+   "name": "DÃN CƠ TRƯỚC CỔ",
+   "start": 488.0,
+   "end": 581.24,
+   "info": "giữ 30 giây mỗi bên"
+  },
+  {
+   "n": 8,
+   "name": "THU CẰM",
+   "start": 581.24,
+   "end": 618.06,
+   "info": "thụt cổ rùa · lặp lại 30 giây"
+  }
+ ],
+ "cues": [
+  {
+   "t": 19.44,
+   "e": 25.3,
+   "text": "KHỞI ĐỘNG",
+   "sub": "xoay cổ 10 vòng mỗi chiều"
+  },
+  {
+   "t": 25.48,
+   "e": 31.9,
+   "text": "XOAY ĐẦU THÀNH VÒNG THẬT CHẬM",
+   "sub": "trong giới hạn thoải mái",
+   "orbit": 1
+  },
+  {
+   "t": 32.16,
+   "e": 34.3,
+   "text": "KHÔNG CẦN XOAY HẾT TẦM",
+   "kind": "no",
+   "orbit": 1
+  },
+  {
+   "t": 34.46,
+   "e": 41.56,
+   "text": "CHÓNG MẶT? CHỈ QUAY TRÁI – PHẢI",
+   "sub": "không xoay thành vòng tròn",
+   "orbit": 1
+  },
+  {
+   "t": 114.54,
+   "e": 118.3,
+   "text": "NGHIÊNG ĐẦU SANG PHẢI, RỒI SANG TRÁI",
+   "fx": [
+    {
+     "type": "swing",
+     "c": [
+      540,
+      470
+     ],
+     "w": 600,
+     "h": 80
+    }
+   ]
+  },
+  {
+   "t": 119.12,
+   "e": 125.56,
+   "text": "TAI HƯỚNG VỀ PHÍA VAI",
+   "sub": "vai không được nhấc lên",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      380,
+      720
+     ],
+     "to": [
+      200,
+      1040
+     ],
+     "curve": 50
+    },
+    {
+     "type": "arrow",
+     "from": [
+      700,
+      720
+     ],
+     "to": [
+      880,
+      1040
+     ],
+     "curve": -50
+    },
+    {
+     "type": "floor",
+     "x1": 110,
+     "x2": 1000,
+     "y": 1150
+    }
+   ]
+  },
+  {
+   "t": 126.0,
+   "e": 129.0,
+   "text": "DÃN CƠ THANG & CƠ ỨC ĐÒN CHŨM",
+   "marks": [
+    [
+     430,
+     1060
+    ],
+    [
+     690,
+     1060
+    ]
+   ],
+   "tag": "CƠ CỔ 2 BÊN"
+  },
+  {
+   "t": 129.12,
+   "e": 132.8,
+   "text": "LỖI HAY GẶP: NHẤC VAI THEO",
+   "kind": "no",
+   "marks": [
+    [
+     960,
+     1170
+    ]
+   ],
+   "tag": "VAI",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      960,
+      1260
+     ],
+     "to": [
+      960,
+      1060
+     ]
+    },
+    {
+     "type": "mark",
+     "kind": "no",
+     "at": [
+      820,
+      1000
+     ]
+    }
+   ]
+  },
+  {
+   "t": 132.9,
+   "e": 137.72,
+   "text": "ĐẶT TAY HỜ TRÊN VAI ĐỂ KIỂM TRA",
+   "sub": "vai không nhô lên",
+   "kind": "ok",
+   "marks": [
+    [
+     150,
+     1170
+    ],
+    [
+     960,
+     1170
+    ]
+   ],
+   "tag": "VAI GIỮ YÊN"
+  },
+  {
+   "t": 175.36,
+   "e": 178.0,
+   "text": "GẬP CẰM CHẠM NGỰC",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      860,
+      560
+     ],
+     "to": [
+      860,
+      900
+     ]
+    }
+   ]
+  },
+  {
+   "t": 178.0,
+   "e": 181.0,
+   "text": "NGỬA CỔ RA SAU THẬT CHẬM",
+   "sub": "để tránh chóng mặt",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      860,
+      900
+     ],
+     "to": [
+      860,
+      540
+     ]
+    }
+   ]
+  },
+  {
+   "t": 235.62,
+   "e": 241.1,
+   "text": "XOAY 2 VAI THÀNH VÒNG LỚN",
+   "sub": "cảm nhận khớp vai ấm dần lên",
+   "fx": [
+    {
+     "type": "rotate",
+     "c": [
+      150,
+      1170
+     ],
+     "r": 130
+    },
+    {
+     "type": "rotate",
+     "c": [
+      960,
+      1170
+     ],
+     "r": 130
+    }
+   ]
+  },
+  {
+   "t": 258.0,
+   "e": 262.1,
+   "text": "DÃN CƠ THANG TRÊN"
+  },
+  {
+   "t": 262.2,
+   "e": 266.4,
+   "text": "NGHIÊNG TAI VỀ PHÍA VAI TRÁI",
+   "sub": "thả lỏng vai phải",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      540,
+      480
+     ],
+     "to": [
+      860,
+      700
+     ],
+     "curve": -70
+    }
+   ]
+  },
+  {
+   "t": 266.64,
+   "e": 273.6,
+   "text": "TAY TRÁI KÉO ĐẦU THẬT NHẸ",
+   "sub": "đến khi căng rõ bên phải cổ",
+   "marks": [
+    [
+     450,
+     980
+    ]
+   ],
+   "tag": "CĂNG BÊN PHẢI CỔ"
+  },
+  {
+   "t": 273.92,
+   "e": 278.0,
+   "text": "GIỮ 30 GIÂY · HÍT THỞ ĐỀU",
+   "sub": "rồi đổi bên",
+   "marks": [
+    [
+     450,
+     980
+    ]
+   ],
+   "tag": "BÊN PHẢI CỔ"
+  },
+  {
+   "t": 279.08,
+   "e": 285.3,
+   "text": "CĂNG, DỄ CHỊU – KHÔNG ĐAU NHÓI",
+   "kind": "ok",
+   "marks": [
+    [
+     450,
+     980
+    ]
+   ],
+   "tag": "BÊN PHẢI CỔ"
+  },
+  {
+   "t": 285.56,
+   "e": 288.4,
+   "text": "ĐAU NHÓI THÌ BUÔNG TAY NGAY",
+   "kind": "no",
+   "marks": [
+    [
+     450,
+     980
+    ]
+   ],
+   "tag": "BUÔNG LỰC"
+  },
+  {
+   "t": 358.68,
+   "e": 367.5,
+   "text": "CÚI NHÌN XUỐNG · GẬP CẰM VÀO NGỰC",
+   "sub": "mũi hướng về phía đầu gối",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      250,
+      560
+     ],
+     "to": [
+      300,
+      980
+     ],
+     "curve": 50
+    }
+   ]
+  },
+  {
+   "t": 367.78,
+   "e": 372.8,
+   "text": "GIỮ 30 GIÂY RỒI ĐỔI BÊN",
+   "sub": "mũi hướng về gối bên kia"
+  },
+  {
+   "t": 373.14,
+   "e": 378.6,
+   "text": "RẤT HỢP VỚI NGƯỜI HAY CÚI ĐIỆN THOẠI",
+   "sub": "hoặc ngồi máy tính lâu",
+   "kind": "ok"
+  },
+  {
+   "t": 488.0,
+   "e": 491.0,
+   "text": "DÃN CƠ TRƯỚC CỔ"
+  },
+  {
+   "t": 491.09,
+   "e": 498.7,
+   "text": "NGHIÊNG TAI VỀ VAI · NGƯỚC LÊN TRẦN NHẸ",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      600,
+      780
+     ],
+     "to": [
+      380,
+      500
+     ],
+     "curve": 60
+    }
+   ]
+  },
+  {
+   "t": 498.91,
+   "e": 504.0,
+   "text": "CĂNG DỌC PHÍA TRƯỚC BÊN CỔ",
+   "sub": "là đúng động tác",
+   "kind": "ok",
+   "marks": [
+    [
+     620,
+     1040
+    ]
+   ],
+   "tag": "TRƯỚC CỔ"
+  },
+  {
+   "t": 504.65,
+   "e": 508.3,
+   "text": "GIỮ 30 GIÂY RỒI ĐỔI BÊN",
+   "marks": [
+    [
+     620,
+     1040
+    ]
+   ],
+   "tag": "TRƯỚC CỔ"
+  },
+  {
+   "t": 508.47,
+   "e": 516.6,
+   "text": "CHỈ HƠI CĂNG, DỄ CHỊU",
+   "sub": "đau thì giảm biên độ ngay",
+   "kind": "ok",
+   "marks": [
+    [
+     620,
+     1040
+    ]
+   ],
+   "tag": "TRƯỚC CỔ"
+  },
+  {
+   "t": 581.24,
+   "e": 587.4,
+   "text": "BÀI TẬP TĂNG CƯỜNG",
+   "sub": "thu cằm · còn gọi là thụt cổ rùa"
+  },
+  {
+   "t": 587.62,
+   "e": 592.7,
+   "text": "2 NGÓN TAY LÊN CẰM · ĐẨY CẰM RA SAU",
+   "marks": [
+    [
+     620,
+     910
+    ]
+   ],
+   "tag": "CẰM",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      860,
+      900
+     ],
+     "to": [
+      690,
+      900
+     ]
+    }
+   ]
+  },
+  {
+   "t": 592.86,
+   "e": 596.4,
+   "text": "KHÔNG CÚI ĐẦU · MẮT NHÌN THẲNG",
+   "fx": [
+    {
+     "type": "sight",
+     "from": [
+      530,
+      725
+     ],
+     "to": [
+      1040,
+      725
+     ]
+    }
+   ]
+  },
+  {
+   "t": 596.86,
+   "e": 600.9,
+   "text": "GIỮ 2–3 GIÂY Ở VỊ TRÍ THỤT",
+   "sub": "rồi thả ra",
+   "hold": 3,
+   "marks": [
+    [
+     620,
+     910
+    ]
+   ],
+   "tag": "CẰM"
+  },
+  {
+   "t": 601.2,
+   "e": 603.7,
+   "text": "LẶP LẠI LIÊN TỤC TRONG 30 GIÂY",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      860,
+      900
+     ],
+     "to": [
+      690,
+      900
+     ]
+    }
+   ]
+  },
+  {
+   "t": 603.94,
+   "e": 609.0,
+   "text": "DỄ SAI: GẬT ĐẦU XUỐNG",
+   "sub": "phải đẩy lùi đầu ra sau",
+   "kind": "no",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      880,
+      600
+     ],
+     "to": [
+      880,
+      880
+     ]
+    },
+    {
+     "type": "mark",
+     "kind": "no",
+     "at": [
+      980,
+      740
+     ]
+    }
+   ]
+  },
+  {
+   "t": 609.22,
+   "e": 617.8,
+   "text": "TẬP TRƯỚC GƯƠNG",
+   "sub": "cổ lùi ra sau, đầu không cúi",
+   "kind": "ok",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      860,
+      900
+     ],
+     "to": [
+      690,
+      900
+     ]
+    }
+   ]
+  }
+ ],
+ "demo": [
+  {
+   "t": 41.6,
+   "e": 66.6,
+   "text": "XOAY CỔ THẬT CHẬM",
+   "sub": "thở đều · trong giới hạn thoải mái",
+   "orbit": 1
+  },
+  {
+   "t": 66.7,
+   "e": 70.5,
+   "text": "ĐỔI CHIỀU XOAY",
+   "sub": "10 vòng chiều ngược lại",
+   "orbit": 1
+  },
+  {
+   "t": 70.5,
+   "e": 110.3,
+   "text": "XOAY CỔ THẬT CHẬM",
+   "sub": "thở đều · trong giới hạn thoải mái",
+   "orbit": 1
+  },
+  {
+   "t": 137.8,
+   "e": 171.4,
+   "text": "NGHIÊNG TRÁI ↔ PHẢI",
+   "sub": "vai giữ yên, không nhấc",
+   "fx": [
+    {
+     "type": "swing",
+     "c": [
+      540,
+      470
+     ],
+     "w": 600,
+     "h": 80
+    },
+    {
+     "type": "floor",
+     "x1": 110,
+     "x2": 1000,
+     "y": 1150
+    }
+   ]
+  },
+  {
+   "t": 181.1,
+   "e": 228.0,
+   "text": "CÚI ↔ NGỬA THẬT CHẬM",
+   "sub": "5 lần",
+   "fx": [
+    {
+     "type": "updown",
+     "c": [
+      880,
+      720
+     ],
+     "label": ""
+    }
+   ]
+  },
+  {
+   "t": 228.0,
+   "e": 230.8,
+   "text": "THẢ LỎNG CỔ · THỞ ĐỀU"
+  },
+  {
+   "t": 241.2,
+   "e": 257.9,
+   "text": "5 VÒNG TRƯỚC · 5 VÒNG SAU",
+   "sub": "vai ấm dần lên",
+   "fx": [
+    {
+     "type": "rotate",
+     "c": [
+      150,
+      1170
+     ],
+     "r": 130
+    },
+    {
+     "type": "rotate",
+     "c": [
+      960,
+      1170
+     ],
+     "r": 130
+    }
+   ]
+  },
+  {
+   "t": 288.5,
+   "e": 309.0,
+   "text": "GIỮ · HÍT THỞ ĐỀU",
+   "sub": "căng nhẹ bên phải cổ",
+   "marks": [
+    [
+     450,
+     980
+    ]
+   ],
+   "tag": "BÊN PHẢI CỔ"
+  },
+  {
+   "t": 309.0,
+   "e": 313.5,
+   "text": "ĐỔI BÊN",
+   "sub": "nghiêng tai về phía vai phải"
+  },
+  {
+   "t": 313.5,
+   "e": 356.0,
+   "text": "GIỮ 30 GIÂY · HÍT THỞ ĐỀU",
+   "sub": "căng nhẹ bên trái cổ",
+   "marks": [
+    [
+     600,
+     1000
+    ]
+   ],
+   "tag": "BÊN TRÁI CỔ"
+  },
+  {
+   "t": 378.7,
+   "e": 419.0,
+   "text": "GIỮ 30 GIÂY · THỞ ĐỀU",
+   "sub": "căng phía sau bên cổ",
+   "marks": [
+    [
+     870,
+     960
+    ]
+   ],
+   "tag": "SAU CỔ"
+  },
+  {
+   "t": 419.0,
+   "e": 423.5,
+   "text": "ĐỔI BÊN",
+   "sub": "mũi hướng về gối bên kia"
+  },
+  {
+   "t": 423.5,
+   "e": 487.8,
+   "text": "GIỮ 30 GIÂY · THỞ ĐỀU",
+   "sub": "căng phía sau bên cổ",
+   "marks": [
+    [
+     240,
+     960
+    ]
+   ],
+   "tag": "SAU CỔ"
+  },
+  {
+   "t": 516.7,
+   "e": 533.0,
+   "text": "GIỮ · THỞ ĐỀU",
+   "sub": "căng nhẹ phía trước cổ",
+   "marks": [
+    [
+     620,
+     1040
+    ]
+   ],
+   "tag": "TRƯỚC CỔ"
+  },
+  {
+   "t": 533.0,
+   "e": 538.0,
+   "text": "ĐỔI BÊN",
+   "sub": "nghiêng tai về vai bên kia"
+  },
+  {
+   "t": 538.0,
+   "e": 578.0,
+   "text": "GIỮ 30 GIÂY · THỞ ĐỀU",
+   "sub": "căng nhẹ phía trước cổ",
+   "marks": [
+    [
+     500,
+     1040
+    ]
+   ],
+   "tag": "TRƯỚC CỔ"
+  },
+  {
+   "t": 578.0,
+   "e": 581.1,
+   "text": "THẢ LỎNG CỔ",
+   "sub": "chuẩn bị động tác cuối"
+  }
+ ],
+ "holds": [
+  {
+   "t": 273.92,
+   "e": 304.2,
+   "n": 30
+  },
+  {
+   "t": 316.0,
+   "e": 346.3,
+   "n": 30
+  },
+  {
+   "t": 380.0,
+   "e": 410.3,
+   "n": 30
+  },
+  {
+   "t": 425.0,
+   "e": 455.3,
+   "n": 30
+  },
+  {
+   "t": 504.65,
+   "e": 534.9,
+   "n": 30
+  },
+  {
+   "t": 540.0,
+   "e": 570.3,
+   "n": 30
+  }
+ ]
+}

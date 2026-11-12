@@ -915,6 +915,109 @@ def backfill(
 
 
 # --------------------------------------------------------------------------- #
+# Tính lại TOÀN BỘ từ đầu mỗi lần mở trang (không dùng điểm cũ đã lưu)
+# --------------------------------------------------------------------------- #
+MIN_HISTORY = 50  # kỳ đầu tiên được chấm phải có ít nhất chừng này kỳ trước nó
+
+_W_CHRONO: list[dict] = []
+_W_N = 0
+_W_SETS = DEFAULT_SETS
+
+
+def _w_init(chrono: list[dict], n: int, n_sets: int) -> None:
+    global _W_CHRONO, _W_N, _W_SETS
+    _W_CHRONO, _W_N, _W_SETS = chrono, n, n_sets
+
+
+def _w_score(i: int) -> tuple[int, dict, dict]:
+    """Chấm kỳ thứ i: hồ sơ chỉ lấy từ các kỳ TRƯỚC nó (không nhìn trước kết quả)."""
+    hist = [d["nums"] for d in reversed(_W_CHRONO[:i])]  # mới -> cũ
+    prof = compute_profile(hist, _W_N)
+    win = set(_W_CHRONO[i]["nums"])
+    counts: dict[str, list[int]] = {}
+    covs: dict[str, int] = {}
+    for method in METHODS:
+        c = [0] * 7
+        sets = generate_sets(method, prof, _W_SETS)
+        for s in sets:
+            c[sum(1 for x in s if x in win)] += 1
+        counts[method] = c
+        covs[method] = coverage3(sets)
+    return i, counts, covs
+
+
+def recompute_all(
+    db_path: Path | str,
+    game_type: str,
+    n_sets: int = DEFAULT_SETS,
+    workers: int | None = None,
+    progress=None,
+) -> dict:
+    """Xoá sạch điểm cũ rồi chấm lại 7 giải thuật trên MỌI kỳ trong lịch sử.
+
+    Với mỗi kỳ (trừ MIN_HISTORY kỳ đầu làm gốc): tạo n_sets bộ/giải thuật chỉ từ
+    các kỳ trước nó, chấm với chính kỳ đó. Chạy song song nhiều tiến trình.
+    Chỉ ghi DB khi đã tính xong hết, nên lỗi giữa chừng không làm mất bảng cũ.
+    """
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+
+    conn = _connect(db_path)
+    try:
+        chrono = _fetch_draws_chrono(conn, game_type)
+    finally:
+        conn.close()
+    total = len(chrono)
+    if total <= MIN_HISTORY:
+        return {"ok": False, "msg": f"Chỉ có {total} kỳ, không đủ để tính."}
+    n = gap_stats.resolve_n(None, game_type)
+    idx = list(range(MIN_HISTORY, total))
+    workers = workers or max(1, (os.cpu_count() or 2) - 1)
+
+    results: dict[int, tuple[dict, dict]] = {}
+    with ProcessPoolExecutor(
+        max_workers=workers, initializer=_w_init, initargs=(chrono, n, n_sets)
+    ) as ex:
+        for i, counts, covs in ex.map(_w_score, idx, chunksize=4):
+            results[i] = (counts, covs)
+            if progress:
+                progress(len(results), len(idx))
+
+    conn = _connect(db_path)
+    try:
+        conn.execute(
+            "DELETE FROM prediction_stats WHERE batch_id IN "
+            "(SELECT id FROM prediction_batches WHERE game_type=?)",
+            (game_type,),
+        )
+        conn.execute(
+            "DELETE FROM prediction_sets WHERE batch_id IN "
+            "(SELECT id FROM prediction_batches WHERE game_type=?)",
+            (game_type,),
+        )
+        conn.execute("DELETE FROM prediction_batches WHERE game_type=?", (game_type,))
+        now = datetime.now().isoformat(timespec="seconds")
+        for i in idx:
+            target, anchor = chrono[i], chrono[i - 1]
+            cur = conn.execute(
+                """
+                INSERT INTO prediction_batches
+                    (game_type, generated_at, after_period, after_date, n_sets,
+                     target_period, target_date, target_numbers, status)
+                VALUES (?,?,?,?,?,?,?,?, 'scored')
+                """,
+                (game_type, now, anchor["period"], anchor["date"], n_sets,
+                 target["period"], target["date"], json.dumps(sorted(target["nums"]))),
+            )
+            counts, covs = results[i]
+            _write_stats(conn, cur.lastrowid, counts, covs)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "periods": len(idx)}
+
+
+# --------------------------------------------------------------------------- #
 # Móc nối tự động với crawl.py (cập nhật lịch sử)
 # --------------------------------------------------------------------------- #
 def auto_generate(

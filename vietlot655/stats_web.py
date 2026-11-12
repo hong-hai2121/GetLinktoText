@@ -20,6 +20,7 @@ import sqlite3
 import statistics
 import subprocess
 import sys
+import time
 import webbrowser
 from collections import defaultdict
 from datetime import datetime
@@ -34,6 +35,9 @@ MEGA_DB_PATH = DB_PATH.parent / "vietlott_mega645_data.db"
 MEGA_HTML_PATH = EXPORT_DIR / "stats_mega645.html"
 ICON_PATH = BASE_DIR / "vietlott_stats.ico"
 SHORTCUT_NAME = "Thống kê Vietlott.lnk"
+# Số bộ mỗi giải thuật cho MỖI kỳ khi tính lại toàn bộ lịch sử lúc mở trang.
+# 1000 bộ x ~2900 kỳ mất 20-30 phút trên máy này; 100 bộ còn vài phút.
+TRACK_SETS = 100
 
 POSITION_NAMES = {
     1: "x1 · nhỏ nhất",
@@ -132,19 +136,33 @@ def compute_extra_stats(db_path: Path | str, game_type: str) -> dict | None:
 
 
 def compute_track(db_path: Path | str, game_type: str) -> dict | None:
-    """Bảng xếp hạng 7 giải thuật trên KẾT QUẢ THẬT đã tích luỹ trong DB.
+    """Bảng xếp hạng 7 giải thuật, TÍNH LẠI TỪ ĐẦU mỗi lần mở trang.
 
-    Bộ số được crawl.py chốt trước mỗi lần cập nhật lịch sử (bảng
-    prediction_batches / prediction_sets), rồi chấm điểm khi kỳ mới về. Ở đây chỉ
-    đọc ra — có gọi evaluate() một lần cho chắc, phòng khi DB được cập nhật bằng
-    đường khác. Thiếu bảng / lỗi thì trả None và trang vẫn chạy bình thường.
+    Không dùng điểm đã lưu từ lần trước: predict_track.recompute_all xoá sạch rồi
+    chấm lại mọi kỳ trong lịch sử (mỗi kỳ chỉ dùng các kỳ trước nó). Lỗi thì trả
+    None và trang vẫn chạy bình thường.
     """
     try:
         import predict_track
 
-        predict_track.evaluate(db_path, game_type)
+        t0 = time.time()
+        print(f"Đang tính lại 7 giải thuật trên toàn bộ lịch sử {game_type}...",
+              flush=True)
+
+        def _prog(done: int, total: int) -> None:
+            if done == total or done % 50 == 0:
+                print(f"\r  {done}/{total} kỳ", end="", flush=True)
+
+        res = predict_track.recompute_all(
+            db_path, game_type, n_sets=TRACK_SETS, progress=_prog
+        )
+        print(f"\n  xong sau {time.time() - t0:.0f} giây.", flush=True)
+        if not res.get("ok"):
+            print(f"⚠ {res.get('msg')}")
+            return None
         return predict_track.load_scoreboard(db_path, game_type)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        print(f"⚠ Không tính được bảng giải thuật: {type(exc).__name__}: {exc}")
         return None
 
 
@@ -590,7 +608,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div id="btBody"></div>
   </div>
 
-  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">dữ liệu thật, tích luỹ trong DB · mỗi lần cập nhật lịch sử: chốt 1000 bộ/giải thuật TRƯỚC, kỳ mới về thì tự chấm</span></h2>
+  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">tính lại từ đầu mỗi lần mở · mỗi kỳ: tạo 1000 bộ/giải thuật chỉ từ các kỳ TRƯỚC nó rồi chấm với kết quả thật</span></h2>
   <div class="panel" id="trackPanel" style="max-width:1000px">
     <div class="pc" id="trackStatus"></div>
     <div id="trackBody"></div>
@@ -1522,11 +1540,7 @@ function renderTrack(){
   const body   = document.getElementById('trackBody');
 
   if(!tr.scored_batches){
-    status.innerHTML = tr.pending
-      ? 'Đã chốt sẵn <b>'+tr.pending+'</b> kỳ bộ số, đang chờ kết quả. Khi kỳ tiếp theo về '+
-        'và bạn chạy <b>cập nhật lịch sử</b>, hệ thống tự chấm rồi bảng xếp hạng hiện ra đây.'
-      : 'Chưa có dữ liệu. Lần chạy <b>cập nhật lịch sử</b> (crawl.py) tới sẽ tự chốt '+
-        '1000 bộ/giải thuật cho kỳ sắp về, rồi tự chấm khi có kết quả.';
+    status.innerHTML = 'Chưa đủ lịch sử để tính (cần trên 50 kỳ).';
     body.innerHTML='';
     return;
   }
@@ -1639,12 +1653,11 @@ function renderTrack(){
         '(không chế độ nào làm được) mà là <b>độ phủ</b>: cùng số vé, bội số ít chồng lấn hơn thì '+
         'nhiều cơ hội hơn. Đó là lý do bảng này xếp theo độ phủ.</div></div>';
 
-  status.innerHTML = 'Đã chấm <b>'+tr.scored_batches+'</b> kỳ thật'+
-    (tr.pending?' · đang chờ <b>'+tr.pending+'</b> kỳ':'')+
+  status.innerHTML = 'Vừa tính lại <b>'+tr.scored_batches+'</b> kỳ thật'+
     ' · ngẫu nhiên lý thuyết TB <b>'+tr.baseline.avg+'</b> số trùng/vé.';
   body.innerHTML = '<div class="btgrid">'+cols+'</div>'+ verdict + distTbl + hist +
     '<div class="pc" style="margin-top:10px">Khác với bảng ở trên (bộ số lưu trong trình duyệt), '+
-    'bảng này dùng <b>bộ số đã chốt trong DB trước khi kỳ mới về</b> nên không thể "nhìn trước kết quả". '+
+    'bảng này <b>tính lại từ đầu mỗi lần mở</b>: bộ số của mỗi kỳ chỉ tạo từ các kỳ trước nó nên không thể "nhìn trước kết quả". '+
     '<b>TB trùng/vé</b> = trung bình số trùng trên toàn bộ vé đã chấm; <b>Thắng kỳ</b> = số kỳ giải thuật đó '+
     'có TB cao nhất (hoà thì chia đôi). '+
     '<b>Bảng xếp theo Độ phủ, không theo TB trùng</b> — TB trùng của mọi giải thuật đều dao động quanh '+

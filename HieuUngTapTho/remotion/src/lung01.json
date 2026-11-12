@@ -1,0 +1,779 @@
+{
+ "intro": [
+  {
+   "t": 5.46,
+   "e": 8.2,
+   "big": "3 ĐỘNG TÁC ĐẦU",
+   "small": "làm ngay trên giường"
+  },
+  {
+   "t": 8.28,
+   "e": 13.3,
+   "big": "VỪA NGỦ DẬY",
+   "small": "lưng và khớp còn cứng"
+  },
+  {
+   "t": 13.5,
+   "e": 17.55,
+   "big": "MỀM CỘT SỐNG",
+   "small": "dần dần theo từng hướng"
+  },
+  {
+   "t": 17.64,
+   "e": 22.8,
+   "big": "TĂNG SỨC MẠNH",
+   "small": "cho cơ và khớp"
+  },
+  {
+   "t": 22.86,
+   "e": 26.3,
+   "big": "CỨNG LƯNG BUỔI SÁNG?",
+   "small": "rất nhiều cô bác gặp phải"
+  },
+  {
+   "t": 26.4,
+   "e": 32.8,
+   "big": "KIÊN TRÌ MỖI NGÀY",
+   "small": "lưng linh hoạt · đỡ đau sau vài tuần"
+  },
+  {
+   "t": 32.88,
+   "e": 37.55,
+   "big": "NẰM NGỬA TRÊN GIƯỜNG",
+   "small": "cùng bắt đầu nhé!"
+  }
+ ],
+ "ex": [
+  {
+   "n": 1,
+   "name": "NGẢ GỐI 2 BÊN",
+   "start": 37.76,
+   "end": 86.0,
+   "info": "10 lần mỗi bên",
+   "pose": "tilt",
+   "idle": "NGẢ GỐI TRÁI ↔ PHẢI"
+  },
+  {
+   "n": 2,
+   "name": "ÔM GỐI VÀO BỤNG",
+   "start": 86.0,
+   "end": 136.4,
+   "info": "giữ 5–10 giây · 10 lần mỗi chân",
+   "pose": "hug",
+   "idle": "ÔM GỐI · ĐỔI CHÂN"
+  },
+  {
+   "n": 3,
+   "name": "NGHIÊNG KHUNG CHẬU",
+   "start": 136.4,
+   "end": 181.9,
+   "info": "giữ 3–5 giây mỗi lần",
+   "pose": "pelvic",
+   "idle": "SIẾT BỤNG · ÉP LƯNG DƯỚI"
+  },
+  {
+   "n": 4,
+   "name": "CÂY CẦU",
+   "start": 181.9,
+   "end": 250.2,
+   "info": "giữ 5–10 giây",
+   "pose": "bridge",
+   "idle": "NÂNG HÔNG · HẠ CHẬM"
+  },
+  {
+   "n": 5,
+   "name": "NHÂN SƯ",
+   "start": 250.2,
+   "end": 275.0,
+   "info": "giữ 5–10 giây",
+   "pose": "sphinx",
+   "idle": "NÂNG NGỰC · HÔNG SÁT SÀN"
+  }
+ ],
+ "cues": [
+  {
+   "t": 41.96,
+   "e": 48.6,
+   "text": "NẰM NGỬA · CO 2 GỐI",
+   "sub": "đùi và cẳng chân vuông góc",
+   "zone": "knee",
+   "tag": "GỐI 90°",
+   "marks": [
+    [
+     383,
+     1017
+    ]
+   ],
+   "fx": [
+    {
+     "type": "angle",
+     "p": [
+      383,
+      1017
+     ],
+     "a": [
+      560,
+      1185
+     ],
+     "b": [
+      245,
+      1280
+     ],
+     "label": "90°"
+    }
+   ]
+  },
+  {
+   "t": 48.72,
+   "e": 53.7,
+   "text": "2 TAY DANG CHÉO ~30°",
+   "sub": "để giữ thăng bằng",
+   "zone": "arm",
+   "tag": "TAY",
+   "marks": [
+    [
+     600,
+     1110
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      800,
+      1070
+     ],
+     "to": [
+      610,
+      1135
+     ]
+    }
+   ]
+  },
+  {
+   "t": 53.84,
+   "e": 60.6,
+   "text": "NGẢ 2 GỐI TRÁI ↔ PHẢI",
+   "sub": "chậm rãi, nhẹ nhàng",
+   "zone": "knee",
+   "tag": "GỐI",
+   "marks": [
+    [
+     330,
+     1190
+    ]
+   ],
+   "fx": [
+    {
+     "type": "swing",
+     "c": [
+      340,
+      1010
+     ],
+     "w": 300,
+     "h": 120,
+     "amp": 1
+    }
+   ]
+  },
+  {
+   "t": 60.74,
+   "e": 69.9,
+   "text": "NHỊP ĐẦU CHỈ NGẢ ÍT",
+   "sub": "nhịp sau tăng dần biên độ",
+   "zone": "knee",
+   "tag": "ÍT → NHIỀU",
+   "marks": [
+    [
+     340,
+     1180
+    ]
+   ],
+   "fx": [
+    {
+     "type": "swing",
+     "c": [
+      340,
+      1010
+     ],
+     "w": 300,
+     "h": 120,
+     "amp": 0.45,
+     "grow": 1
+    }
+   ]
+  },
+  {
+   "t": 90.77,
+   "e": 96.9,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "mỗi chân 10 lần",
+   "zone": "",
+   "hold": 1
+  },
+  {
+   "t": 97.04,
+   "e": 100.85,
+   "text": "NẰM NGỬA · CO 1 CHÂN",
+   "sub": "chân kia để yên",
+   "zone": "knee",
+   "tag": "GỐI",
+   "marks": [
+    [
+     660,
+     917
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      600,
+      1060
+     ],
+     "to": [
+      660,
+      880
+     ],
+     "curve": -60
+    }
+   ]
+  },
+  {
+   "t": 100.92,
+   "e": 105.0,
+   "text": "2 TAY ÔM GỐI · ÉP VÀO BỤNG",
+   "sub": "ở mức dễ chịu nhất",
+   "zone": "belly",
+   "tag": "ÉP VÀO BỤNG",
+   "marks": [
+    [
+     730,
+     1033
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      700,
+      950
+     ],
+     "to": [
+      840,
+      1130
+     ],
+     "curve": -90
+    }
+   ]
+  },
+  {
+   "t": 105.12,
+   "e": 107.0,
+   "text": "KHÔNG CẦN ÉP QUÁ SÁT",
+   "sub": "",
+   "zone": "belly",
+   "kind": "no",
+   "tag": "VỪA PHẢI",
+   "marks": [
+    [
+     730,
+     1033
+    ]
+   ],
+   "fx": [
+    {
+     "type": "mark",
+     "kind": "no",
+     "at": [
+      840,
+      950
+     ]
+    }
+   ]
+  },
+  {
+   "t": 107.1,
+   "e": 112.2,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "mỗi bên chân 10 lần",
+   "zone": "knee",
+   "hold": 1
+  },
+  {
+   "t": 138.57,
+   "e": 141.4,
+   "text": "GIỮ 3–5 GIÂY",
+   "sub": "mỗi lần",
+   "zone": "",
+   "hold": 1
+  },
+  {
+   "t": 141.49,
+   "e": 145.7,
+   "text": "GỐI CO · SIẾT NHẸ BỤNG",
+   "sub": "",
+   "zone": "belly",
+   "tag": "BỤNG",
+   "marks": [
+    [
+     767,
+     1117
+    ]
+   ],
+   "fx": [
+    {
+     "type": "squeeze",
+     "c": [
+      767,
+      1117
+     ]
+    }
+   ]
+  },
+  {
+   "t": 145.75,
+   "e": 149.3,
+   "text": "XOAY KHUNG CHẬU",
+   "sub": "ép lưng dưới xuống sàn",
+   "zone": "lowback",
+   "tag": "LƯNG DƯỚI",
+   "marks": [
+    [
+     587,
+     1183
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      587,
+      990
+     ],
+     "to": [
+      587,
+      1130
+     ]
+    },
+    {
+     "type": "floor",
+     "x1": 470,
+     "x2": 720,
+     "y": 1238
+    }
+   ]
+  },
+  {
+   "t": 149.33,
+   "e": 152.9,
+   "text": "THẢ VỀ VỊ TRÍ CŨ",
+   "sub": "",
+   "zone": "pelvis",
+   "tag": "KHUNG CHẬU",
+   "marks": [
+    [
+     587,
+     1183
+    ]
+   ],
+   "fx": [
+    {
+     "type": "rotate",
+     "c": [
+      587,
+      1183
+     ]
+    }
+   ]
+  },
+  {
+   "t": 152.95,
+   "e": 158.5,
+   "text": "ĐỘNG TÁC RẤT NHỎ",
+   "sub": "đừng làm quá · không nhấc mông",
+   "zone": "glute",
+   "kind": "no",
+   "tag": "MÔNG",
+   "marks": [
+    [
+     560,
+     1205
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      560,
+      1170
+     ],
+     "to": [
+      560,
+      1020
+     ]
+    },
+    {
+     "type": "mark",
+     "kind": "no",
+     "at": [
+      560,
+      1080
+     ]
+    }
+   ]
+  },
+  {
+   "t": 158.59,
+   "e": 166.3,
+   "text": "LƯNG DƯỚI SÁT SÀN",
+   "sub": "mông luôn chạm sàn",
+   "zone": "lowback",
+   "kind": "ok",
+   "tag": "SÁT SÀN",
+   "marks": [
+    [
+     590,
+     1183
+    ]
+   ],
+   "fx": [
+    {
+     "type": "floor",
+     "x1": 450,
+     "x2": 760,
+     "y": 1238
+    },
+    {
+     "type": "mark",
+     "kind": "ok",
+     "at": [
+      700,
+      1060
+     ]
+    }
+   ]
+  },
+  {
+   "t": 183.86,
+   "e": 186.2,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "",
+   "zone": "",
+   "hold": 1
+  },
+  {
+   "t": 186.26,
+   "e": 191.0,
+   "text": "NẰM NGỬA · GỐI CO",
+   "sub": "bàn chân rộng bằng hông",
+   "zone": "feet",
+   "tag": "BÀN CHÂN",
+   "marks": [
+    [
+     143,
+     1350
+    ]
+   ],
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      60,
+      1375
+     ],
+     "to": [
+      230,
+      1375
+     ]
+    }
+   ]
+  },
+  {
+   "t": 191.06,
+   "e": 193.2,
+   "text": "SIẾT MÔNG · NÂNG HÔNG",
+   "sub": "",
+   "zone": "glute",
+   "tag": "MÔNG",
+   "marks": [
+    [
+     480,
+     1183
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      480,
+      1230
+     ],
+     "to": [
+      480,
+      1010
+     ]
+    }
+   ]
+  },
+  {
+   "t": 193.22,
+   "e": 197.2,
+   "text": "VAI – HÔNG – GỐI THẲNG HÀNG",
+   "sub": "",
+   "zone": "line",
+   "kind": "line",
+   "tag": "THẲNG HÀNG",
+   "marks": [
+    [
+     867,
+     1240
+    ],
+    [
+     475,
+     1125
+    ],
+    [
+     255,
+     950
+    ]
+   ]
+  },
+  {
+   "t": 197.22,
+   "e": 202.3,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "",
+   "zone": "glute",
+   "hold": 1,
+   "kind": "line",
+   "tag": "THẲNG HÀNG",
+   "marks": [
+    [
+     867,
+     1250
+    ],
+    [
+     500,
+     1133
+    ],
+    [
+     283,
+     950
+    ]
+   ]
+  },
+  {
+   "t": 202.39,
+   "e": 204.9,
+   "text": "HẠ THẬT CHẬM",
+   "sub": "",
+   "zone": "hip",
+   "tag": "HẠ CHẬM",
+   "marks": [
+    [
+     500,
+     1150
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      500,
+      1000
+     ],
+     "to": [
+      500,
+      1200
+     ],
+     "slow": 1
+    }
+   ]
+  },
+  {
+   "t": 252.32,
+   "e": 255.9,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "",
+   "zone": "",
+   "hold": 1
+  },
+  {
+   "t": 255.98,
+   "e": 259.3,
+   "text": "NẰM SẤP · CHỐNG 2 CẲNG TAY",
+   "sub": "",
+   "zone": "forearm",
+   "tag": "CẲNG TAY",
+   "marks": [
+    [
+     120,
+     1325
+    ]
+   ],
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      30,
+      1340
+     ],
+     "to": [
+      230,
+      1318
+     ]
+    }
+   ]
+  },
+  {
+   "t": 259.38,
+   "e": 262.45,
+   "text": "KHUỶU TAY DƯỚI VAI",
+   "sub": "nâng ngực lên",
+   "zone": "chest",
+   "tag": "NGỰC",
+   "marks": [
+    [
+     310,
+     1130
+    ]
+   ],
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      330,
+      1120
+     ],
+     "to": [
+      330,
+      940
+     ]
+    }
+   ]
+  },
+  {
+   "t": 262.54,
+   "e": 265.8,
+   "text": "HÔNG SÁT MẶT SÀN",
+   "sub": "hoặc sát mặt giường",
+   "zone": "hip",
+   "kind": "ok",
+   "tag": "HÔNG",
+   "marks": [
+    [
+     775,
+     1205
+    ]
+   ],
+   "fx": [
+    {
+     "type": "floor",
+     "x1": 620,
+     "x2": 960,
+     "y": 1262
+    },
+    {
+     "type": "mark",
+     "kind": "ok",
+     "at": [
+      900,
+      1090
+     ]
+    }
+   ]
+  },
+  {
+   "t": 265.88,
+   "e": 269.8,
+   "text": "MẮT NHÌN THẲNG",
+   "sub": "ra phía trước",
+   "zone": "eyes",
+   "tag": "MẮT",
+   "marks": [
+    [
+     165,
+     945
+    ]
+   ],
+   "fx": [
+    {
+     "type": "sight",
+     "from": [
+      150,
+      945
+     ],
+     "to": [
+      10,
+      945
+     ]
+    }
+   ]
+  },
+  {
+   "t": 269.9,
+   "e": 274.8,
+   "text": "GIỮ 5–10 GIÂY",
+   "sub": "",
+   "zone": "chest",
+   "hold": 1
+  }
+ ],
+ "demo": [
+  {
+   "t": 70.6,
+   "e": 84.5,
+   "text": "",
+   "fx": [
+    {
+     "type": "swing",
+     "c": [
+      340,
+      1010
+     ],
+     "w": 300,
+     "h": 120,
+     "amp": 1
+    }
+   ]
+  },
+  {
+   "t": 167.0,
+   "e": 181.5,
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      590,
+      1000
+     ],
+     "to": [
+      590,
+      1130
+     ],
+     "label": "ÉP LƯNG"
+    },
+    {
+     "type": "floor",
+     "x1": 470,
+     "x2": 720,
+     "y": 1238
+    }
+   ]
+  },
+  {
+   "t": 205.6,
+   "e": 249.0,
+   "fx": [
+    {
+     "type": "updown",
+     "c": [
+      470,
+      1120
+     ]
+    }
+   ]
+  }
+ ]
+}
