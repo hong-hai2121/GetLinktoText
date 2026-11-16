@@ -358,6 +358,11 @@ class ExtensionRelay:
     def connected(self):
         return self._ready.is_set() and self._ext is not None
 
+    @property
+    def fail_reason(self):
+        """Lý do extension nối vào rồi ngắt trước khi bắt tay xong (None = extension chưa từng nối vào relay)."""
+        return self._fail_reason
+
     def connect_url(self, client_name, token=None):
         """URL trang connect của extension; trang này đọc mcpRelayUrl (bắt buộc loopback),
         client, protocolVersion, token. Token đúng -> chính tab connect thành tab điều khiển, không cần bấm."""

@@ -40,7 +40,8 @@ DEFAULT_CONFIG = {
     "profile_dir": "Profile 9",
     "extension_token": "",             # PLAYWRIGHT_MCP_EXTENSION_TOKEN=... (dán cả dòng cũng được)
     "client_name": "Đăng video YouTube",  # tên hiện trên nhóm tab "Playwright · ..."
-    "connect_timeout_sec": 60,
+    "connect_timeout_sec": 60,             # có token: chờ extension tự nối bấy nhiêu giây
+    "cho_bam_cho_phep_sec": 120,           # không token / token sai: chờ người dùng bấm "Allow & select" trong Chrome (0 = không tự chuyển)
     # --- tab YouTube trong app ---
     "channel_name": "",                    # điền sau khi "Kiểm tra kết nối"
     "channel_url": "",                     # link Studio của kênh
@@ -161,6 +162,25 @@ def open_extension_settings(cfg, log=print):
     _spawn_chrome(cfg, f"chrome://extensions/?id={EXTENSION_ID}")
 
 
+def open_status_page(cfg, log=print):
+    """Mở trang trạng thái của extension (chrome-extension://<id>/status.html, = bấm icon extension) trong đúng
+    profile: có dòng PLAYWRIGHT_MCP_EXTENSION_TOKEN=... kèm nút sao chép và nút tạo token mới. Dùng khi muốn lấy
+    token bằng tay để dán vào app."""
+    log(f"Mở trang token của Playwright Extension trong profile '{cfg['profile_dir']}' — sao chép dòng "
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN=... dán vào ô Token rồi Lưu.")
+    _spawn_chrome(cfg, f"chrome-extension://{EXTENSION_ID}/status.html")
+
+
+# Token của extension nằm trong localStorage['auth-token'] của chính extension (mỗi profile một token, đổi khi người
+# dùng bấm "tạo token mới" hoặc dữ liệu extension bị xoá). Token trong config cũ -> trang connect chỉ báo
+# "Invalid token provided." và KHÔNG BAO GIỜ nối vào relay (app chỉ thấy hết giờ). Cách cứu: mở trang connect
+# KHÔNG token -> người dùng bấm "Allow & select" -> nối được; token thật hiện ngay trên trang đó, và nếu chọn đúng
+# dòng của tab kết nối thì app đọc được token qua localStorage để tự lưu (app._dong_bo_token).
+HUONG_DAN_CHO_PHEP = ("Trong tab đó bấm 'Allow & select' ở dòng của chính tab kết nối (Playwright Extension) thì app tự "
+                      "lưu token mới; chọn tab khác thì sao chép dòng PLAYWRIGHT_MCP_EXTENSION_TOKEN=... hiện trên "
+                      "trang đó, dán vào ô Token rồi Lưu.")
+
+
 def _key(cfg):
     return (str(cfg.get("user_data_dir") or ""), str(cfg.get("profile_dir") or ""))
 
@@ -264,10 +284,14 @@ def _bat_keepalive():
     _keepalive.start()
 
 
-def launch_chrome(cfg, log=print):
+def launch_chrome(cfg, log=print, khong_token=False):
     """Giữ tên cũ cho app.py / run_cli.py. Thực chất: bật relay, mở trang connect của extension
     trong đúng profile và chờ extension nối vào. Phiên của profile này còn sống thì DÙNG LẠI, không
-    mở tab mới (mỗi profile chỉ nối một lần cho tới khi tắt server)."""
+    mở tab mới (mỗi profile chỉ nối một lần cho tới khi tắt server).
+
+    khong_token=True: mở trang connect KHÔNG kèm token — người dùng bấm "Allow & select" trong Chrome (dùng khi
+    token trong config đã đổi: tab Chrome báo "Invalid token provided", user 16/11/2026). Có token mà hết
+    connect_timeout_sec chưa nối thì tự mở thêm tab không token và chờ cho_bam_cho_phep_sec (0 = không tự chuyển)."""
     global _current_key
     key = _key(cfg)
     s = _sessions.get(key)
@@ -287,21 +311,34 @@ def launch_chrome(cfg, log=print):
             "(1) chrome://extensions -> Chi tiết -> bật 'Cho phép truy cập URL tệp'; "
             "(2) bấm icon extension -> sao chép token -> dán vào app. Sau đó chạy lại.")
 
-    token = normalize_token(cfg.get("extension_token"))
+    token = "" if khong_token else normalize_token(cfg.get("extension_token"))
+    client = cfg.get("client_name") or DEFAULT_CONFIG["client_name"]
+    cho_phep = cfg.get("cho_bam_cho_phep_sec")
+    cho_phep = float(DEFAULT_CONFIG["cho_bam_cho_phep_sec"] if cho_phep is None else cho_phep)
     relay = ExtensionRelay(log=log)
     relay.start()
     log(f"Relay sẵn sàng (cổng {relay.port}). Mở trang kết nối trong profile '{cfg['profile_dir']}'...")
-    relay.open_connect_page(chrome, cfg["profile_dir"],
-                            cfg.get("client_name") or DEFAULT_CONFIG["client_name"], token)
-    if token:
-        timeout = float(cfg.get("connect_timeout_sec") or 60)
-        log("Có token — extension sẽ tự kết nối, không cần bấm gì.")
-    else:
-        timeout = None
-        log("⚠ Chưa có token — hãy bấm 'Cho phép' (Allow) trong tab Chrome vừa mở. "
-            "(Dán token vào app để lần sau tự động.)")
+    relay.open_connect_page(chrome, cfg["profile_dir"], client, token or None)
     try:
-        relay.wait_for_extension(timeout)
+        if token:
+            timeout = float(cfg.get("connect_timeout_sec") or 60)
+            log("Có token — extension sẽ tự kết nối, không cần bấm gì.")
+            try:
+                relay.wait_for_extension(timeout)
+            except Exception:
+                # extension chưa từng nối vào relay = token sai (tab báo 'Invalid token provided') hoặc Chrome chưa
+                # mở được. Mở thêm tab KHÔNG token cùng relay (mỗi tab connect một yêu cầu riêng, không đá nhau)
+                if relay.fail_reason or cho_phep <= 0:
+                    raise
+                log(f"⚠ Hết {int(timeout)}s mà extension chưa nối — hay gặp nhất là TOKEN ĐÃ ĐỔI (tab Chrome báo "
+                    f"'Invalid token provided'). Mở thêm tab kết nối KHÔNG token trong profile '{cfg['profile_dir']}', "
+                    f"chờ bạn bấm tối đa {int(cho_phep)}s. {HUONG_DAN_CHO_PHEP}")
+                relay.open_connect_page(chrome, cfg["profile_dir"], client, None)
+                relay.wait_for_extension(cho_phep or None)
+        else:
+            log(f"⚠ Nối KHÔNG token — bấm 'Allow & select' trong tab Chrome vừa mở (chờ tối đa "
+                f"{int(cho_phep) if cho_phep > 0 else 'vô hạn'} giây). {HUONG_DAN_CHO_PHEP}")
+            relay.wait_for_extension(cho_phep or None)
     except Exception:
         relay.stop()
         raise

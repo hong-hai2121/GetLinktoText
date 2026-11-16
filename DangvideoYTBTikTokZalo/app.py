@@ -800,7 +800,30 @@ def _cap_nhat_lich_that():
           + " -> video mới xếp sau mốc này.")
 
 
-GOI_Y_NOI_LAI = "→ sửa xong (mở đúng trình duyệt/profile, kiểm tra token) rồi bấm '🔌 Kết nối lại' trên giao diện, không cần tắt server."
+GOI_Y_NOI_LAI = ("→ bấm '🔌 Kết nối lại' (cửa sổ server hoặc giao diện web), không cần tắt server. Tab Chrome báo "
+                 "'Invalid token provided' = token đã đổi → bấm 'Nối & Cho phép' rồi chọn 'Allow & select' trong tab vừa mở.")
+
+
+def _dong_bo_token(name, page):
+    """Sau khi nối: đọc token THẬT của extension (localStorage['auth-token'] của trang connect chrome-extension://)
+    và lưu vào config nếu khác. User 16/11/2026 bị 'Invalid token provided' vì token trong config đã cũ: sau một
+    lần bấm Cho phép, lần sau tự nối. Tab điều khiển không phải trang của extension (người dùng chọn tab khác khi
+    Allow) thì không đọc được -> bỏ qua, nhật ký đã hướng dẫn sao chép tay."""
+    try:
+        if not (page.url or "").startswith(f"chrome-extension://{chrome_cdp.EXTENSION_ID}/"):
+            return
+        tok = chrome_cdp.normalize_token(page.evaluate("() => localStorage.getItem('auth-token') || ''") or "")
+    except Exception:                           # noqa: BLE001
+        return
+    if not tok:
+        return
+    with S.lock:
+        if tok == chrome_cdp.normalize_token(platform_cfg(name).get("extension_token") or ""):
+            return
+        _set_token(name, tok)
+        chrome_cdp.save_config(S.cfg)
+    S.log(f"✓ {LABEL[name]}: token trong config đã cũ -> đã lấy token mới từ extension (…{tok[-6:]}) và lưu; "
+          "lần sau tự nối, không cần bấm Cho phép.")
 
 
 def _noi_tat_ca():
@@ -812,7 +835,8 @@ def _noi_tat_ca():
         try:
             S.log(f"===== Nối trình duyệt {LABEL[name]} — {browser_name(pcfg)} profile '{pcfg['profile_dir']}' (1 lần, giữ suốt phiên) =====")
             chrome_cdp.launch_chrome(pcfg, log=S.log)
-            chrome_cdp.connect_playwright(pcfg, log=S.log)
+            _pw, _b, page = chrome_cdp.connect_playwright(pcfg, log=S.log)
+            _dong_bo_token(name, page)
         except Exception as e:                  # noqa: BLE001
             hong.append(name)
             S.log(f"❌ {LABEL[name]}: {str(e).splitlines()[0][:200]}\n   {GOI_Y_NOI_LAI}")
@@ -1062,6 +1086,7 @@ def api_check_connection(data):
             S.log(f"===== Kiểm tra {LABEL[name]} — {browser_name(pcfg)} profile '{pcfg['profile_dir']}' =====")
             chrome_cdp.launch_chrome(pcfg, log=S.log)
             pw, _browser, page = chrome_cdp.connect_playwright(pcfg, log=S.log)
+            _dong_bo_token(name, page)
             if name == "youtube":
                 info = youtube_upload.get_channel_info(page, log=S.log)
                 if not info["logged_in"]:
@@ -1107,21 +1132,26 @@ def api_check_connection(data):
     return {"ok": True, "msg": f"Đang kiểm tra kết nối {LABEL[name]} — xem Nhật ký."}
 
 
-def _noi_lai_mot(name):
+def _noi_lai_mot(name, cho_phep=False):
     """Trên thread tự động hoá: nối lại trình duyệt của MỘT nền tảng. Phiên đang tốt (tab còn trả lời) thì giữ
     nguyên, chỉ báo; phiên treo (cờ còn nối nhưng không trả lời) thì bỏ rồi nối mới; chưa có phiên / rớt thì
-    launch_chrome tự nối mới. Trả True nếu sau đó đã dùng được."""
+    launch_chrome tự nối mới. cho_phep=True: nối KHÔNG token (bấm 'Allow & select' trong Chrome) — dùng khi token
+    đã đổi; nối xong tự đọc token mới và lưu. Trả True nếu sau đó đã dùng được."""
     pcfg = platform_cfg(name)
     try:
         if chrome_cdp.phien_tot(pcfg):
             S.log(f"✓ {LABEL[name]}: kết nối đang tốt (profile '{pcfg['profile_dir']}') — giữ nguyên, không nối lại.")
+            _pw, _b, page = chrome_cdp.connect_playwright(pcfg, log=S.log)     # trả lại bộ đang có
+            _dong_bo_token(name, page)
             return True
         if chrome_cdp.session_alive(pcfg):
             S.log(f"{LABEL[name]}: phiên cũ không trả lời -> bỏ phiên cũ, nối mới.")
             chrome_cdp.ngat_phien(pcfg)
-        S.log(f"===== Nối lại {LABEL[name]} — {browser_name(pcfg)} profile '{pcfg['profile_dir']}' =====")
-        chrome_cdp.launch_chrome(pcfg, log=S.log)
-        chrome_cdp.connect_playwright(pcfg, log=S.log)
+        S.log(f"===== Nối lại {LABEL[name]} — {browser_name(pcfg)} profile '{pcfg['profile_dir']}'"
+              + (" — KHÔNG token, bạn bấm 'Allow & select' trong Chrome" if cho_phep else "") + " =====")
+        chrome_cdp.launch_chrome(pcfg, log=S.log, khong_token=cho_phep)
+        _pw, _b, page = chrome_cdp.connect_playwright(pcfg, log=S.log)
+        _dong_bo_token(name, page)
         S.log(f"✓ {LABEL[name]}: đã nối lại, dùng được.")
         return True
     except Exception as e:                      # noqa: BLE001
@@ -1137,21 +1167,23 @@ def api_ket_noi_lai(data):
     token sai là lý do hay gặp). Chạy trên thread tự động hoá, kết quả ở Nhật ký + đèn 'Kết nối'."""
     raw = (data.get("platform") or "all").strip().lower()
     names = list(pq.PLATFORMS) if raw == "all" else [_valid_platform(raw)]
+    cho_phep = bool(data.get("cho_phep"))        # True: nối KHÔNG token, người dùng bấm 'Allow & select' trong Chrome
     with S.lock:
         if S.running:
             return {"ok": False, "msg": "Đang chạy việc khác — chờ xong rồi nối lại."}
         if S.seo_running:
             return {"ok": False, "msg": "Đang tạo nội dung bằng AI (đang dùng trình duyệt) — chờ xong rồi nối lại."}
-        if raw != "all" and "token" in data:
+        if raw != "all" and "token" in data and not cho_phep:
             _set_token(names[0], data.get("token"))
             chrome_cdp.save_config(S.cfg)
         S.running = True
-        S.current = "nối lại " + (" + ".join(LABEL[n] for n in names) if len(names) > 1 else LABEL[names[0]])
+        S.current = ("nối lại " + (" + ".join(LABEL[n] for n in names) if len(names) > 1 else LABEL[names[0]])
+                     + (" (bấm Cho phép trong Chrome)" if cho_phep else ""))
     ten = "cả 3 nền tảng" if len(names) > 1 else LABEL[names[0]]
 
     def work():
         try:
-            kq = {n: _noi_lai_mot(n) for n in names}
+            kq = {n: _noi_lai_mot(n, cho_phep) for n in names}
             hong = [n for n, ok in kq.items() if not ok]
             if hong:
                 S.log(f"⚠ Vẫn chưa nối được: {', '.join(LABEL[n] for n in hong)} — xem lỗi phía trên rồi bấm Kết nối lại lần nữa.")
@@ -1163,6 +1195,9 @@ def api_ket_noi_lai(data):
                 S.current = ""
 
     S.auto_q.put(work)
+    if cho_phep:
+        return {"ok": True, "msg": f"Đang mở trang kết nối {ten} KHÔNG token — bấm 'Allow & select' trong tab Chrome vừa mở; "
+                                   "app sẽ tự lưu token mới. Xem Nhật ký."}
     return {"ok": True, "msg": f"Đang nối lại {ten} — xem Nhật ký (có thể mất tới 60 giây mỗi nền tảng)."}
 
 
