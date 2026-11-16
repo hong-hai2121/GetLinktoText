@@ -199,6 +199,7 @@ def _platform_info():
             "browser": browser_name(pcfg),
             "profile": pcfg.get("profile_dir") or "",
             "ext_ok": bool(S.ext_ok.get(name)),
+            "connected": chrome_cdp.session_ready(pcfg),   # đèn "Kết nối": extension + Playwright đều đã nối, tab còn
             "token": pcfg.get("extension_token") or "",
             "account": acc,
             "account_url": acc_url,
@@ -799,8 +800,13 @@ def _cap_nhat_lich_that():
           + " -> video mới xếp sau mốc này.")
 
 
+GOI_Y_NOI_LAI = "→ sửa xong (mở đúng trình duyệt/profile, kiểm tra token) rồi bấm '🔌 Kết nối lại' trên giao diện, không cần tắt server."
+
+
 def _noi_tat_ca():
-    """Lúc server khởi động: nối MỘT lần cả 3 profile (YouTube, TikTok, Zalo/Gemini) và giữ tới khi tắt."""
+    """Lúc server khởi động: nối MỘT lần cả 3 profile (YouTube, TikTok, Zalo/Gemini) và giữ tới khi tắt.
+    Nền tảng nào hỏng thì báo và chỉ sang nút 'Kết nối lại' (api_ket_noi_lai) — không phải tắt mở lại server."""
+    hong = []
     for name in pq.PLATFORMS:
         pcfg = platform_cfg(name)
         try:
@@ -808,9 +814,13 @@ def _noi_tat_ca():
             chrome_cdp.launch_chrome(pcfg, log=S.log)
             chrome_cdp.connect_playwright(pcfg, log=S.log)
         except Exception as e:                  # noqa: BLE001
-            S.log(f"❌ {LABEL[name]}: {str(e).splitlines()[0][:200]}")
+            hong.append(name)
+            S.log(f"❌ {LABEL[name]}: {str(e).splitlines()[0][:200]}\n   {GOI_Y_NOI_LAI}")
         S.refresh_ext(name)
-    S.log("✓ Sẵn sàng — các tab điều khiển giữ mở, không nối lại nữa cho tới khi tắt server.")
+    if hong:
+        S.log(f"⚠ Chưa nối được: {', '.join(LABEL[n] for n in hong)} {GOI_Y_NOI_LAI}")
+    else:
+        S.log("✓ Sẵn sàng — các tab điều khiển giữ mở, không nối lại nữa cho tới khi tắt server.")
     try:
         api_check_gpt({})               # đèn trạng thái ChatGPT CLI (không cần mạng)
     except Exception as e:              # noqa: BLE001
@@ -1095,6 +1105,65 @@ def api_check_connection(data):
 
     S.auto_q.put(work)
     return {"ok": True, "msg": f"Đang kiểm tra kết nối {LABEL[name]} — xem Nhật ký."}
+
+
+def _noi_lai_mot(name):
+    """Trên thread tự động hoá: nối lại trình duyệt của MỘT nền tảng. Phiên đang tốt (tab còn trả lời) thì giữ
+    nguyên, chỉ báo; phiên treo (cờ còn nối nhưng không trả lời) thì bỏ rồi nối mới; chưa có phiên / rớt thì
+    launch_chrome tự nối mới. Trả True nếu sau đó đã dùng được."""
+    pcfg = platform_cfg(name)
+    try:
+        if chrome_cdp.phien_tot(pcfg):
+            S.log(f"✓ {LABEL[name]}: kết nối đang tốt (profile '{pcfg['profile_dir']}') — giữ nguyên, không nối lại.")
+            return True
+        if chrome_cdp.session_alive(pcfg):
+            S.log(f"{LABEL[name]}: phiên cũ không trả lời -> bỏ phiên cũ, nối mới.")
+            chrome_cdp.ngat_phien(pcfg)
+        S.log(f"===== Nối lại {LABEL[name]} — {browser_name(pcfg)} profile '{pcfg['profile_dir']}' =====")
+        chrome_cdp.launch_chrome(pcfg, log=S.log)
+        chrome_cdp.connect_playwright(pcfg, log=S.log)
+        S.log(f"✓ {LABEL[name]}: đã nối lại, dùng được.")
+        return True
+    except Exception as e:                      # noqa: BLE001
+        S.log(f"❌ {LABEL[name]}: {str(e).splitlines()[0][:200]}\n   {GOI_Y_NOI_LAI}")
+        return False
+    finally:
+        S.refresh_ext(name)
+
+
+def api_ket_noi_lai(data):
+    """Nút '🔌 Kết nối lại' (user 16/11/2026: mở app mà nối tự động hỏng thì phải nối lại được bằng tay, không
+    phải tắt mở server). platform = youtube / tiktok / zalo hoặc 'all' (cả ba). Có 'token' thì lưu trước (sửa
+    token sai là lý do hay gặp). Chạy trên thread tự động hoá, kết quả ở Nhật ký + đèn 'Kết nối'."""
+    raw = (data.get("platform") or "all").strip().lower()
+    names = list(pq.PLATFORMS) if raw == "all" else [_valid_platform(raw)]
+    with S.lock:
+        if S.running:
+            return {"ok": False, "msg": "Đang chạy việc khác — chờ xong rồi nối lại."}
+        if S.seo_running:
+            return {"ok": False, "msg": "Đang tạo nội dung bằng AI (đang dùng trình duyệt) — chờ xong rồi nối lại."}
+        if raw != "all" and "token" in data:
+            _set_token(names[0], data.get("token"))
+            chrome_cdp.save_config(S.cfg)
+        S.running = True
+        S.current = "nối lại " + (" + ".join(LABEL[n] for n in names) if len(names) > 1 else LABEL[names[0]])
+    ten = "cả 3 nền tảng" if len(names) > 1 else LABEL[names[0]]
+
+    def work():
+        try:
+            kq = {n: _noi_lai_mot(n) for n in names}
+            hong = [n for n, ok in kq.items() if not ok]
+            if hong:
+                S.log(f"⚠ Vẫn chưa nối được: {', '.join(LABEL[n] for n in hong)} — xem lỗi phía trên rồi bấm Kết nối lại lần nữa.")
+            else:
+                S.log(f"✓ Đã nối {ten} — sẵn sàng đăng.")
+        finally:
+            with S.lock:
+                S.running = False
+                S.current = ""
+
+    S.auto_q.put(work)
+    return {"ok": True, "msg": f"Đang nối lại {ten} — xem Nhật ký (có thể mất tới 60 giây mỗi nền tảng)."}
 
 
 def api_start(data):
@@ -1426,6 +1495,7 @@ ROUTES = {
     "/api/retry_errors": api_retry_errors,
     "/api/dang_lai": api_dang_lai,
     "/api/check_connection": api_check_connection,
+    "/api/ket_noi_lai": api_ket_noi_lai,
     "/api/start": api_start,
     "/api/stop": api_stop,
     "/api/doc_lich": api_doc_lich,

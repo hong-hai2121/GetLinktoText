@@ -210,6 +210,39 @@ def sessions_info():
     return [(s["cfg"].get("profile_dir"), s["relay"].connected and _page_song(s.get("page"))) for s in _sessions.values()]
 
 
+def session_ready(cfg):
+    """Phiên của profile ĐÃ DÙNG ĐƯỢC chưa: extension nối relay + Playwright đã nối + tab điều khiển còn.
+    (session_alive còn trả True khi Playwright chưa nối — chỉ đủ cho launch_chrome dùng lại relay.)
+    Chỉ nhìn cờ, không gửi lệnh -> gọi được mỗi giây từ thread HTTP để hiện đèn trạng thái."""
+    s = _sessions.get(_key(cfg))
+    return bool(s and s["relay"].connected and s.get("browser") is not None and _page_song(s.get("page")))
+
+
+def relay_tra_loi(cfg, timeout=5.0):
+    """Hỏi thật: tab điều khiển của profile còn trả lời lệnh CDP qua extension không (cờ connected có thể
+    còn True dù extension đã ngủ / tab treo). Gọi được từ thread bất kỳ."""
+    s = _sessions.get(_key(cfg))
+    if not s or not s["relay"].connected:
+        return False
+    try:
+        s["relay"].send_cdp("Runtime.evaluate", {"expression": "1", "returnByValue": True}, timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def phien_tot(cfg):
+    """Phiên đang dùng được THẬT: session_ready + tab trả lời lệnh. Dùng cho nút 'Kết nối lại' để không ngắt
+    oan phiên đang tốt."""
+    return session_ready(cfg) and relay_tra_loi(cfg)
+
+
+def ngat_phien(cfg, dong_tab=False):
+    """Gỡ phiên của MỘT profile (dừng Playwright của nó + tắt relay; dong_tab=True thì đóng cả tab điều khiển)
+    để launch_chrome/connect_playwright lần sau nối mới. Không có phiên thì không làm gì."""
+    _bo_phien(_key(cfg), dong_tab=dong_tab)
+
+
 def _keepalive_loop():
     while True:
         time.sleep(KEEPALIVE_GIAY)

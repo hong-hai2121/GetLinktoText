@@ -44,6 +44,10 @@ body{margin:0;min-height:100%;display:flex;background:var(--bg);color:var(--fg);
 .ai-jump .sp{font-size:20px;flex:none}
 .ai-jump b{display:block;font-size:13px}
 .ai-jump small{display:block;font-size:11px;opacity:.9}
+.side-btn{margin:10px 10px 0;padding:9px 12px;border:1px solid #334155;border-radius:9px;background:transparent;
+  color:var(--sidebar-fg);font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.side-btn:hover{background:var(--sidebar-2)}
+.side-btn:disabled{opacity:.5;cursor:not-allowed}
 .side-foot{margin-top:auto;padding:14px 20px;font-size:11px;color:#6b7280;border-top:1px solid #263142}
 
 /* ---------------- header ---------------- */
@@ -100,6 +104,8 @@ textarea{resize:vertical}
 .btn.primary:hover{background:var(--primary-h)}
 .btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
 .btn.blue:hover{background:#1d4ed8}
+.btn.warn{background:#d97706;border-color:#d97706;color:#fff;font-weight:600}   /* "Kết nối lại" khi CHƯA nối */
+.btn.warn:hover{background:#b45309}
 
 /* ---------------- thẻ AI: khu chính ---------------- */
 .card.ai{border:0;overflow:hidden;box-shadow:0 12px 32px rgba(109,40,217,.16),0 2px 6px rgba(0,0,0,.06)}
@@ -293,6 +299,7 @@ td.kq .er.cu{color:#b45309}
     <button data-page="zalo"><span class="ic ic-za">Z</span>Zalo<span class="cnt" id="cnt-zalo"></span></button>
   </nav>
   <button class="ai-jump" id="aiJump" title="Về thẻ Tạo nội dung bằng AI"><span class="sp">✨</span><div><b>Tạo nội dung AI</b><small>nhận diện giọng nói + AI viết</small></div></button>
+  <button class="side-btn" id="btnReconnectAll" title="Nối lại trình duyệt của cả YouTube, TikTok, Zalo (phiên đang tốt giữ nguyên, chỉ nối cái hỏng)">🔌 Kết nối lại cả 3 trình duyệt</button>
   <div class="side-foot">Server cục bộ · điều khiển trình duyệt đang mở qua Playwright Extension · mỗi nền tảng một profile</div>
 </aside>
 
@@ -301,9 +308,11 @@ td.kq .er.cu{color:#b45309}
     <h2 id="pageTitle">YouTube</h2>
     <span class="chip" id="chipBrowser">Chrome · Profile <b>…</b></span>
     <span class="chip" id="extChip">Extension: …</span>
+    <span class="chip" id="connChip">Kết nối: …</span>
     <span class="chip" id="chipAcc">Kênh&nbsp;<a id="account" href="#" target="_blank" rel="noopener">(chưa kiểm tra)</a></span>
     <span class="spacer"></span>
     <span class="run-ind" id="runInd"><span class="spin"></span><span id="runText">Đang chạy…</span></span>
+    <button class="btn" id="btnReconnect" title="Nối lại trình duyệt của nền tảng đang xem — khi lúc mở app nối tự động hỏng, tab điều khiển bị đóng hay extension ngắt. Không cần tắt server.">🔌 Kết nối lại</button>
     <button class="btn blue" id="btnCheck">Kiểm tra kết nối</button>
   </div>
 
@@ -469,7 +478,9 @@ td.kq .er.cu{color:#b45309}
           <input type="password" id="token" autocomplete="off" placeholder="PLAYWRIGHT_MCP_EXTENSION_TOKEN=…"></div>
         <button class="btn" id="btnEye" title="Hiện / ẩn token">👁</button>
         <button class="btn" id="btnSaveToken">Lưu token</button>
+        <button class="btn" id="btnReconnectYt" title="Nối lại trình duyệt YouTube (lưu token đang gõ rồi nối)">🔌 Kết nối lại</button>
       </div>
+      <p class="hint" style="padding:0 16px 12px">Đèn "Kết nối" trên thanh trên cùng đỏ (lúc mở app nối tự động hỏng, tab điều khiển bị đóng, extension ngắt) → mở Chrome đúng profile, kiểm tra token rồi bấm <b>Kết nối lại</b>; không cần tắt server.</p>
     </div>
 
     <div class="card">
@@ -542,6 +553,7 @@ function platformPage(n) {
           <span class="chip">Trình duyệt <b id="${n}-browser">…</b></span>
           <span class="chip">Profile <b id="${n}-profile">…</b></span>
           <span class="chip" id="${n}-ext">Extension: …</span>
+          <span class="chip" id="${n}-conn">Kết nối: …</span>
           <span class="chip" id="${n}-acc">Tài khoản: (chưa kiểm tra)</span>
         </div>
         <div class="row" style="margin-top:10px">
@@ -549,9 +561,11 @@ function platformPage(n) {
             <input type="password" id="${n}-token" autocomplete="off" placeholder="PLAYWRIGHT_MCP_EXTENSION_TOKEN=…"></div>
           <button class="btn" id="${n}-eye" title="Hiện / ẩn token">👁</button>
           <button class="btn" id="${n}-saveToken">Lưu token</button>
+          <button class="btn" id="${n}-reconnect" title="Nối lại trình duyệt ${L} (lưu token đang gõ rồi nối)">🔌 Kết nối lại</button>
           <button class="btn blue" id="${n}-check">Kiểm tra đăng nhập</button>
         </div>
-        <p class="hint">Chuẩn bị một lần cho profile này: cài Playwright Extension → bật "Cho phép truy cập URL tệp" → sao chép token dán vào đây → đăng nhập ${L} sẵn.</p>
+        <p class="hint">Chuẩn bị một lần cho profile này: cài Playwright Extension → bật "Cho phép truy cập URL tệp" → sao chép token dán vào đây → đăng nhập ${L} sẵn.
+          Đèn "Kết nối" đỏ (lúc mở app nối hỏng, tab bị đóng, extension ngắt) → mở đúng trình duyệt/profile rồi bấm <b>Kết nối lại</b>, không cần tắt server.</p>
       </div>
     </div>
 
@@ -667,6 +681,14 @@ function renderPfTable(n, items) {
     </tr>`).join("");
   bindTitleEdit(tb);
 }
+// đèn "Kết nối" (extension + Playwright đều nối, tab còn) + nút "Kết nối lại" (vàng khi CHƯA nối, khoá khi đang chạy)
+function denKetNoi(chip, btn, info, st) {
+  if (chip) {
+    chip.textContent = "Kết nối: " + (info.connected ? "đã nối" : "CHƯA nối");
+    chip.className = "chip " + (info.connected ? "ok" : "bad");
+  }
+  if (btn) { btn.className = "btn" + (info.connected ? "" : " warn"); btn.disabled = st.running; }
+}
 function renderTopbar(st) {
   const info = st.platforms[currentPage];
   $("pageTitle").textContent = info.label;
@@ -674,6 +696,8 @@ function renderTopbar(st) {
   const ext = $("extChip");
   ext.textContent = "Extension: " + (info.ext_ok ? "đã cài" : "CHƯA cài");
   ext.className = "chip " + (info.ext_ok ? "ok" : "bad");
+  denKetNoi($("connChip"), $("btnReconnect"), info, st);
+  $("btnReconnect").textContent = `🔌 Kết nối lại ${info.label}`;
   const acc = $("chipAcc");
   if (currentPage === "youtube") {
     acc.innerHTML = `Kênh&nbsp;<a id="account" href="#" target="_blank" rel="noopener"></a>`;
@@ -702,6 +726,7 @@ function renderPlatformCards(st) {
     $(n + "-gh").textContent = `— tối đa ${st.so_hashtag} hashtag đầu tiên`;
     $(n + "-start").disabled = st.running;
     $(n + "-check").disabled = st.running;
+    denKetNoi($(n + "-conn"), $(n + "-reconnect"), info, st);
   });
 }
 function render(st) {
@@ -727,6 +752,8 @@ function render(st) {
   $("btnStart").disabled = st.running;
   $("btnStart").innerHTML = st.running ? "Đang chạy…" : "▶&nbsp; Bắt đầu đăng";
   $("btnCheck").disabled = st.running;
+  denKetNoi(null, $("btnReconnectYt"), st.platforms.youtube, st);
+  $("btnReconnectAll").disabled = st.running;
   renderTable(st.items);
   ["tiktok", "zalo"].forEach(n => renderPfTable(n, st.items));
   PF.forEach(p => {
@@ -769,6 +796,16 @@ $("btnCheck").onclick = () => {
   const tok = currentPage === "youtube" ? $("token").value : $(currentPage + "-token").value;
   post("/api/check_connection", {platform: currentPage, token: tok});
 };
+// "🔌 Kết nối lại": nối lại trình duyệt của một nền tảng (gửi kèm token đang gõ — token sai là lý do hay gặp) hoặc cả 3.
+// Server giữ phiên đang tốt, chỉ nối cái hỏng; kết quả ở Nhật ký + đèn "Kết nối".
+function ketNoiLai(p) {
+  const d = {platform: p};
+  if (p !== "all" && formLoaded) d.token = p === "youtube" ? $("token").value : $(p + "-token").value;
+  post("/api/ket_noi_lai", d);
+}
+$("btnReconnect").onclick = () => ketNoiLai(currentPage);
+$("btnReconnectYt").onclick = () => ketNoiLai("youtube");
+$("btnReconnectAll").onclick = () => ketNoiLai("all");
 function startRun(only) {
   const dry = $("dryRun").checked;
   const items = lastState?.items || [];
@@ -1067,6 +1104,7 @@ $("selAll").onchange = e => {
   $(n + "-eye").onclick = () => $(n + "-token").type = $(n + "-token").type === "password" ? "text" : "password";
   $(n + "-saveToken").onclick = () => post("/api/save_token", {platform: n, token: $(n + "-token").value});
   $(n + "-check").onclick = () => post("/api/check_connection", {platform: n, token: $(n + "-token").value});
+  $(n + "-reconnect").onclick = () => ketNoiLai(n);
   $(n + "-saveHashtags").onclick = async () => {
     const j = await post("/api/save_hashtags", {hashtags: $(n + "-hashtags").value, so_hashtag: $(n + "-soHashtag").value});
     if (j.ok) ["tiktok", "zalo"].forEach(m => { $(m + "-hashtags").value = $(n + "-hashtags").value; $(m + "-soHashtag").value = j.so_hashtag; });
