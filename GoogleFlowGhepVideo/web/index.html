@@ -343,6 +343,14 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
           <button class="btn sm" id="btnMhDoc" onclick="api('/api/kho_minh_hoa_lam_moi')">↻ Đọc lại Sheet</button>
           <span id="mhInfo" class="muted"></span>
         </div>
+        <!-- biến thể của cảnh dùng nhiều (user 22/11): thêm DÒNG biến thể vào cuối Sheet kho, mô tả do AI viết, link để trống -->
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" id="btnMhBienThe" onclick="api('/api/tao_bien_the')" title="Cảnh nào dùng đủ ngưỡng mà chưa đủ biến thể: nhờ AI viết mô tả cảnh mới (cùng nội dung và từ khóa, khác nhân vật / bối cảnh / góc máy) rồi thêm dòng biến thể vào cuối tab Kho. Dòng mới ghi ID cảnh gốc ở cột “Nhóm cảnh”, ô từ khóa để trống (dùng chung của cảnh gốc), Link Drive để trống: tạo video theo cột Mô tả rồi dán link vào là tool dùng. Khi dựng, tool xoay vòng cảnh gốc và các biến thể theo cột “Dùng gần nhất”.">🧬 Tạo biến thể cho cảnh dùng nhiều</button>
+          <span class="muted">đủ</span><input type="number" id="btNguong" min="1" step="1" style="width:58px" title="Tổng lượt dùng của cảnh (gốc + các biến thể) đạt số này thì có 1 biến thể" onchange="btLuu()">
+          <span class="muted">lượt = 1 biến thể, cứ thêm</span><input type="number" id="btBuoc" min="1" step="1" style="width:58px" title="Sau ngưỡng đầu, cứ thêm bấy nhiêu lượt thì thêm 1 biến thể, không giới hạn" onchange="btLuu()">
+          <span class="muted">lượt = thêm 1</span>
+          <span id="btInfo" class="muted"></span>
+        </div>
         <div class="tbl-wrap" style="margin-top:8px">
           <table><thead><tr><th>ID</th><th>Tên clip</th><th>Từ khóa</th><th>Video mẫu</th></tr></thead>
             <tbody id="mhBody"><tr><td colspan="4" class="empty">Đang đọc Sheet…</td></tr></tbody></table>
@@ -904,15 +912,22 @@ async function luuMhDir(){ const j = await api('/api/set_minh_hoa_dir', {dir: $(
 async function chonThuMucMh(){ toast('Đang mở hộp thoại chọn thư mục…'); mhDirty.dir = false; await api('/api/chon_thu_muc_minh_hoa'); }
 const MH_TT = {file_may: ['ok', 'có trong thư mục'], drive_da_tai: ['ok', 'đã tải từ Drive'], drive_chua_tai: ['warn', 'có link, chưa tải'],
   link_la: ['bad', 'link không nhận ra'], thieu: ['bad', 'chưa có video mẫu']};
+function btLuu(){ api('/api/set_bien_the', {nguong: +$('btNguong').value || 5, buoc: +$('btBuoc').value || 3}); }
 function renderMinhHoa(m){
   if (!m) return;
   if (!mhDirty.sheet && document.activeElement !== $('mhSheet')) $('mhSheet').value = m.sheet || '';
   if (!mhDirty.dir && document.activeElement !== $('mhDir')) $('mhDir').value = m.dir || '';
   const k = m.kho || {}, dong = k.dong || [];
   $('btnMhTai').disabled = !!k.dang || !m.sheet; $('btnMhDoc').disabled = !!k.dang || !m.sheet;
+  const bt = m.bien_the || {};                              // nút Tạo biến thể: xem trước số dòng sẽ thêm theo ngưỡng hiện tại
+  $('btnMhBienThe').disabled = !!k.dang || !m.sheet || !bt.dong;
+  if (document.activeElement !== $('btNguong')) $('btNguong').value = bt.nguong ?? 5;
+  if (document.activeElement !== $('btBuoc')) $('btBuoc').value = bt.buoc ?? 3;
+  $('btInfo').innerHTML = k.dang === 'bien_the' ? '' : bt.dong ? `→ sẽ thêm <b>${bt.dong}</b> dòng cho <b>${bt.canh}</b> cảnh` : (dong.length ? '→ chưa cảnh nào cần thêm biến thể' : '');
   let info = '';
   if (k.dang === 'doc') info = '<span class="chip run"><span class="spin"></span> Đang đọc Sheet…</span>';
   else if (k.dang === 'tai') info = '<span class="chip run"><span class="spin"></span> Đang tải clip từ Drive…</span>';
+  else if (k.dang === 'bien_the') info = '<span class="chip run"><span class="spin"></span> Đang nhờ AI viết mô tả biến thể rồi thêm dòng vào Sheet… (xem Nhật ký)</span>';
   else if (!m.sheet) info = '<span class="chip warn">Chưa có link Sheet kho</span>';
   else if (k.loi) info = `<span class="chip bad">Không đọc được Sheet</span> <span class="err-t">${esc(k.loi)}</span>`;
   else if (!dong.length) info = '<span class="chip warn">Sheet chưa có dòng nào có từ khóa</span>';
@@ -928,7 +943,7 @@ function renderMinhHoa(m){
   const key = JSON.stringify(dong);
   if (key === mhLast) return; mhLast = key;
   $('mhBody').innerHTML = dong.map(d => { const [cls, nhan] = MH_TT[d.trang_thai] || ['', d.trang_thai];
-    return `<tr><td>${esc(d.id)}</td><td>${esc(d.ten)}</td><td class="muted">${esc(d.tu_khoa)}</td>`
+    return `<tr><td>${esc(d.id)}</td><td>${esc(d.ten)}${d.nhom ? `<div class="muted" style="font-size:11.5px">↳ biến thể của ${esc(d.nhom)}</div>` : ''}</td><td class="muted">${esc(d.tu_khoa)}</td>`
       + `<td><span class="chip ${cls}">${nhan}</span>${d.file ? ` <span class="muted">${esc(d.file)}</span>` : ''}</td></tr>`; }).join('')
     || `<tr><td colspan="4" class="empty">${k.dang === 'doc' ? 'Đang đọc Sheet…' : 'Chưa có dòng nào'}</td></tr>`;
 }

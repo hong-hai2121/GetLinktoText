@@ -79,6 +79,9 @@ CSV_TTL = 12 * 3600           # giây: dùng lại CSV đã tải; app.py tải 
 VEC_NGUONG_MAC_DINH = 0.70    # mức 4 (vector nghĩa, vector_kho.py): sàn điểm cosine để nhận
 VEC_NHOM_MAC_DINH = 0.97      # clip đạt ≥ 97% điểm cao nhất (user 23/10: 90% rộng quá) (và vượt sàn) thì cùng nhóm -> planner random (đa dạng giữa các video)
 FILE_DA_DUNG = CACHE_DIR / "da_dung.json"   # số lần mỗi clip đã được dùng ở các tập trước (xoay vòng cảnh toàn kênh)
+FILE_GAN_NHAT = CACHE_DIR / "gan_nhat.json"  # lần dùng gần nhất của mỗi clip -> planner lấy clip LÂU CHƯA DÙNG nhất (user 22/11)
+COT_NHOM, COT_GAN_NHAT = "Nhóm cảnh", "Dùng gần nhất"   # tên hai cột tool tự thêm vào dòng 1 Sheet kho khi chưa có
+BIEN_THE_NGUONG, BIEN_THE_BUOC = 5, 3        # user 22/11: cảnh dùng đủ 5 lượt = 1 biến thể, sau đó cứ thêm 3 lượt = thêm 1 (không giới hạn)
 DAU_HET_CAU = ".?!:;…"
 
 
@@ -103,6 +106,8 @@ class Clip:
     so_lan: int | None = None       # cột "Số lần dùng" trên Sheet kho (None = Sheet chưa có cột đó -> dùng da_dung.json)
     dong: int = 0                   # số dòng trong Sheet (để cộng "Số lần dùng" đúng dòng)
     nguon: str = ""                 # link Sheet / file CSV đã đọc ra clip này (biết tab nào mà cộng)
+    nhom: str = ""                  # BIẾN THỂ (user 22/11): ID cảnh GỐC ghi ở cột "Nhóm cảnh"; cảnh gốc / cảnh thường = ""
+    gan_nhat: str | None = None     # cột "Dùng gần nhất" 'YYYY-MM-DD HH:MM:SS' (None = Sheet chưa có cột -> gan_nhat.json trên máy)
 
 
 def _cot(ten: str) -> str:
@@ -112,6 +117,9 @@ def _cot(ten: str) -> str:
                       ("mo_ta", ("mo ta", "mota", "noi dung")), ("loai", ("loai", "kieu", "type")),
                       ("thoi_luong", ("thoi luong", "giay", "duration")), ("link", ("link", "link drive", "drive", "url", "duong dan")),
                       ("ghi_chu", ("ghi chu", "note")),
+                      # user 22/11 — hai cột này phải đứng TRƯỚC so_lan ("lan dung gan nhat" bắt đầu bằng "lan dung")
+                      ("nhom", ("nhom canh", "nhom", "bien the cua", "canh goc")),
+                      ("gan_nhat", ("dung gan nhat", "gan nhat", "lan dung gan nhat", "lan cuoi dung", "lan cuoi")),
                       ("so_lan", ("so lan dung", "so lan", "da dung", "luot dung", "lan dung"))):   # user 07/11
         if k in mau or any(k.startswith(m) for m in mau):
             return khoa
@@ -161,21 +169,74 @@ def _doc_dong(nguon: str, log: Callable[[str], None] = print, moi: bool = False)
         if not url:
             raise ValueError(f"Kho minh họa phải là link Google Sheet hoặc file CSV: {nguon}")
         text = _tai_csv(url, log, moi)
-    rows = list(csv.reader(io.StringIO(text)))
+    return _doc_dong_tu_bang(list(csv.reader(io.StringIO(text))), nguon, log)
+
+
+_DANG_LUC = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y")
+
+
+def _chuan_luc(s: str) -> str:
+    """Ô "Dùng gần nhất" -> 'YYYY-MM-DD HH:MM:SS' (so sánh chuỗi được); trống / không đọc được -> '' (coi như chưa dùng)."""
+    s = (s or "").strip()
+    for dang in _DANG_LUC if s else ():
+        try:
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.strptime(s, dang))
+        except ValueError:
+            continue
+    return ""
+
+
+def _doc_dong_tu_bang(rows: list[list[str]], nguon: str = "", log: Callable[[str], None] = print) -> list[dict]:
+    """Bảng (dòng 1 = tên cột) -> các dòng kho như _doc_dong. Dùng chung cho CSV đã tải và ws.get_all_values().
+    BIẾN THỂ (user 22/11): dòng ghi ID cảnh gốc ở cột "Nhóm cảnh" là CÙNG một cảnh, khác hình -> dùng chung từ khóa của
+    cảnh gốc (ô từ khóa của biến thể để trống cũng được; có ghi thêm thì cộng vào), mô tả / loại để trống thì lấy của cảnh
+    gốc; dict có nhom = ID cảnh gốc. Biến thể của biến thể thì lần tới cảnh gốc thật."""
     if not rows:
         return []
     cot = [_cot(c) for c in rows[0]]
     co_so_lan = "so_lan" in cot                        # Sheet có cột "Số lần dùng" (tìm theo TÊN, không theo chữ cái)
-    kq = []
+    co_gan_nhat = "gan_nhat" in cot                    # Sheet có cột "Dùng gần nhất"
+    tho = []                                           # (số dòng, ô theo cột chuẩn, từ khóa riêng, ô "Nhóm cảnh")
     for i, r in enumerate(rows[1:], 2):
         d = {cot[j]: (r[j].strip() if j < len(r) else "") for j in range(len(cot))}
         tags = [t.strip() for t in re.split(r"[,;/|]", d.get("tu_khoa", "")) if t.strip()]
+        nhom = d.get("nhom", "").strip()
+        if tags or nhom:
+            tho.append((i, d, tags, nhom))
+    theo_id = {(d.get("id") or f"dong{i}").upper(): (d, tags, nhom.upper()) for i, d, tags, nhom in tho}
+
+    def goc_cua(ma: str, nhom: str) -> str:
+        """ID (viết hoa) của cảnh gốc thật; '' nếu trỏ tới ID không có trong kho / trỏ vòng."""
+        da, k = {ma}, nhom
+        while k and k in theo_id and k not in da:
+            if not theo_id[k][2]:
+                return k
+            da.add(k)
+            k = theo_id[k][2]
+        return ""
+
+    kq, loi_nhom = [], []
+    for i, d, tags, nhom in tho:
+        ma = d.get("id") or f"dong{i}"
+        goc_d, goc_tags = None, []
+        if nhom:
+            k = goc_cua(ma.upper(), nhom.upper())
+            if k and theo_id[k][1]:
+                goc_d, goc_tags = theo_id[k][0], theo_id[k][1]
+            else:
+                loi_nhom.append(f"dòng {i} [{ma}] → “{nhom}”")
+        if goc_d is not None:
+            co = {khong_dau(t) for t in goc_tags}
+            tags = goc_tags + [t for t in tags if khong_dau(t) not in co]
         if not tags:
             continue
         link = d.get("link", "")
-        ten = d.get("ten") or tags[0]
+        ten_goc = (goc_d.get("ten") or goc_tags[0]) if goc_d is not None else ""
+        ten = d.get("ten") or (f"{Path(ten_goc).stem} ({ma}){Path(ten_goc).suffix}" if goc_d is not None else tags[0])
         duoi = Path(ten).suffix.lower() or Path(urllib.parse.urlparse(link).path).suffix.lower()
         loai = (d.get("loai") or "").lower()
+        if goc_d is not None and not loai and not duoi:    # biến thể không ghi loại, tên không đuôi -> theo cảnh gốc
+            loai, duoi = (goc_d.get("loai") or "").lower(), Path(ten_goc).suffix.lower()
         loai = "anh" if loai.startswith(("anh", "ảnh", "image", "img")) or duoi in DUOI_ANH else "video"
         try:
             tl = float(str(d.get("thoi_luong", "")).replace(",", ".") or 0)
@@ -187,8 +248,13 @@ def _doc_dong(nguon: str, log: Callable[[str], None] = print, moi: bool = False)
                 so_lan = int(float(str(d.get("so_lan", "")).replace(",", ".") or 0))
             except ValueError:
                 so_lan = 0
-        kq.append(dict(id=d.get("id") or f"dong{i}", ten=ten, tags=tags, mo_ta=d.get("mo_ta", ""), loai=loai,
-                       thoi_luong=tl, link=link, ghi_chu=d.get("ghi_chu", ""), dong=i, so_lan=so_lan, nguon=nguon))
+        kq.append(dict(id=ma, ten=ten, tags=tags, mo_ta=d.get("mo_ta", "") or (goc_d.get("mo_ta", "") if goc_d is not None else ""),
+                       loai=loai, thoi_luong=tl, link=link, ghi_chu=d.get("ghi_chu", ""), dong=i, so_lan=so_lan, nguon=nguon,
+                       nhom=(goc_d.get("id") or "") if goc_d is not None else "",
+                       gan_nhat=_chuan_luc(d.get("gan_nhat", "")) if co_gan_nhat else None))
+    if loi_nhom:
+        log(f"  kho minh họa: {len(loi_nhom)} dòng ghi “{COT_NHOM}” trỏ tới ID không có (hoặc không có từ khóa) trong kho — coi như "
+            f"cảnh riêng, dòng không có từ khóa thì bỏ qua: {'; '.join(loi_nhom[:5])}{'…' if len(loi_nhom) > 5 else ''}")
     return kq
 
 
@@ -216,7 +282,8 @@ def _file_theo_ten(chi_muc: dict[str, Path], ma: str, ten: str) -> Path | None:
 def _lap_clip(d: dict, link: str) -> Clip:
     return Clip(id=d["id"], ten=d["ten"], tu_khoa=[khong_dau(t) for t in d["tags"]], tu_khoa_hien=d["tags"],
                 mo_ta=d["mo_ta"], loai=d["loai"], link=link, thoi_luong=d["thoi_luong"],
-                so_lan=d.get("so_lan"), dong=d.get("dong", 0), nguon=d.get("nguon", ""))
+                so_lan=d.get("so_lan"), dong=d.get("dong", 0), nguon=d.get("nguon", ""),
+                nhom=d.get("nhom", ""), gan_nhat=d.get("gan_nhat"))
 
 
 def doc_kho(nguon: str, log: Callable[[str], None] = print, thu_muc: str | Path | None = None,
@@ -479,13 +546,62 @@ def dem_da_dung(*kho: list[Clip]) -> dict[str, int]:
     return d
 
 
+def doc_gan_nhat() -> dict[str, str]:
+    """Lần dùng gần nhất của mỗi clip ghi trên máy: {id: 'YYYY-MM-DD HH:MM:SS'}."""
+    try:
+        d = json.loads(FILE_GAN_NHAT.read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in d.items() if v} if isinstance(d, dict) else {}
+    except Exception:          # noqa: BLE001
+        return {}
+
+
+def ghi_gan_nhat(ids: list[str], luc: str) -> None:
+    d = doc_gan_nhat()
+    for i in ids:
+        d[i] = luc
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        FILE_GAN_NHAT.write_text(json.dumps(d, ensure_ascii=False, indent=0), encoding="utf-8")
+    except Exception:          # noqa: BLE001
+        pass
+
+
+def lan_gan_nhat(*kho: list[Clip]) -> dict[str, str]:
+    """Lần dùng gần nhất của mỗi clip ('' / không có = chưa dùng) -> planner lấy clip LÂU CHƯA DÙNG nhất trước, nên cảnh
+    gốc và các biến thể xoay vòng đều, biến thể mới không bị lấy liền một mạch cho "đuổi kịp" số lần dùng (user 22/11).
+    Lấy mốc MUỘN hơn giữa cột "Dùng gần nhất" trên Sheet (dùng chung nhiều máy) và gan_nhat.json trên máy: CSV kho chỉ
+    tải một lần đầu mỗi lượt chạy, nên giữa các tập của cùng một lượt thì mốc trên máy mới là mốc mới nhất."""
+    d = doc_gan_nhat()
+    for ds in kho:
+        for c in ds or []:
+            if c.gan_nhat and c.gan_nhat > d.get(c.id, ""):
+                d[c.id] = c.gan_nhat
+    return d
+
+
+def _them_cot(ws, rows: list[list[str]], ten: str) -> int:
+    """Thêm một cột mới (tên ở dòng 1) vào bên phải bảng của worksheet -> chỉ số cột (từ 0). Lưới thiếu cột thì nới."""
+    j = max((len(r) for r in rows), default=0)
+    if ws.col_count < j + 1:
+        ws.add_cols(j + 1 - ws.col_count)
+    ws.update_cell(1, j + 1, ten)
+    for r in rows:                                   # giữ bảng trong bộ nhớ khớp với Sheet
+        r.extend([""] * (j + 1 - len(r)))
+    if rows:
+        rows[0][j] = ten
+    return j
+
+
 def cong_so_lan_dung(clips: list[Clip], log: Callable[[str], None] = print) -> str:
     """Sau khi DỰNG XONG video (không phải chọn thử): mỗi cảnh đã dùng cộng 1 vào cột "Số lần dùng" của đúng Sheet kho
     (kho video / kho ảnh ngang, cột tìm theo TÊN ở dòng 1, dòng tìm theo ID rồi mới theo số dòng) + da_dung.json trên
-    máy làm dự phòng. Một clip dùng 2 cảnh trong tập = cộng 2. -> dòng thông báo."""
+    máy làm dự phòng. Một clip dùng 2 cảnh trong tập = cộng 2. Đồng thời ghi giờ dựng vào cột "Dùng gần nhất" (tab chưa
+    có cột thì tự thêm vào dòng 1) + gan_nhat.json trên máy để xoay vòng cảnh / biến thể (user 22/11). -> dòng thông báo."""
     if not clips:
         return ""
+    luc = time.strftime("%Y-%m-%d %H:%M:%S")
     ghi_da_dung([c.id for c in clips])
+    ghi_gan_nhat([c.id for c in clips], luc)
     theo_sheet: dict[tuple[str, str], list[Clip]] = {}
     for c in clips:
         m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]{20,})", c.nguon or "")
@@ -504,28 +620,36 @@ def cong_so_lan_dung(clips: list[Clip], log: Callable[[str], None] = print) -> s
             ws = gc.open_by_key(khoa).get_worksheet_by_id(int(gid))
             rows = ws.get_all_values()
             cot = [_cot(c) for c in (rows[0] if rows else [])]
-            if "so_lan" not in cot:
-                tb.append(f"tab '{ws.title}' chưa có cột 'Số lần dùng' (thêm tên cột đó vào dòng 1)")
-                continue
-            j_sl, j_id = cot.index("so_lan"), (cot.index("id") if "id" in cot else -1)
+            j_sl, j_id = (cot.index("so_lan") if "so_lan" in cot else -1), (cot.index("id") if "id" in cot else -1)
             dong_theo_id = {r[j_id].strip(): i for i, r in enumerate(rows[1:], 2) if j_id >= 0 and j_id < len(r) and r[j_id].strip()}
             them: dict[int, int] = {}
             for c in ds:
                 dong = dong_theo_id.get(c.id) or (c.dong if 1 < c.dong <= len(rows) else 0)
                 if dong:
                     them[dong] = them.get(dong, 0) + 1
+            ghi = []
+            if them and rows:                        # "Dùng gần nhất": cột chưa có thì thêm vào dòng 1 rồi ghi giờ dựng
+                moi_cot = "gan_nhat" not in cot
+                j_gn = _them_cot(ws, rows, COT_GAN_NHAT) if moi_cot else cot.index("gan_nhat")
+                ghi.append(f"ghi “{COT_GAN_NHAT}”" + (" (vừa thêm cột)" if moi_cot else ""))
             cells = []
             for dong, n in them.items():
                 r = rows[dong - 1]
-                cu = r[j_sl].strip() if j_sl < len(r) else ""
-                try:
-                    cu_n = int(float(cu.replace(",", ".") or 0))
-                except ValueError:
-                    cu_n = 0
-                cells.append(gspread_cell(dong, j_sl + 1, cu_n + n))
+                if j_sl >= 0:
+                    cu = r[j_sl].strip() if j_sl < len(r) else ""
+                    try:
+                        cu_n = int(float(cu.replace(",", ".") or 0))
+                    except ValueError:
+                        cu_n = 0
+                    cells.append(gspread_cell(dong, j_sl + 1, cu_n + n))
+                if rows:
+                    cells.append(gspread_cell(dong, j_gn + 1, luc))
             if cells:
-                ws.update_cells(cells)
-            tb.append(f"tab '{ws.title}': +{sum(them.values())} ở {len(them)} dòng")
+                ws.update_cells(cells)               # RAW: giờ dựng là chuỗi 'YYYY-MM-DD HH:MM:SS', Sheet không tự đổi kiểu ngày
+            if j_sl < 0:
+                ghi.append("chưa có cột 'Số lần dùng' (thêm tên cột đó vào dòng 1) nên không cộng lượt")
+            tb.append(f"tab '{ws.title}': " + (f"+{sum(them.values())} ở {len(them)} dòng" if j_sl >= 0 else f"{len(them)} dòng")
+                      + (", " + ", ".join(ghi) if ghi else ""))
         except Exception as e:                       # noqa: BLE001
             tb.append(f"tab gid {gid} lỗi: {e}")
     return "; ".join(tb)
@@ -536,9 +660,203 @@ def gspread_cell(row: int, col: int, value):
     return Cell(row=row, col=col, value=value)
 
 
-def khop_tu_khoa(de_xuat: list[str], kho: list[Clip], vec_nguong: float | None = None,
-                 vec_nhom: float | None = None, van_ban: str = "", gan_nguong: float | None = 0.75,
-                 bo_chung: float | None = None, chua_phu: float | None = None) -> dict | None:
+# ---- biến thể của cảnh dùng nhiều (user 22/11): tool thêm DÒNG biến thể vào Sheet kho, video do khâu Google Flow làm
+BIEN_THE_MOI_LAN = 12          # số cảnh gửi AI mỗi lần hỏi
+
+MAU_BIEN_THE = """Bạn là đạo diễn hình ảnh cho kênh video sức khỏe tiêu hóa ở Việt Nam (khán giả là cô chú 45-70 tuổi).
+Dưới đây là các CẢNH MINH HỌA đang bị dùng lặp lại nhiều lần trong các video. Với mỗi cảnh, hãy viết thêm MÔ TẢ CẢNH BIẾN THỂ để tạo clip mới bằng AI tạo video (Google Flow):
+- Biến thể phải diễn tả ĐÚNG cùng nội dung, cùng các từ khóa của cảnh gốc: người xem vẫn hiểu đó là cùng một ý.
+- HÌNH ẢNH phải khác rõ so với cảnh gốc, khác với các biến thể đã có, và khác nhau giữa các biến thể mới. Đổi ít nhất hai trong các yếu tố: nhân vật (giới tính, độ tuổi, vóc dáng, trang phục), bối cảnh (phòng nào, trong nhà hay ngoài trời, thời điểm trong ngày, ánh sáng), cỡ cảnh và góc máy (cận tay, cận mặt, trung cảnh, toàn cảnh, ngang tầm mắt, từ trên xuống), hành động cụ thể thể hiện cùng ý.
+- Mỗi mô tả là MỘT câu tiếng Việt 20-40 chữ, tả cụ thể thứ nhìn thấy được trong khung hình; người và bối cảnh Việt Nam đời thường.
+- Không lời thoại, không chữ hay logo trên hình, không cảnh máu me, phản cảm hay gây sợ.
+
+DANH SÁCH CẢNH:
+{danh_sach}
+
+Trả lời CHỈ một mảng JSON, không giải thích thêm. Mỗi phần tử: {{"id": "<ID cảnh gốc>", "bien_the": ["mô tả 1", "mô tả 2"]}} với ĐÚNG số biến thể được yêu cầu cho từng cảnh."""
+
+
+def so_bien_the_can(luot: int, nguong: int = BIEN_THE_NGUONG, buoc: int = BIEN_THE_BUOC) -> int:
+    """Số biến thể một cảnh NÊN có theo tổng lượt dùng của cả nhóm: đủ `nguong` lượt = 1 biến thể, sau đó cứ thêm `buoc`
+    lượt = thêm 1, không giới hạn (user 22/11: 5 và 3 -> 5 lượt 1 biến thể, 8 lượt 2, 11 lượt 3…)."""
+    nguong, buoc = max(1, int(nguong)), max(1, int(buoc))
+    return 0 if luot < nguong else 1 + (luot - nguong) // buoc
+
+
+def can_bien_the(dong: list[dict], nguong: int = BIEN_THE_NGUONG, buoc: int = BIEN_THE_BUOC,
+                 dem: dict | None = None) -> list[dict]:
+    """Từ các dòng kho (_doc_dong) -> cảnh VIDEO nào cần thêm biến thể, nhiều lượt xếp trước:
+    [{id, ten, tags, mo_ta, luot (tổng lượt cả nhóm), da_co (số biến thể đang có, kể cả dòng chưa có video), them (số cần
+    tạo thêm), mo_ta_da_co}]. Lượt lấy ở cột "Số lần dùng"; Sheet chưa có cột đó thì lấy `dem` (da_dung.json)."""
+    nhom: dict[str, list[dict]] = {}
+    for d in dong:
+        nhom.setdefault((d.get("nhom") or d["id"]).upper(), []).append(d)
+    kq = []
+    for g, ds in nhom.items():
+        goc = next((d for d in ds if d["id"].upper() == g), None)
+        if goc is None or goc["loai"] != "video":
+            continue
+        luot = sum((d["so_lan"] if d.get("so_lan") is not None else (dem or {}).get(d["id"], 0)) for d in ds)
+        da_co = len(ds) - 1
+        them = so_bien_the_can(luot, nguong, buoc) - da_co
+        if them > 0:
+            kq.append(dict(id=goc["id"], ten=goc["ten"], tags=goc["tags"], mo_ta=goc["mo_ta"], luot=luot, da_co=da_co, them=them,
+                           mo_ta_da_co=[d["mo_ta"] for d in ds if d is not goc and d["mo_ta"] and d["mo_ta"] != goc["mo_ta"]]))
+    kq.sort(key=lambda x: -x["luot"])
+    return kq
+
+
+def _muc_bien_the(x: dict) -> str:
+    return (f"- [{x['id']}] Tên: {Path(x['ten']).stem}\n  Từ khóa: {', '.join(x['tags'])}\n  Mô tả cảnh gốc: {x['mo_ta'] or '(chưa có)'}\n"
+            + ("  Biến thể đã có: " + " | ".join(x["mo_ta_da_co"]) + "\n" if x["mo_ta_da_co"] else "")
+            + f"  Cần viết: {x['them']} biến thể")
+
+
+def tao_bien_the(nguon: str, nha: str = "gpt", model: str | None = None, nguong: int = BIEN_THE_NGUONG,
+                 buoc: int = BIEN_THE_BUOC, log: Callable[[str], None] = print,
+                 dung: Callable[[], bool] | None = None) -> dict:
+    """Nút "Tạo biến thể" ở thẻ Kho (user 22/11). Đọc thẳng tab kho trên Sheet -> cảnh nào dùng đủ ngưỡng mà chưa đủ biến
+    thể (can_bien_the) -> nhờ AI viết mô tả cảnh MỚI cho từng biến thể (cùng nội dung + từ khóa, khác nhân vật / bối cảnh /
+    góc máy) -> thêm dòng vào CUỐI tab: ID mới, tên cảnh gốc kèm (2), (3)…, ô từ khóa để trống (dùng chung của cảnh gốc
+    qua cột "Nhóm cảnh"), mô tả do AI viết, Link Drive để trống — dòng chưa có link không được dựng, làm xong video dán
+    link vào là chạy. Tab chưa có cột "Nhóm cảnh" / "Dùng gần nhất" thì tự thêm vào dòng 1.
+    -> {them (số dòng đã thêm), canh (số cảnh), con (số biến thể chưa tạo được vì AI không trả lời), loi}."""
+    kq = {"them": 0, "canh": 0, "con": 0, "loi": ""}
+    m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]{20,})", nguon or "")
+    if not m:
+        return {**kq, "loi": "kho phải là link Google Sheet mới thêm được dòng biến thể"}
+    g = re.search(r"[#&?]gid=(\d+)", nguon)
+    gc, cach = _gspread_khach(log)
+    if gc is None:
+        return {**kq, "loi": f"không ghi được lên Sheet ({cach})"}
+    ws = gc.open_by_key(m.group(1)).get_worksheet_by_id(int(g.group(1)) if g else 0)
+    can = can_bien_the(_doc_dong_tu_bang(ws.get_all_values(), nguon, log), nguong, buoc, doc_da_dung())
+    if not can:
+        return kq
+    tong = sum(x["them"] for x in can)
+    log(f"Biến thể: {len(can)} cảnh cần thêm {tong} biến thể (đủ {nguong} lượt = 1, cứ thêm {buoc} lượt = thêm 1) — nhờ AI viết mô tả cảnh…")
+    mo_ta_moi: dict[str, list[str]] = {}
+    for i in range(0, len(can), BIEN_THE_MOI_LAN):
+        if dung and dung():
+            log("  đã dừng — các cảnh còn lại bấm lại sau")
+            break
+        lo = can[i:i + BIEN_THE_MOI_LAN]
+        prompt = MAU_BIEN_THE.format(danh_sach="\n".join(_muc_bien_the(x) for x in lo))
+        t0 = time.time()
+        try:
+            mod, r = hoi_co_du_phong(nha, prompt, model, log)
+            ds = _json_trong_tra_loi(r.text)
+        except Exception as e:                       # noqa: BLE001 — một lô hỏng không chặn lô khác
+            log(f"  lô {i // BIEN_THE_MOI_LAN + 1}: AI không trả lời được ({e}) — bỏ qua lô này, bấm lại sau")
+            continue
+        for d in ds if isinstance(ds, list) else []:
+            if not isinstance(d, dict):
+                continue
+            bt = d.get("bien_the") or d.get("mo_ta") or []
+            bt = bt if isinstance(bt, list) else [bt]
+            mo_ta_moi[str(d.get("id") or "").strip().strip("[]").upper()] = [" ".join(str(x).split()) for x in bt if str(x).strip()]
+        log(f"  lô {i // BIEN_THE_MOI_LAN + 1}: {mod.TEN} viết mô tả cho {len(lo)} cảnh xong {time.time() - t0:.0f}s")
+    # đọc LẠI Sheet ngay trước khi ghi (AI trả lời mất vài phút, trong lúc đó có thể đã có dòng mới) -> dòng cuối + ID lớn nhất
+    rows = ws.get_all_values()
+    if not rows:
+        return {**kq, "loi": "tab kho trống"}
+    cot = [_cot(c) for c in rows[0]]
+    for khoa, ten in (("nhom", COT_NHOM), ("gan_nhat", COT_GAN_NHAT)):
+        if khoa not in cot:
+            _them_cot(ws, rows, ten)
+            cot = [_cot(c) for c in rows[0]]
+            log(f"  tab '{ws.title}': đã thêm cột “{ten}” vào dòng 1")
+    j_id, j_ten = (cot.index("id") if "id" in cot else -1), (cot.index("ten") if "ten" in cot else -1)
+    lon_nhat: dict[str, int] = {}
+    for r in rows[1:]:
+        mm = re.match(r"^([A-Za-z]+)(\d+)$", r[j_id].strip()) if 0 <= j_id < len(r) else None
+        if mm:
+            lon_nhat[mm.group(1).upper()] = max(lon_nhat.get(mm.group(1).upper(), 0), int(mm.group(2)))
+    ten_co = {khong_dau(Path(r[j_ten]).stem) for r in rows[1:] if 0 <= j_ten < len(r) and r[j_ten].strip()}
+    them_dong, tom = [], []
+    for x in can:
+        ds = mo_ta_moi.get(x["id"].upper(), [])[:x["them"]]
+        kq["con"] += x["them"] - len(ds)
+        mm = re.match(r"^([A-Za-z]+)(\d+)$", x["id"])
+        stem, duoi = Path(x["ten"]).stem, Path(x["ten"]).suffix
+        so = x["da_co"] + 1
+        for mt in ds:
+            so += 1
+            while khong_dau(f"{stem} ({so})") in ten_co:
+                so += 1
+            ten_co.add(khong_dau(f"{stem} ({so})"))
+            if mm:
+                lon_nhat[mm.group(1).upper()] = lon_nhat.get(mm.group(1).upper(), 0) + 1
+                ma = f"{mm.group(1)}{lon_nhat[mm.group(1).upper()]}"
+            else:
+                ma = f"{x['id']}-b{so}"
+            o = {"id": ma, "ten": f"{stem} ({so}){duoi}", "mo_ta": mt, "loai": "video", "so_lan": 0, "nhom": x["id"]}
+            them_dong.append([o.get(c, "") for c in cot])
+        if ds:
+            kq["canh"] += 1
+            tom.append(f"[{x['id']}] {x['luot']} lượt +{len(ds)}")
+    if them_dong:
+        dau = len(rows) + 1
+        if ws.row_count < dau + len(them_dong) - 1:
+            ws.add_rows(dau + len(them_dong) - 1 - ws.row_count)
+        ws.update(values=them_dong, range_name=f"A{dau}", value_input_option="RAW")
+        kq["them"] = len(them_dong)
+        log(f"Biến thể: đã thêm {len(them_dong)} dòng (dòng {dau}–{dau + len(them_dong) - 1}) vào tab '{ws.title}' cho {kq['canh']} cảnh: "
+            + "; ".join(tom[:12]) + ("…" if len(tom) > 12 else "")
+            + ". Dòng chưa có Link Drive nên chưa dùng khi dựng — tạo video theo cột Mô tả rồi dán link vào.")
+    if kq["con"]:
+        log(f"Biến thể: còn {kq['con']} biến thể chưa tạo được (AI không trả lời / trả thiếu) — bấm lại nút để làm tiếp")
+    return kq
+
+
+def _tach_nhom(kho: list[Clip]) -> tuple[list[Clip], dict[str, list[Clip]]]:
+    """Kho có BIẾN THỂ (Clip.nhom = ID cảnh gốc) -> (các CẢNH ĐẠI DIỆN giữ thứ tự kho, {id đại diện: [mọi clip cùng cảnh,
+    đại diện đứng đầu]}). Đại diện = cảnh gốc nếu có trong danh sách, không thì biến thể đầu tiên (cảnh gốc chưa có
+    video / đã bị loại). Kho không có biến thể nào -> (kho, {}) — không đổi gì so với trước."""
+    if not any(c.nhom for c in kho):
+        return kho, {}
+    nhom: dict[str, list[Clip]] = {}
+    for c in kho:
+        nhom.setdefault((c.nhom or c.id).upper(), []).append(c)
+    dai_dien, theo, xong = [], {}, set()
+    for c in kho:
+        g = (c.nhom or c.id).upper()
+        if g in xong:
+            continue
+        xong.add(g)
+        ds = nhom[g]
+        dd = next((x for x in ds if x.id.upper() == g), ds[0])
+        dai_dien.append(dd)
+        theo[dd.id] = [dd] + [x for x in ds if x is not dd]
+    return dai_dien, theo
+
+
+def _mo_nhom(clips: list[Clip], theo: dict[str, list[Clip]]) -> list[Clip]:
+    """Mỗi cảnh đại diện đã khớp -> cả nhóm (cảnh gốc + biến thể), giữ thứ tự, không trùng."""
+    kq, thay = [], set()
+    for c in clips:
+        for x in theo.get(c.id, [c]):
+            if x.id not in thay:
+                thay.add(x.id)
+                kq.append(x)
+    return kq
+
+
+def khop_tu_khoa(de_xuat: list[str], kho: list[Clip], *a, **kw) -> dict | None:
+    """So đề xuất của AI với kho (4 mức, xem _khop_tu_khoa_dai_dien — cùng tham số). Kho có BIẾN THỂ (cột "Nhóm cảnh",
+    user 22/11): so trên CẢNH ĐẠI DIỆN của từng nhóm rồi mở kết quả ra cả nhóm — cảnh gốc khớp ở mức nào thì biến thể
+    cùng được xét, và một cảnh có nhiều biến thể không chiếm hết chỗ của cảnh khác trong nhóm ngang điểm (mức 3-4 có trần
+    số clip). Planner xoay vòng trong nhóm theo lần dùng gần nhất."""
+    dai_dien, theo = _tach_nhom(kho)
+    kh = _khop_tu_khoa_dai_dien(de_xuat, dai_dien, *a, **kw)
+    if kh and theo:
+        kh["clips"] = _mo_nhom(kh["clips"], theo)
+    return kh
+
+
+def _khop_tu_khoa_dai_dien(de_xuat: list[str], kho: list[Clip], vec_nguong: float | None = None,
+                           vec_nhom: float | None = None, van_ban: str = "", gan_nguong: float | None = 0.75,
+                           bo_chung: float | None = None, chua_phu: float | None = None) -> dict | None:
     """So các từ khóa AI đề xuất (theo thứ tự ưu tiên) với kho, 4 mức, dừng ở mức đầu tiên khớp:
       1. ĐÚNG : đề xuất (bỏ dấu, chữ thường) trùng hẳn một từ khóa trong kho (mọi clip có từ khóa đó = một nhóm).
       2. CHỨA : tập từ nội dung (giữ dấu, bỏ từ nối) của đề xuất nằm trong hoặc bao trùm tập từ của một từ khóa kho,
@@ -651,6 +969,19 @@ NGUONG_GAN_NHAT = 0.2          # điểm tối thiểu để coi một clip là 
 
 def khop_gan_nhat(de_xuat: list[str], kho: list[Clip], van_ban: str = "", loai_tru: set[str] | None = None,
                   vec_nguong: float | None = None) -> dict | None:
+    """Vớt vát khi 4 mức đều trượt (xem _khop_gan_nhat_dai_dien). Kho có BIẾN THỂ: bỏ clip trong loai_tru TRƯỚC (kẻo cảnh
+    gốc hỏng / đã dùng kéo cả nhóm ra ngoài), so trên cảnh đại diện rồi mở ra cả nhóm."""
+    if loai_tru and any(c.nhom for c in kho):
+        kho = [c for c in kho if c.id not in loai_tru]
+    dai_dien, theo = _tach_nhom(kho)
+    gan = _khop_gan_nhat_dai_dien(de_xuat, dai_dien, van_ban, loai_tru, vec_nguong)
+    if gan and theo:
+        gan["clips"] = _mo_nhom(gan["clips"], theo)
+    return gan
+
+
+def _khop_gan_nhat_dai_dien(de_xuat: list[str], kho: list[Clip], van_ban: str = "", loai_tru: set[str] | None = None,
+                            vec_nguong: float | None = None) -> dict | None:
     """Vớt vát khi 4 mức đều trượt (không clip gốc / cần thêm clip): vector nghĩa với ngưỡng thấp hơn 0,15 (so cả đề
     xuất lẫn chữ trong câu), không có vector thì so chữ (_khop_gan_nhat_chu). -> dict như khop_tu_khoa hoặc None."""
     vec_nguong = VEC_NGUONG_MAC_DINH if vec_nguong is None else float(vec_nguong)
@@ -1302,7 +1633,8 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
                          log: Callable[[str], None] = print, kin_het: bool = False,
                          seed: int | None = None, vec_nguong: float | None = None,
                          dem_kenh: dict | None = None, toc_mh: float = TOC_MH, canh_giay: float = CANH_GIAY,
-                         duoi_giay: float = DUOI_CHUYEN, xen_bac_si: float = 0.0) -> tuple[list[Canh], list[dict], dict]:
+                         duoi_giay: float = DUOI_CHUYEN, xen_bac_si: float = 0.0,
+                         gan_kenh: dict | None = None) -> tuple[list[Canh], list[dict], dict]:
     """PHỦ KÍN: cảnh kho là nền chính của phần sau. Mỗi câu được phủ bằng chuỗi clip khớp theo thứ tự AI đề xuất,
     thời gian câu CHIA ĐỀU cho các clip — không có đoạn nào dưới DOAN_TOI_THIEU (3s) gây nhấp nháy, không hở hình
     bác sĩ giữa hai cảnh:
@@ -1324,6 +1656,7 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
     import random as _random
     rng = _random.Random(seed)
     dem_kenh = dem_kenh or {}                                    # số lần clip đã dùng ở các tập trước (xoay vòng toàn kênh)
+    gan_kenh = gan_kenh or {}                                    # lần dùng gần nhất ('' = chưa dùng): lâu chưa dùng nhất đứng trước (user 22/11)
     ngau: dict[str, float] = {}                                  # số ngẫu nhiên cố định theo seed cho từng clip -> random trong nhóm ngang nhau
     theo_cau = {d["cau"]: d for d in chon}
     kho_theo_tag: dict[str, list[Clip]] = {}
@@ -1449,8 +1782,10 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
             log(f"  câu {c.so} không khớp kho → {ly_do}")
         # ưu tiên clip CHƯA dùng trong video này (giữ thứ tự AI đề xuất giữa các clip cùng số lần), rồi tránh lặp
         # ngay clip vừa chiếu ở câu trước
-        # thứ tự ứng viên: ít dùng trong video này -> ít dùng toàn kênh -> random theo seed (nhóm cùng từ khóa đa dạng giữa các video)
-        clips.sort(key=lambda cl: (so_lan_dung.get(cl.id, 0), dem_kenh.get(cl.id, 0), ngau.setdefault(cl.id, rng.random())))
+        # thứ tự ứng viên: ít dùng trong video này -> LÂU CHƯA DÙNG nhất toàn kênh (cảnh gốc + biến thể xoay vòng, user 22/11)
+        # -> ít dùng toàn kênh -> random theo seed (nhóm cùng từ khóa đa dạng giữa các video)
+        clips.sort(key=lambda cl: (so_lan_dung.get(cl.id, 0), gan_kenh.get(cl.id, ""), dem_kenh.get(cl.id, 0),
+                                   ngau.setdefault(cl.id, rng.random())))
         clip_tk = dict(d.get("clip_tk") or {})
         ghi_chu: dict[str, str] = {}
         nguon = [cl for cl in clips if cap(cl) > 0]              # vòng 1 (tải/đo ngay, bỏ clip hỏng)
@@ -1509,7 +1844,7 @@ def len_ke_hoach_phu_kin(cau: list[Cau], chon: list[dict], *, do_dai: Callable[[
                     break
                 trong_seq = {x.id for x in seq}
                 ung.sort(key=lambda cl: (cl.id in trong_seq, so_lan_dung.get(cl.id, 0) + sum(1 for x in seq if x.id == cl.id),
-                                         dem_kenh.get(cl.id, 0), ngau.setdefault(cl.id, rng.random())))
+                                         gan_kenh.get(cl.id, ""), dem_kenh.get(cl.id, 0), ngau.setdefault(cl.id, rng.random())))
                 seq.append(ung[0])
             return seq
 
@@ -1697,7 +2032,7 @@ def trang_thai_tu_dong(dong_sheet: list[dict], thu_muc: str | Path | None = None
                 tt, f = "file_may", p.name
         dem["co" if tt in ("file_may", "drive_da_tai") else "chua_tai" if tt == "drive_chua_tai" else "thieu"] += 1
         dong.append(dict(id=d["id"], ten=d["ten"], tu_khoa=", ".join(d["tags"]), loai=d["loai"], trang_thai=tt, file=f,
-                         link=link, dong=d["dong"]))
+                         link=link, dong=d["dong"], nhom=d.get("nhom", "")))
     return {"thu_muc": str(thu_muc), "dong": dong, **dem}
 
 
@@ -1791,6 +2126,7 @@ def chuan_bi(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, nha:
         ok, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=do_dai, kho=kho,
                                               anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
                                               kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=dem_da_dung(kho),
+                                              gan_kenh=lan_gan_nhat(kho),
                                               toc_mh=toc_mh, canh_giay=toi_da_giay,
                                               xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
@@ -2017,14 +2353,14 @@ def chuan_bi_noi_bat(tu, *, kho_nguon: str, tu_giay: float = 0.0, nha: str = "gp
             vector_kho.nhung([x for _, dx, _ in chon for x in dx] + [c.text for c in cau], log=lambda s: log("  " + s))
         except Exception as e:                     # noqa: BLE001
             log(f"  vector: bỏ qua ({e})")
-    dem = dem_da_dung(kho)
+    dem, gan_dung = dem_da_dung(kho), lan_gan_nhat(kho)
     dung_roi: set[str] = set()
     canh, thieu = [], []
     for so, de_xuat, mo_ta in chon:
         c = cau[so - 1]
         kh = khop_tu_khoa(de_xuat, kho, vec_nguong, vec_nhom, van_ban=c.text) if kho else None
         nhom = [x for x in (kh["clips"] if kh else []) if x.id not in dung_roi]
-        nhom.sort(key=lambda x: (dem.get(x.id, 0), rng.random()))      # ảnh ít dùng nhất ở các tập trước
+        nhom.sort(key=lambda x: (gan_dung.get(x.id, ""), dem.get(x.id, 0), rng.random()))   # lâu chưa dùng nhất -> ít dùng nhất ở các tập trước
         anh = None
         for x in nhom:
             try:
@@ -2228,7 +2564,7 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
             vector_kho.nhung([x for _, dx, _ in nhan.values() for x in dx] + [c.text for c in cau], log=lambda s: log("  " + s))
         except Exception as e:                       # noqa: BLE001
             log(f"  vector: bỏ qua ({e})")
-    dem = dem_da_dung(kho_v, kho_a)
+    dem, gan_dung = dem_da_dung(kho_v, kho_a), lan_gan_nhat(kho_v, kho_a)
     lan_dung: dict[str, int] = {}                    # clip đã chiếu mấy lần trong video này — chỉ để ƯU TIÊN clip chưa dùng
 
     def _chon(loai: str, de_xuat: list[str], c: Cau) -> tuple[Clip | None, dict | None, str]:
@@ -2267,7 +2603,7 @@ def chuan_bi_tron(tu, *, kho_video: str, kho_anh: str, tu_giay: float = 0.0, nha
         # user 07/11: BỎ luật "một clip chỉ dùng một lần trong video" — clip đúng thì dùng lại được, kể cả hai câu gần nhau
         # (trước đây câu sau mất clip vì câu trước đã lấy -> ghi Thiếu dù kho có). Chỉ còn ƯU TIÊN: clip chưa dùng trong video
         # này -> ít dùng ở các tập trước -> ngẫu nhiên theo seed
-        nhom.sort(key=lambda x: (lan_dung.get(x.id, 0), dem.get(x.id, 0), rng.random()))
+        nhom.sort(key=lambda x: (lan_dung.get(x.id, 0), gan_dung.get(x.id, ""), dem.get(x.id, 0), rng.random()))
         loi_tai = []
         for x in nhom:
             try:
@@ -2434,6 +2770,7 @@ def lap_ke_hoach(tu, *, kho_nguon: str, tong_giay: float, tu_giay: float = 0.0, 
         canh, thieu, phu = len_ke_hoach_phu_kin(cau, chon, do_dai=lambda cl: cl.thoi_luong or toi_da_giay, kho=kho,
                                                 anh_giay=min(toi_da_giay, ANH_GIU_GIAY), log=log,
                                                 kin_het=khong_clip_goc, seed=seed, vec_nguong=vec_nguong, dem_kenh=dem_da_dung(kho),
+                                              gan_kenh=lan_gan_nhat(kho),
                                               toc_mh=toc_mh, canh_giay=toi_da_giay,
                                               xen_bac_si=0.0 if khong_clip_goc else xen_bac_si)
         kq["phu"] = phu
