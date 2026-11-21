@@ -332,9 +332,10 @@ def probe_media(path: Path):
     exe = shutil.which("ffprobe")
     if not exe:
         sys.exit("Không tìm thấy ffprobe trên PATH (đi kèm ffmpeg).")
+    # lấy trọn thông tin luồng (-show_streams) thay vì lọc "stream_side_data": tên mục đó chỉ có ở ffprobe mới,
+    # ffprobe 4.x (bản đang cài ở ~/.local/bin) báo "No match for section" và thoát lỗi -> Chọn thử / Chạy hỏng
     out = subprocess.run(
-        [exe, "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height:stream_side_data=rotation:format=duration",
+        [exe, "-v", "error", "-select_streams", "v:0", "-show_streams", "-show_format",
          "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout
     j = json.loads(out)
     dur = float(j.get("format", {}).get("duration") or 0)
