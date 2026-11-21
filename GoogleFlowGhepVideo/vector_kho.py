@@ -152,6 +152,7 @@ def cap_nhat(kho, log: Callable[[str], None] = print) -> dict:
 
 
 _mt: dict = {"ky": None, "rows": [], "M": None}
+_mt_phu: dict = {}               # chữ ký kho -> (rows, M) của các lần trước (tối đa 2)
 
 
 def _ma_tran(kho):
@@ -159,6 +160,8 @@ def _ma_tran(kho):
     ky = tuple((c.id, tuple(c.tu_khoa_hien or []), c.ten, c.mo_ta) for c in kho)
     if _mt["ky"] == ky and _mt["M"] is not None:
         return _mt["rows"], _mt["M"]
+    if ky in _mt_phu:                                   # kho có biến thể: lúc so trên cảnh đại diện, lúc so cả kho (22/11)
+        return _mt_phu[ky]
     rows, texts = [], []
     for i, c in enumerate(kho):
         kw, mt = van_ban_clip(c)
@@ -169,6 +172,10 @@ def _ma_tran(kho):
     M = nhung(texts, log=lambda s: None, luu=True)
     if M is None:
         return [], None
+    if _mt["ky"] is not None and _mt["M"] is not None:  # giữ thêm 2 ma trận gần nhất, khỏi dựng lại khi hai danh sách xen kẽ
+        _mt_phu[_mt["ky"]] = (_mt["rows"], _mt["M"])
+        while len(_mt_phu) > 2:
+            _mt_phu.pop(next(iter(_mt_phu)))
     _mt.update(ky=ky, rows=rows, M=M)
     return rows, M
 

@@ -126,6 +126,9 @@ TUY_CHON_MAC_DINH = {
     "minh_hoa_sfx_db": -4.0,        # tiếng chuyển cảnh nhỏ hơn giọng đọc bấy nhiêu dB (user chốt -4 sau khi nghe thử -8)
     "minh_hoa_vec_nguong": 0.70,    # tìm clip theo nghĩa (vector câu): sàn điểm để nhận (user chốt 22/10: 90% + vượt sàn)
     "minh_hoa_vec_nhom": 0.97,      # nhóm random: clip đạt ≥ tỉ lệ này × điểm cao nhất
+    # nút "Tạo biến thể" ở thẻ Kho (user 22/11): cảnh dùng đủ `nguong` lượt = 1 biến thể, sau đó cứ thêm `buoc` lượt = thêm 1
+    "bien_the_nguong": 5,
+    "bien_the_buoc": 3,
     # checkbox "Hỏi GPT mới khi chạy" ở tab Ghép video: False = tập đã hỏi AI rồi (gpt_minh_hoa.json trong thư mục
     # tập) thì dùng lại trả lời cũ, chỉ ghép lại; True = hỏi AI mới mỗi lần chạy (--minh-hoa-hoi-lai)
     "minh_hoa_hoi_lai": False,
@@ -267,6 +270,8 @@ def chuan_hoa_tuy_chon(d: dict) -> dict:
         "minh_hoa_sfx": bool(d.get("minh_hoa_sfx", m["minh_hoa_sfx"])),
         "minh_hoa_vec_nguong": round(_so(d.get("minh_hoa_vec_nguong"), float, m["minh_hoa_vec_nguong"], 0.3, 0.95), 2),
         "minh_hoa_vec_nhom": round(_so(d.get("minh_hoa_vec_nhom"), float, m["minh_hoa_vec_nhom"], 0.5, 1.0), 2),
+        "bien_the_nguong": _so(d.get("bien_the_nguong"), int, m["bien_the_nguong"], 1, 1000),
+        "bien_the_buoc": _so(d.get("bien_the_buoc"), int, m["bien_the_buoc"], 1, 1000),
         "minh_hoa_sfx_db": round(_so(d.get("minh_hoa_sfx_db"), float, m["minh_hoa_sfx_db"], -30.0, 6.0), 1),
         "minh_hoa_hoi_lai": bool(d.get("minh_hoa_hoi_lai", m["minh_hoa_hoi_lai"])),
         "khong_clip_goc": bool(d.get("khong_clip_goc", m["khong_clip_goc"])),
@@ -662,6 +667,28 @@ class State:
         self.lam_moi_kho_mh()                        # Sheet vừa tải lại trong tai_tat_ca -> dùng bản đệm, không gọi mạng thêm
         return True
 
+    def tao_bien_the_kho(self) -> bool:
+        """Nút 'Tạo biến thể cho cảnh dùng nhiều' (user 22/11, thread nền): cảnh dùng đủ ngưỡng mà chưa đủ biến thể -> AI viết
+        mô tả cảnh mới -> thêm dòng biến thể (chưa có link) vào cuối tab kho. Xong thì đọc lại Sheet."""
+        with self.lock:
+            if self.kho_mh["dang"]:
+                return False
+            tc = dict(self.tuy_chon)
+            self.kho_mh["dang"] = "bien_the"
+        try:
+            kq = minh_hoa.tao_bien_the(tc["minh_hoa_sheet"], nha=tc["minh_hoa_ai"], model=tc["minh_hoa_model"] or None,
+                                       nguong=tc["bien_the_nguong"], buoc=tc["bien_the_buoc"], log=self.log)
+            if kq["loi"]:
+                self.log(f"Biến thể: không tạo được — {kq['loi']}")
+            elif not kq["them"] and not kq["con"]:
+                self.log("Biến thể: chưa cảnh nào cần thêm biến thể theo ngưỡng hiện tại.")
+        except Exception as e:                       # noqa: BLE001
+            self.log(f"Biến thể: lỗi: {e}")
+        with self.lock:
+            self.kho_mh["dang"] = ""
+        self.lam_moi_kho_mh(moi=True)                # Sheet vừa có dòng mới -> đọc lại + tính vector
+        return True
+
     def _vong_do_ai(self):
         while True:
             for k, m in NHA_AI.items():
@@ -836,6 +863,25 @@ def api_kho_may_ds(data):
     return {"ok": True, "dir": str(d), "ds": ds}
 
 
+_BT_XEM_TRUOC: dict = {"ky": None, "kq": {"canh": 0, "dong": 0}}
+
+
+def _xem_truoc_bien_the() -> dict:
+    """Nút "Tạo biến thể" sẽ thêm bao nhiêu dòng cho bao nhiêu cảnh, theo kho đang đọc + ngưỡng hiện tại (chỉ tính lại khi
+    kho hoặc ngưỡng đổi; web hỏi trạng thái mỗi giây)."""
+    with S.lock:
+        dong, ng, b = S.kho_mh_dong, S.tuy_chon["bien_the_nguong"], S.tuy_chon["bien_the_buoc"]
+    ky = (id(dong), len(dong or ()), ng, b)
+    if _BT_XEM_TRUOC["ky"] != ky:
+        try:
+            can = minh_hoa.can_bien_the(dong or [], ng, b, minh_hoa.doc_da_dung())
+            kq = {"canh": len(can), "dong": sum(x["them"] for x in can)}
+        except Exception:                            # noqa: BLE001
+            kq = {"canh": 0, "dong": 0}
+        _BT_XEM_TRUOC.update(ky=ky, kq=kq)
+    return {**_BT_XEM_TRUOC["kq"], "nguong": ng, "buoc": b}
+
+
 def state_payload(after: int) -> dict:
     S.cap_nhat_kho_mh()                             # rẻ: chỉ tính lại khi file trong thư mục video mẫu đổi
     google = {**drive_len.trang_thai(), **S.google}   # ngoài lock: có thể gọi mạng một lần (lấy email)
@@ -865,7 +911,8 @@ def state_payload(after: int) -> dict:
             "kho_may": kho_tren_may(S.minh_hoa_dir),
             "kho_anh": dict(S.kho_anh),
             "minh_hoa": {"dir": S.minh_hoa_dir, "ton_tai": mh_dir.is_dir(), "mac_dinh": mh_dir == THU_MUC_MINH_HOA,
-                         "sheet": S.tuy_chon["minh_hoa_sheet"], "bat": S.tuy_chon["minh_hoa"], "kho": dict(S.kho_mh)},
+                         "sheet": S.tuy_chon["minh_hoa_sheet"], "bat": S.tuy_chon["minh_hoa"], "kho": dict(S.kho_mh),
+                         "bien_the": _xem_truoc_bien_the()},
             "tuy_chon": dict(S.tuy_chon),
             "tuy_chon_mac_dinh": dict(TUY_CHON_MAC_DINH),
             "mau_giong": mau_giong(),
@@ -1061,6 +1108,25 @@ def api_tai_minh_hoa(_data):
         return {"ok": False, "msg": "Đang đọc Sheet / tải clip, chờ xong đã."}
     threading.Thread(target=S.tai_kho_mh, daemon=True, name="tai-mh").start()
     return {"ok": True, "msg": "Đang tải các clip có Link Drive về thư mục video mẫu…"}
+
+
+def api_tao_bien_the(_data):
+    """Nút "Tạo biến thể cho cảnh dùng nhiều" ở thẻ Kho video minh họa (user 22/11)."""
+    if not minh_hoa.sheet_csv_url(S.tuy_chon["minh_hoa_sheet"] or ""):
+        return {"ok": False, "msg": "Kho phải là link Google Sheet mới thêm được dòng biến thể."}
+    if S.kho_mh["dang"]:
+        return {"ok": False, "msg": "Đang đọc Sheet / tải clip / tạo biến thể, chờ xong đã."}
+    threading.Thread(target=S.tao_bien_the_kho, daemon=True, name="bien-the").start()
+    return {"ok": True, "msg": "Đang tìm cảnh dùng nhiều và nhờ AI viết mô tả biến thể — xem tiến độ ở Nhật ký…"}
+
+
+def api_set_bien_the(data):
+    """Hai ô ngưỡng cạnh nút Tạo biến thể: đủ `nguong` lượt = 1 biến thể, cứ thêm `buoc` lượt = thêm 1."""
+    with S.lock:
+        S.tuy_chon = chuan_hoa_tuy_chon({**S.tuy_chon, "bien_the_nguong": data.get("nguong"), "bien_the_buoc": data.get("buoc")})
+        S.save()
+        ng, b = S.tuy_chon["bien_the_nguong"], S.tuy_chon["bien_the_buoc"]
+    return {"ok": True, "msg": f"Biến thể: cảnh dùng đủ {ng} lượt = 1 biến thể, cứ thêm {b} lượt = thêm 1."}
 
 
 # ---- tab Chỉnh sửa
@@ -2591,6 +2657,8 @@ ROUTES = {
     "/api/set_minh_hoa_sheet": api_set_minh_hoa_sheet,
     "/api/kho_minh_hoa_lam_moi": api_kho_minh_hoa_lam_moi,
     "/api/tai_minh_hoa": api_tai_minh_hoa,
+    "/api/tao_bien_the": api_tao_bien_the,
+    "/api/set_bien_the": api_set_bien_the,
     "/api/set_minh_hoa_hoi_lai": api_set_minh_hoa_hoi_lai,
     "/api/set_khong_clip_goc": api_set_khong_clip_goc,
     "/api/nghe_thu_giong": api_nghe_thu_giong,
