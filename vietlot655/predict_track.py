@@ -21,7 +21,9 @@ Vì vậy bảng xếp hạng sắp theo độ phủ, không theo TB trùng (v�
 """
 
 import argparse
+import hashlib
 import json
+import os
 import random
 import sqlite3
 import statistics
@@ -247,6 +249,17 @@ def init_tables(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE prediction_stats ADD COLUMN cov3 INTEGER NOT NULL DEFAULT 0"
         )
+    # Điểm đã lưu của update_scores còn dùng lại được hay không: xem _cached_scores.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prediction_cache (
+            game_type  TEXT PRIMARY KEY,
+            signature  TEXT NOT NULL,
+            n_draws    INTEGER NOT NULL,
+            draws_hash TEXT NOT NULL
+        )
+        """
+    )
     conn.commit()
 
 
@@ -915,22 +928,32 @@ def backfill(
 
 
 # --------------------------------------------------------------------------- #
-# Tính lại TOÀN BỘ từ đầu mỗi lần mở trang (không dùng điểm cũ đã lưu)
+# Chấm 7 giải thuật trên TOÀN BỘ lịch sử — kỳ đã chấm thì dùng lại điểm đã lưu
 # --------------------------------------------------------------------------- #
 MIN_HISTORY = 50  # kỳ đầu tiên được chấm phải có ít nhất chừng này kỳ trước nó
+# Thiếu ít kỳ thì chấm ngay trong tiến trình này: dựng pool trên Windows (spawn +
+# import lại module ở từng worker) tốn hơn cả việc chấm vài kỳ.
+INLINE_MAX = 8
 
 _W_CHRONO: list[dict] = []
 _W_N = 0
 _W_SETS = DEFAULT_SETS
+_W_GAME = ""
 
 
-def _w_init(chrono: list[dict], n: int, n_sets: int) -> None:
-    global _W_CHRONO, _W_N, _W_SETS
-    _W_CHRONO, _W_N, _W_SETS = chrono, n, n_sets
+def _w_init(chrono: list[dict], n: int, n_sets: int, game_type: str) -> None:
+    global _W_CHRONO, _W_N, _W_SETS, _W_GAME
+    _W_CHRONO, _W_N, _W_SETS, _W_GAME = chrono, n, n_sets, game_type
 
 
 def _w_score(i: int) -> tuple[int, dict, dict]:
-    """Chấm kỳ thứ i: hồ sơ chỉ lấy từ các kỳ TRƯỚC nó (không nhìn trước kết quả)."""
+    """Chấm kỳ thứ i: hồ sơ chỉ lấy từ các kỳ TRƯỚC nó (không nhìn trước kết quả).
+
+    RNG gieo theo (game, kỳ đích, số bộ) nên điểm của một kỳ là HẰNG: chấm lúc nào,
+    ở tiến trình nào cũng ra đúng con số đó. Nhờ vậy điểm đã lưu và điểm tính lại
+    từ đầu là một — update_scores mới được phép dùng lại điểm cũ.
+    """
+    random.seed(f"{_W_GAME}|{_W_CHRONO[i]['period']}|{_W_SETS}")
     hist = [d["nums"] for d in reversed(_W_CHRONO[:i])]  # mới -> cũ
     prof = compute_profile(hist, _W_N)
     win = set(_W_CHRONO[i]["nums"])
@@ -946,58 +969,144 @@ def _w_score(i: int) -> tuple[int, dict, dict]:
     return i, counts, covs
 
 
-def recompute_all(
+def _algo_signature(n_sets: int) -> str:
+    """Dấu vân tay của cách chấm: nội dung file này + số bộ mỗi kỳ.
+
+    Sửa bất cứ gì trong file (giải thuật, hằng số, cả chú thích) là dấu đổi, toàn
+    bộ điểm đã lưu bị bỏ và chấm lại từ đầu. Thà chấm lại thừa một lần còn hơn để
+    bảng xếp hạng trộn điểm của hai phiên bản giải thuật. Không đọc được file thì
+    trả chuỗi rỗng = không bao giờ khớp = lần nào cũng chấm lại.
+    """
+    try:
+        h = hashlib.sha1(Path(__file__).read_bytes())
+    except OSError:
+        return ""
+    h.update(f"|{n_sets}|{MIN_HISTORY}".encode())
+    return h.hexdigest()
+
+
+def _draws_hash(chrono: list[dict]) -> str:
+    h = hashlib.sha1()
+    for d in chrono:
+        h.update(f"{d['period']}:{d['date']}:{d['nums']};".encode())
+    return h.hexdigest()
+
+
+def _cached_scores(
+    conn: sqlite3.Connection, game_type: str, chrono: list[dict], n_sets: int, sig: str
+) -> dict[int, int]:
+    """Các kỳ có điểm đã lưu còn dùng được: {vị trí trong chrono: batch_id}.
+
+    Điểm của kỳ i phụ thuộc MỌI kỳ trước nó, nên chỉ dùng lại khi (1) cách chấm
+    không đổi và (2) đoạn lịch sử mà lần chấm trước đã thấy vẫn y nguyên. Sai một
+    trong hai là trả về rỗng -> chấm lại tất cả.
+    """
+    row = conn.execute(
+        "SELECT signature, n_draws, draws_hash FROM prediction_cache WHERE game_type=?",
+        (game_type,),
+    ).fetchone()
+    if not sig or row is None or row["signature"] != sig:
+        return {}
+    k = row["n_draws"]
+    if k > len(chrono) or _draws_hash(chrono[:k]) != row["draws_hash"]:
+        return {}
+    pos = {d["period"]: i for i, d in enumerate(chrono)}
+    have: dict[int, int] = {}
+    for b in conn.execute(
+        """
+        SELECT b.id, b.after_period, b.target_period
+        FROM prediction_batches b
+        JOIN prediction_stats ps ON ps.batch_id = b.id
+        WHERE b.game_type=? AND b.status='scored' AND b.n_sets=?
+        GROUP BY b.id
+        HAVING COUNT(*) = ?
+        ORDER BY b.id
+        """,
+        (game_type, n_sets, len(METHODS)),
+    ):
+        i = pos.get(b["target_period"])
+        # i >= k: batch do crawl.py chấm (vé bốc không gieo seed) — không dùng.
+        if i is None or not (MIN_HISTORY <= i < k) or i in have:
+            continue
+        if chrono[i - 1]["period"] == b["after_period"]:
+            have[i] = b["id"]
+    return have
+
+
+def update_scores(
     db_path: Path | str,
     game_type: str,
     n_sets: int = DEFAULT_SETS,
     workers: int | None = None,
     progress=None,
+    force: bool = False,
 ) -> dict:
-    """Xoá sạch điểm cũ rồi chấm lại 7 giải thuật trên MỌI kỳ trong lịch sử.
+    """Chấm 7 giải thuật trên MỌI kỳ trong lịch sử, chỉ tính những kỳ chưa có điểm.
 
     Với mỗi kỳ (trừ MIN_HISTORY kỳ đầu làm gốc): tạo n_sets bộ/giải thuật chỉ từ
-    các kỳ trước nó, chấm với chính kỳ đó. Chạy song song nhiều tiến trình.
+    các kỳ trước nó, chấm với chính kỳ đó. Lần chạy thường ngày chỉ còn vài kỳ mới
+    về phải chấm. Chấm lại tất cả khi force=True, khi file này bị sửa, khi đổi
+    n_sets hoặc khi lịch sử cũ thay đổi (xem _cached_scores) — kết quả vẫn y hệt
+    vì điểm từng kỳ là hằng (xem _w_score).
+
+    Batch nào của game này không thuộc bộ điểm đó (đang 'pending', do crawl.py
+    chấm, trùng kỳ...) đều bị xoá, để bảng xếp hạng chỉ gồm đúng 1 batch/kỳ.
     Chỉ ghi DB khi đã tính xong hết, nên lỗi giữa chừng không làm mất bảng cũ.
     """
-    import os
     from concurrent.futures import ProcessPoolExecutor
 
     conn = _connect(db_path)
     try:
         chrono = _fetch_draws_chrono(conn, game_type)
+        total = len(chrono)
+        if total <= MIN_HISTORY:
+            return {"ok": False, "msg": f"Chỉ có {total} kỳ, không đủ để tính."}
+        sig = _algo_signature(n_sets)
+        have = {} if force else _cached_scores(conn, game_type, chrono, n_sets, sig)
     finally:
         conn.close()
-    total = len(chrono)
-    if total <= MIN_HISTORY:
-        return {"ok": False, "msg": f"Chỉ có {total} kỳ, không đủ để tính."}
     n = gap_stats.resolve_n(None, game_type)
     idx = list(range(MIN_HISTORY, total))
-    workers = workers or max(1, (os.cpu_count() or 2) - 1)
+    todo = [i for i in idx if i not in have]
 
     results: dict[int, tuple[dict, dict]] = {}
-    with ProcessPoolExecutor(
-        max_workers=workers, initializer=_w_init, initargs=(chrono, n, n_sets)
-    ) as ex:
-        for i, counts, covs in ex.map(_w_score, idx, chunksize=4):
-            results[i] = (counts, covs)
-            if progress:
-                progress(len(results), len(idx))
+    if len(todo) <= INLINE_MAX:
+        state = random.getstate()  # _w_score gieo lại RNG chung — trả về như cũ
+        try:
+            _w_init(chrono, n, n_sets, game_type)
+            for i in todo:
+                _, counts, covs = _w_score(i)
+                results[i] = (counts, covs)
+                if progress:
+                    progress(len(results), len(todo))
+        finally:
+            random.setstate(state)
+    else:
+        workers = min(workers or max(1, (os.cpu_count() or 2) - 1), len(todo))
+        with ProcessPoolExecutor(
+            max_workers=workers, initializer=_w_init,
+            initargs=(chrono, n, n_sets, game_type),
+        ) as ex:
+            for i, counts, covs in ex.map(_w_score, todo, chunksize=4):
+                results[i] = (counts, covs)
+                if progress:
+                    progress(len(results), len(todo))
 
     conn = _connect(db_path)
     try:
-        conn.execute(
-            "DELETE FROM prediction_stats WHERE batch_id IN "
-            "(SELECT id FROM prediction_batches WHERE game_type=?)",
-            (game_type,),
-        )
-        conn.execute(
-            "DELETE FROM prediction_sets WHERE batch_id IN "
-            "(SELECT id FROM prediction_batches WHERE game_type=?)",
-            (game_type,),
-        )
-        conn.execute("DELETE FROM prediction_batches WHERE game_type=?", (game_type,))
+        keep = set(have.values())
+        stale = [
+            (r[0],)
+            for r in conn.execute(
+                "SELECT id FROM prediction_batches WHERE game_type=?", (game_type,)
+            ).fetchall()
+            if r[0] not in keep
+        ]
+        conn.executemany("DELETE FROM prediction_stats WHERE batch_id=?", stale)
+        conn.executemany("DELETE FROM prediction_sets WHERE batch_id=?", stale)
+        conn.executemany("DELETE FROM prediction_batches WHERE id=?", stale)
         now = datetime.now().isoformat(timespec="seconds")
-        for i in idx:
+        for i in todo:
             target, anchor = chrono[i], chrono[i - 1]
             cur = conn.execute(
                 """
@@ -1011,10 +1120,15 @@ def recompute_all(
             )
             counts, covs = results[i]
             _write_stats(conn, cur.lastrowid, counts, covs)
+        conn.execute(
+            "INSERT OR REPLACE INTO prediction_cache "
+            "(game_type, signature, n_draws, draws_hash) VALUES (?,?,?,?)",
+            (game_type, sig, total, _draws_hash(chrono)),
+        )
         conn.commit()
     finally:
         conn.close()
-    return {"ok": True, "periods": len(idx)}
+    return {"ok": True, "periods": len(idx), "computed": len(todo), "reused": len(have)}
 
 
 # --------------------------------------------------------------------------- #

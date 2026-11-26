@@ -1,0 +1,543 @@
+{
+ "cover": [
+  52.43,
+  69.87
+ ],
+ "ex": [
+  {
+   "n": 7,
+   "name": "VƯƠN DUỖI TOÀN THÂN",
+   "start": 0.0,
+   "end": 52.43,
+   "info": "8–10 nhịp"
+  },
+  {
+   "n": 8,
+   "name": "NHÚN – HẠ BẢ VAI",
+   "start": 53.1,
+   "end": 114.4,
+   "info": "8–10 nhịp"
+  }
+ ],
+ "cues": [
+  {
+   "t": 0.3,
+   "e": 4.4,
+   "text": "VƯƠN DUỖI TOÀN THÂN",
+   "sub": "thực hiện 8 đến 10 nhịp"
+  },
+  {
+   "t": 4.68,
+   "e": 9.6,
+   "text": "KÉO GIÃN DỌC TRỤC CỘT SỐNG",
+   "sub": "từ cổ xuống xương cùng",
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      740,
+      1130
+     ],
+     "to": [
+      480,
+      1190
+     ]
+    }
+   ],
+   "marks": [
+    [
+     740,
+     1130
+    ],
+    [
+     480,
+     1190
+    ]
+   ],
+   "tag": "CỘT SỐNG"
+  },
+  {
+   "t": 9.64,
+   "e": 13.9,
+   "text": "KÉO CĂNG CHUỖI CƠ BẮP CHÂN",
+   "marks": [
+    [
+     150,
+     1200
+    ]
+   ],
+   "tag": "BẮP CHÂN",
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      460,
+      1190
+     ],
+     "to": [
+      40,
+      1200
+     ]
+    }
+   ]
+  },
+  {
+   "t": 13.92,
+   "e": 16.0,
+   "text": "KHAI THÔNG KHÍ HUYẾT",
+   "sub": "đánh thức hệ thần kinh trung ương",
+   "kind": "ok",
+   "marks": [
+    [
+     830,
+     1110
+    ]
+   ],
+   "tag": "THẦN KINH"
+  },
+  {
+   "t": 16.2,
+   "e": 19.5,
+   "text": "NẰM NGỬA THẲNG, THOẢI MÁI",
+   "sub": "tư thế chuẩn bị",
+   "fx": [
+    {
+     "type": "floor",
+     "x1": 40,
+     "x2": 950,
+     "y": 1255
+    }
+   ]
+  },
+  {
+   "t": 19.6,
+   "e": 23.9,
+   "text": "2 CHÂN DUỖI THẲNG · ĐAN NGÓN TAY",
+   "sub": "đặt tay trước bụng",
+   "marks": [
+    [
+     600,
+     1160
+    ]
+   ],
+   "tag": "ĐAN TAY"
+  },
+  {
+   "t": 24.2,
+   "e": 27.3,
+   "text": "HÍT MỘT HƠI THẬT SÂU",
+   "fx": [
+    {
+     "type": "squeeze",
+     "c": [
+      650,
+      1150
+     ]
+    }
+   ]
+  },
+  {
+   "t": 27.54,
+   "e": 29.5,
+   "text": "LẬT NGỬA LÒNG BÀN TAY · VƯƠN QUA ĐẦU",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      640,
+      1140
+     ],
+     "to": [
+      880,
+      960
+     ],
+     "curve": -40
+    }
+   ]
+  },
+  {
+   "t": 29.54,
+   "e": 31.8,
+   "text": "DUỖI THẲNG 2 CẲNG CHÂN",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      460,
+      1190
+     ],
+     "to": [
+      40,
+      1200
+     ]
+    }
+   ]
+  },
+  {
+   "t": 31.84,
+   "e": 35.1,
+   "text": "KÉO NGƯỢC MŨI CHÂN VỀ PHÍA NGƯỜI",
+   "marks": [
+    [
+     45,
+     1190
+    ]
+   ],
+   "tag": "MŨI CHÂN",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      20,
+      1090
+     ],
+     "to": [
+      120,
+      1110
+     ],
+     "curve": -40
+    }
+   ]
+  },
+  {
+   "t": 35.32,
+   "e": 39.2,
+   "text": "GIỮ CĂNG KHOẢNG 5 GIÂY",
+   "hold": 5,
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      880,
+      970
+     ],
+     "to": [
+      40,
+      1200
+     ]
+    }
+   ]
+  },
+  {
+   "t": 39.36,
+   "e": 41.1,
+   "text": "THỞ RA THẬT CHẬM",
+   "fx": [
+    {
+     "type": "squeeze",
+     "c": [
+      650,
+      1150
+     ]
+    }
+   ]
+  },
+  {
+   "t": 41.16,
+   "e": 43.4,
+   "text": "THU TAY VỀ, ĐẶT LÊN BỤNG",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      880,
+      980
+     ],
+     "to": [
+      620,
+      1140
+     ],
+     "curve": 40
+    }
+   ]
+  },
+  {
+   "t": 43.44,
+   "e": 45.4,
+   "text": "THẢ LỎNG BÀN CHÂN",
+   "marks": [
+    [
+     45,
+     1190
+    ]
+   ],
+   "tag": "THẢ LỎNG",
+   "kind": "ok"
+  },
+  {
+   "t": 47.06,
+   "e": 51.3,
+   "text": "LẶP LẠI 8–10 NHỊP",
+   "sub": "hít vào vươn – thở ra thả lỏng"
+  },
+  {
+   "t": 69.9,
+   "e": 71.5,
+   "text": "TƯ THẾ CHUẨN BỊ"
+  },
+  {
+   "t": 71.53,
+   "e": 73.3,
+   "text": "NGỒI THẲNG LƯNG",
+   "sub": "trên mép giường hoặc ghế",
+   "fx": [
+    {
+     "type": "beam",
+     "from": [
+      510,
+      900
+     ],
+     "to": [
+      510,
+      1330
+     ]
+    }
+   ]
+  },
+  {
+   "t": 73.37,
+   "e": 77.4,
+   "text": "2 BÀN CHÂN ĐẶT PHẲNG TRÊN SÀN",
+   "sub": "2 tay thả lỏng tự nhiên bên hông",
+   "kind": "ok"
+  },
+  {
+   "t": 77.85,
+   "e": 82.3,
+   "text": "HÍT VÀO BẰNG MŨI",
+   "marks": [
+    [
+     510,
+     760
+    ]
+   ],
+   "tag": "MŨI",
+   "fx": [
+    {
+     "type": "squeeze",
+     "c": [
+      510,
+      1150
+     ]
+    }
+   ]
+  },
+  {
+   "t": 82.46,
+   "e": 85.8,
+   "text": "NHÚN 2 VAI LÊN CAO",
+   "sub": "sát về phía mang tai",
+   "marks": [
+    [
+     282,
+     1000
+    ],
+    [
+     752,
+     1000
+    ]
+   ],
+   "tag": "BẢ VAI",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      230,
+      1130
+     ],
+     "to": [
+      230,
+      900
+     ]
+    },
+    {
+     "type": "arrow",
+     "from": [
+      800,
+      1130
+     ],
+     "to": [
+      800,
+      900
+     ]
+    }
+   ]
+  },
+  {
+   "t": 85.96,
+   "e": 90.1,
+   "text": "GIỮ NGUYÊN KHOẢNG 5 GIÂY",
+   "hold": 5,
+   "marks": [
+    [
+     282,
+     1000
+    ],
+    [
+     752,
+     1000
+    ]
+   ],
+   "tag": "GIỮ VAI CAO"
+  },
+  {
+   "t": 90.18,
+   "e": 91.7,
+   "text": "THỞ RA BẰNG MIỆNG",
+   "fx": [
+    {
+     "type": "squeeze",
+     "c": [
+      510,
+      1150
+     ]
+    }
+   ]
+  },
+  {
+   "t": 91.74,
+   "e": 95.2,
+   "text": "HẠ NHẸ 2 VAI XUỐNG THẬT THẤP",
+   "marks": [
+    [
+     282,
+     1000
+    ],
+    [
+     752,
+     1000
+    ]
+   ],
+   "tag": "BẢ VAI",
+   "fx": [
+    {
+     "type": "arrow",
+     "from": [
+      230,
+      880
+     ],
+     "to": [
+      230,
+      1110
+     ]
+    },
+    {
+     "type": "arrow",
+     "from": [
+      800,
+      880
+     ],
+     "to": [
+      800,
+      1110
+     ]
+    }
+   ]
+  },
+  {
+   "t": 95.28,
+   "e": 98.0,
+   "text": "GIỮ THẲNG CỔ & ĐẦU",
+   "sub": "chỉ di chuyển khớp vai",
+   "kind": "ok",
+   "marks": [
+    [
+     282,
+     1000
+    ],
+    [
+     752,
+     1000
+    ]
+   ],
+   "tag": "CHỈ VAI CHUYỂN ĐỘNG"
+  },
+  {
+   "t": 98.04,
+   "e": 101.0,
+   "text": "KHÔNG GỒNG CỨNG HÀM",
+   "kind": "no",
+   "marks": [
+    [
+     510,
+     840
+    ]
+   ],
+   "tag": "HÀM THẢ LỎNG"
+  },
+  {
+   "t": 101.04,
+   "e": 104.0,
+   "text": "LẶP LẠI 8–10 NHỊP",
+   "sub": "hít vào nhún – thở ra hạ"
+  }
+ ],
+ "demo": [
+  {
+   "t": 45.5,
+   "e": 47.0,
+   "text": "NGHỈ · THỞ ĐỀU"
+  },
+  {
+   "t": 104.1,
+   "e": 114.4,
+   "text": "NHÚN LÊN · GIỮ · HẠ XUỐNG",
+   "sub": "thở đều, cổ và đầu giữ thẳng",
+   "fx": [
+    {
+     "type": "updown",
+     "c": [
+      230,
+      1000
+     ],
+     "label": ""
+    },
+    {
+     "type": "updown",
+     "c": [
+      800,
+      1000
+     ],
+     "label": ""
+    }
+   ]
+  }
+ ],
+ "diagram": [
+  {
+   "t": 53.17,
+   "e": 56.2,
+   "text": "ĐỘNG TÁC 8 · NHÚN – HẠ BẢ VAI",
+   "phase": "intro"
+  },
+  {
+   "t": 56.33,
+   "e": 62.0,
+   "text": "ĐAU LƯNG KÉO THEO CO RÚT CƠ THANG",
+   "sub": "và bả vai → đau mỏi vai gáy",
+   "phase": "tense",
+   "kind": "no"
+  },
+  {
+   "t": 62.03,
+   "e": 64.95,
+   "text": "BƠM MÁU NUÔI DƯỠNG VÙNG VAI GÁY",
+   "phase": "pump",
+   "kind": "ok"
+  },
+  {
+   "t": 64.99,
+   "e": 66.65,
+   "text": "GIẢI PHÓNG CHÈN ÉP MẠCH MÁU LÊN NÃO",
+   "phase": "brain",
+   "kind": "ok"
+  },
+  {
+   "t": 66.67,
+   "e": 69.8,
+   "text": "LÀM DỊU HỆ THẦN KINH",
+   "phase": "calm",
+   "kind": "ok"
+  }
+ ]
+}

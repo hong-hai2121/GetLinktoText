@@ -35,8 +35,9 @@ MEGA_DB_PATH = DB_PATH.parent / "vietlott_mega645_data.db"
 MEGA_HTML_PATH = EXPORT_DIR / "stats_mega645.html"
 ICON_PATH = BASE_DIR / "vietlott_stats.ico"
 SHORTCUT_NAME = "Thống kê Vietlott.lnk"
-# Số bộ mỗi giải thuật cho MỖI kỳ khi tính lại toàn bộ lịch sử lúc mở trang.
-# 1000 bộ x ~2900 kỳ mất 20-30 phút trên máy này; 100 bộ còn vài phút.
+# Số bộ mỗi giải thuật cho MỖI kỳ khi chấm trên toàn bộ lịch sử. Đổi số này là
+# điểm đã lưu bị bỏ, lần mở kế tiếp chấm lại tất cả một lần: 100 bộ x ~2800 kỳ
+# mất khoảng 1 phút trên máy này, 1000 bộ thì 20-30 phút.
 TRACK_SETS = 100
 
 POSITION_NAMES = {
@@ -135,31 +136,43 @@ def compute_extra_stats(db_path: Path | str, game_type: str) -> dict | None:
     }
 
 
-def compute_track(db_path: Path | str, game_type: str) -> dict | None:
-    """Bảng xếp hạng 7 giải thuật, TÍNH LẠI TỪ ĐẦU mỗi lần mở trang.
+def compute_track(
+    db_path: Path | str, game_type: str, recompute: bool = False
+) -> dict | None:
+    """Bảng xếp hạng 7 giải thuật trên toàn bộ lịch sử (mỗi kỳ chỉ dùng các kỳ trước nó).
 
-    Không dùng điểm đã lưu từ lần trước: predict_track.recompute_all xoá sạch rồi
-    chấm lại mọi kỳ trong lịch sử (mỗi kỳ chỉ dùng các kỳ trước nó). Lỗi thì trả
-    None và trang vẫn chạy bình thường.
+    Kỳ đã chấm thì dùng lại điểm đã lưu, chỉ chấm thêm kỳ mới về — chấm lại cả
+    ~1400 kỳ mỗi lần mở trang từng chiếm gần hết thời gian chờ. Điểm từng kỳ là
+    hằng (RNG gieo theo kỳ) nên dùng lại hay tính lại từ đầu đều ra cùng một bảng;
+    predict_track.update_scores tự chấm lại tất cả khi giải thuật / TRACK_SETS /
+    lịch sử cũ thay đổi, hoặc khi recompute=True (--tinh-lai). Lỗi thì trả None và
+    trang vẫn chạy bình thường.
     """
     try:
         import predict_track
 
         t0 = time.time()
-        print(f"Đang tính lại 7 giải thuật trên toàn bộ lịch sử {game_type}...",
-              flush=True)
+        shown = False
 
         def _prog(done: int, total: int) -> None:
-            if done == total or done % 50 == 0:
-                print(f"\r  {done}/{total} kỳ", end="", flush=True)
+            nonlocal shown
+            if total > predict_track.INLINE_MAX and (done == total or done % 50 == 0):
+                shown = True
+                print(f"\r  {game_type}: đang chấm {done}/{total} kỳ", end="", flush=True)
 
-        res = predict_track.recompute_all(
-            db_path, game_type, n_sets=TRACK_SETS, progress=_prog
+        res = predict_track.update_scores(
+            db_path, game_type, n_sets=TRACK_SETS, progress=_prog, force=recompute
         )
-        print(f"\n  xong sau {time.time() - t0:.0f} giây.", flush=True)
+        if shown:
+            print(flush=True)
         if not res.get("ok"):
             print(f"⚠ {res.get('msg')}")
             return None
+        print(
+            f"7 giải thuật {game_type}: chấm {res['computed']} kỳ, dùng lại điểm "
+            f"đã lưu của {res['reused']} kỳ ({time.time() - t0:.1f} giây).",
+            flush=True,
+        )
         return predict_track.load_scoreboard(db_path, game_type)
     except Exception as exc:  # noqa: BLE001
         print(f"⚠ Không tính được bảng giải thuật: {type(exc).__name__}: {exc}")
@@ -167,7 +180,8 @@ def compute_track(db_path: Path | str, game_type: str) -> dict | None:
 
 
 def load_game_data(
-    conn: sqlite3.Connection, db_path: Path | str, game_type: str
+    conn: sqlite3.Connection, db_path: Path | str, game_type: str,
+    recompute: bool = False,
 ) -> dict:
     total_row = conn.execute(
         "SELECT MAX(total_draws) FROM number_frequency WHERE game_type = ?",
@@ -243,13 +257,14 @@ def load_game_data(
         "positions": positions,
         "frequency": frequency,
         "extra": compute_extra_stats(db_path, game_type),
-        "track": compute_track(db_path, game_type),
+        "track": compute_track(db_path, game_type, recompute),
         "history": load_history(db_path, game_type),
     }
 
 
 def load_all(
-    conn: sqlite3.Connection, db_path: Path | str, game_types: list[str] | None
+    conn: sqlite3.Connection, db_path: Path | str, game_types: list[str] | None,
+    recompute: bool = False,
 ) -> list[dict]:
     if not game_types:
         game_types = [
@@ -260,7 +275,7 @@ def load_all(
         ]
     data = []
     for game_type in game_types:
-        game = load_game_data(conn, db_path, game_type)
+        game = load_game_data(conn, db_path, game_type, recompute)
         if game["total_draws"]:
             data.append(game)
     return data
@@ -337,7 +352,9 @@ def load_history(db_path: Path | str, game_type: str) -> list[dict]:
     return history
 
 
-def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
+def load_game_data_minimal(
+    db_path: Path | str, game_type: str, recompute: bool = False
+) -> dict | None:
     """Nạp dữ liệu tối thiểu cho trang rút gọn (Gợi ý / Backtest / Mô phỏng).
 
     Không cần các bảng number_frequency / position_* / number_streaks — mọi thứ
@@ -352,13 +369,14 @@ def load_game_data_minimal(db_path: Path | str, game_type: str) -> dict | None:
         "positions": [],
         "frequency": compute_frequency_list(db_path, game_type, extra["n"]),
         "extra": extra,
-        "track": compute_track(db_path, game_type),
+        "track": compute_track(db_path, game_type, recompute),
         "history": load_history(db_path, game_type),
     }
 
 
 def load_all_minimal(
-    conn: sqlite3.Connection, db_path: Path | str, game_types: list[str] | None
+    conn: sqlite3.Connection, db_path: Path | str, game_types: list[str] | None,
+    recompute: bool = False,
 ) -> list[dict]:
     if not game_types:
         game_types = [
@@ -369,7 +387,7 @@ def load_all_minimal(
         ]
     data = []
     for game_type in game_types:
-        game = load_game_data_minimal(db_path, game_type)
+        game = load_game_data_minimal(db_path, game_type, recompute)
         if game and game["total_draws"]:
             data.append(game)
     return data
@@ -608,7 +626,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div id="btBody"></div>
   </div>
 
-  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">tính lại từ đầu mỗi lần mở · mỗi kỳ: tạo 1000 bộ/giải thuật chỉ từ các kỳ TRƯỚC nó rồi chấm với kết quả thật</span></h2>
+  <h2>Giải thuật nào đang trúng nhiều nhất? <span class="hint">chấm trên toàn bộ lịch sử · mỗi kỳ: tạo %%TRACK_SETS%% bộ/giải thuật chỉ từ các kỳ TRƯỚC nó rồi chấm với kết quả thật</span></h2>
   <div class="panel" id="trackPanel" style="max-width:1000px">
     <div class="pc" id="trackStatus"></div>
     <div id="trackBody"></div>
@@ -1653,11 +1671,12 @@ function renderTrack(){
         '(không chế độ nào làm được) mà là <b>độ phủ</b>: cùng số vé, bội số ít chồng lấn hơn thì '+
         'nhiều cơ hội hơn. Đó là lý do bảng này xếp theo độ phủ.</div></div>';
 
-  status.innerHTML = 'Vừa tính lại <b>'+tr.scored_batches+'</b> kỳ thật'+
+  status.innerHTML = 'Đã chấm <b>'+tr.scored_batches+'</b> kỳ thật'+
     ' · ngẫu nhiên lý thuyết TB <b>'+tr.baseline.avg+'</b> số trùng/vé.';
   body.innerHTML = '<div class="btgrid">'+cols+'</div>'+ verdict + distTbl + hist +
     '<div class="pc" style="margin-top:10px">Khác với bảng ở trên (bộ số lưu trong trình duyệt), '+
-    'bảng này <b>tính lại từ đầu mỗi lần mở</b>: bộ số của mỗi kỳ chỉ tạo từ các kỳ trước nó nên không thể "nhìn trước kết quả". '+
+    'bảng này <b>chấm trên toàn bộ lịch sử</b>: bộ số của mỗi kỳ chỉ tạo từ các kỳ trước nó nên không thể "nhìn trước kết quả". '+
+    'Kỳ đã chấm giữ nguyên điểm (chấm lại vẫn ra đúng số đó), mỗi lần mở chỉ chấm thêm kỳ mới về. '+
     '<b>TB trùng/vé</b> = trung bình số trùng trên toàn bộ vé đã chấm; <b>Thắng kỳ</b> = số kỳ giải thuật đó '+
     'có TB cao nhất (hoà thì chia đôi). '+
     '<b>Bảng xếp theo Độ phủ, không theo TB trùng</b> — TB trùng của mọi giải thuật đều dao động quanh '+
@@ -1904,6 +1923,7 @@ def render_html(
         .replace("%%TITLE%%", title)
         .replace("%%NAV%%", nav)
         .replace("%%FAVICON%%", _favicon_tag())
+        .replace("%%TRACK_SETS%%", str(TRACK_SETS))
     )
 
 
@@ -1931,10 +1951,15 @@ def run_update(game: str) -> list[str]:
     """
     failed: list[str] = []
     jobs: list[tuple[str, list[str]]] = []
+    # --no-predict: crawl.py khỏi chốt 7×1000 vé chờ chấm. Ngay sau khi cào,
+    # compute_track dựng bảng xếp hạng từ lịch sử và xoá mọi batch khác của game,
+    # nên ở luồng này số vé đó chỉ là ghi vào DB rồi xoá đi.
     if game in ("power655", "all"):
-        jobs.append(("Power 6/55", [str(BASE_DIR / "crawl.py")]))
+        jobs.append(("Power 6/55", [str(BASE_DIR / "crawl.py"), "--no-predict"]))
     if game in ("mega645", "all"):
-        jobs.append(("Mega 6/45", [str(BASE_DIR / "crawl_mega645.py")]))
+        jobs.append(
+            ("Mega 6/45", [str(BASE_DIR / "crawl_mega645.py"), "--no-predict"])
+        )
     if not jobs:
         return failed
 
@@ -2109,6 +2134,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Cào kỳ mới (crawl.py + crawl_mega645.py) trước khi sinh trang.",
     )
     parser.add_argument(
+        "--tinh-lai",
+        action="store_true",
+        help=(
+            "Bỏ điểm đã lưu, chấm lại 7 giải thuật trên toàn bộ lịch sử (khoảng "
+            "1 phút). Bình thường không cần: chỉ kỳ mới về mới phải chấm."
+        ),
+    )
+    parser.add_argument(
         "--tao-shortcut",
         action="store_true",
         help="Tạo shortcut '%s' ra Desktop rồi thoát." % SHORTCUT_NAME,
@@ -2158,7 +2191,9 @@ def build_page_specs(args: argparse.Namespace) -> list[dict]:
     return specs
 
 
-def build_page_data(db_path: str, game_types: list[str]) -> list[dict]:
+def build_page_data(
+    db_path: str, game_types: list[str], recompute: bool = False
+) -> list[dict]:
     """Nạp dữ liệu cho 1 trang, tự hạ xuống loader nhẹ nếu DB thiếu bảng.
 
     Trang chỉ còn các mục không cần biểu đồ, nhưng payload vẫn phải có
@@ -2169,12 +2204,12 @@ def build_page_data(db_path: str, game_types: list[str]) -> list[dict]:
     conn.execute("PRAGMA busy_timeout=10000")
     try:
         try:
-            return load_all(conn, db_path, game_types)
+            return load_all(conn, db_path, game_types, recompute)
         except sqlite3.OperationalError as exc:
             # DB chưa chạy number_stats bao giờ -> thiếu number_frequency /
             # position_*. Tính thẳng từ draw_results còn hơn không có trang nào.
             print(f"⚠ {Path(db_path).name}: {exc} — tính từ draw_results.")
-            return load_all_minimal(conn, db_path, game_types)
+            return load_all_minimal(conn, db_path, game_types, recompute)
     finally:
         conn.close()
 
@@ -2201,7 +2236,7 @@ def main() -> int:
         if not Path(spec["db"]).exists():
             print(f"⚠ Không thấy DB {spec['db']} — bỏ qua {spec['games']}.")
             continue
-        data = build_page_data(spec["db"], spec["games"])
+        data = build_page_data(spec["db"], spec["games"], args.tinh_lai)
         if not data:
             print(
                 f"⚠ Không có dữ liệu cho {spec['games']} trong {spec['db']} "

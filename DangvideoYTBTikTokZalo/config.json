@@ -2,9 +2,10 @@
   "chrome_path": "",
   "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
   "profile_dir": "Profile 9",
-  "extension_token": "Ch97U3l_jFXfW4eN",
+  "extension_token": "ebEG4kyeLddpp1n3b6lqrtMeHTiYp5pQbLj-Ea9weo0",
   "client_name": "Đăng video YouTube",
   "connect_timeout_sec": 60,
+  "cho_bam_cho_phep_sec": 120,
   "channel_name": "",
   "channel_url": "",
   "schedule_times": [
@@ -31,7 +32,7 @@
       "browser_path": "",
       "user_data_dir": "C:\\Users\\PC\\AppData\\Local\\Google\\Chrome\\User Data",
       "profile_dir": "Profile 9",
-      "extension_token": "Ch97U3l_jFXfW4eN",
+      "extension_token": "ebEG4kyeLddpp1n3b6lqrtMeHTiYp5pQbLj-Ea9weo0",
       "client_name": "Đăng video YouTube"
     },
     "tiktok": {
