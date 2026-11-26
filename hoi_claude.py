@@ -97,15 +97,54 @@ def hoi(cau_hoi: str, *, he_thong: str | None = None, model: str | None = None, 
                            cwd=str(thu_muc or Path.home()), env=env, timeout=thoi_gian, creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
         raise ClaudeLoi(f"Claude không trả lời trong {thoi_gian:.0f}s.") from None
-    try:
-        d = json.loads(r.stdout)
-    except ValueError:
-        raise ClaudeLoi((r.stderr or r.stdout or f"claude thoát mã {r.returncode}").strip()[:2000]) from None
+    d = _doc_json(r.stdout)
+    if d is None:
+        raise ClaudeLoi((r.stderr or r.stdout or f"claude thoát mã {r.returncode}").strip()[:2000])
     if r.returncode != 0 or d.get("is_error"):
         raise ClaudeLoi(str(d.get("result") or r.stderr or f"claude thoát mã {r.returncode}").strip()[:2000])
-    model_thuc = next(iter(d.get("modelUsage") or {}), "")
     return TraLoi(text=str(d.get("result") or "").strip(), session_id=str(d.get("session_id") or ""),
-                  model=model_thuc, cost_usd=float(d.get("total_cost_usd") or 0), raw=d)
+                  model=_model_chinh(d, model), cost_usd=float(d.get("total_cost_usd") or 0), raw=d)
+
+
+def _doc_json(out: str) -> dict | None:
+    """JSON kết quả trong stdout. Có lúc CLI in thêm dòng chữ sau JSON (vd "Client.listTools() called but server does
+    not advertise tools capability") -> json.loads cả khối hỏng dù câu trả lời tốt; khi đó tìm đúng dòng JSON."""
+    out = out.strip()
+    try:
+        d = json.loads(out)
+        if isinstance(d, dict):
+            return d
+    except ValueError:
+        pass
+    for dong in out.splitlines():
+        dong = dong.strip()
+        if dong.startswith("{") and dong.endswith("}"):
+            try:
+                d = json.loads(dong)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and ("result" in d or "is_error" in d):
+                return d
+    return None
+
+
+def _model_chinh(d: dict, yeu_cau: str | None) -> str:
+    """Model đã viết câu trả lời. `modelUsage` còn chứa model nhỏ CLI dùng cho việc phụ (haiku, thường đứng ĐẦU) nên
+    không lấy khóa đầu: ưu tiên khóa khớp model được yêu cầu, rồi khóa có số token khớp `usage` của lượt chính, rồi
+    khóa cuối."""
+    mu = d.get("modelUsage") or {}
+    ds = list(mu)
+    if len(ds) <= 1:
+        return ds[0] if ds else ""
+    if yeu_cau:
+        yc = yeu_cau.lower().split("[")[0]
+        for k in ds:
+            if yc in k.lower():
+                return k
+    u = d.get("usage") or {}
+    khop = [k for k in ds if isinstance(mu[k], dict) and mu[k].get("outputTokens") == u.get("output_tokens")
+            and mu[k].get("inputTokens") == u.get("input_tokens")]
+    return khop[0] if len(khop) == 1 else ds[-1]
 
 
 class Phien:

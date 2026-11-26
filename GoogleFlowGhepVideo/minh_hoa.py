@@ -1085,11 +1085,26 @@ def nha_da_ket_noi(ten: str) -> str:
 
 AI_CHO = 180                  # giây chờ tối đa MỘT AI cho một câu hỏi chọn cảnh (bình thường 15-45s); quá thì thử AI khác
 AI_THU_TU = ("claude", "gpt", "gemini")
+# Model user đã chọn cho TỪNG AI ở tab Kết nối AI (lưu trong file cài đặt của app; user 26/11: chọn một lần là giữ, dùng
+# cho cả khâu chọn cảnh). app.py giữ đồng bộ dict này, ghep_tieude.py nạp qua --minh-hoa-model-ai. Dùng khi lượt hỏi
+# không có model riêng: ô Model của tab Chỉnh sửa để trống, hoặc AI dự phòng trả lời thay. Không có mục = mặc định của CLI.
+MODEL_THEO_AI: dict[str, str] = {}
+
+
+def dat_model_theo_ai(ds) -> None:
+    """ds = {"claude": "opus", ...} hoặc ["claude=opus", ...] -> thay toàn bộ MODEL_THEO_AI (mục trống / AI lạ thì bỏ)."""
+    cap = list(ds.items()) if isinstance(ds, dict) else [str(x).partition("=")[::2] for x in (ds or [])]
+    MODEL_THEO_AI.clear()
+    for ten, model in cap:
+        ten, model = str(ten).strip().lower(), str(model or "").strip()
+        if ten in AI_THU_TU and model:
+            MODEL_THEO_AI[ten] = model
 
 
 def hoi_co_du_phong(nha: str, prompt: str, model: str | None, log: Callable[[str], None] = print):
     """Hỏi AI `nha`; nếu lỗi / hết giờ AI_CHO / trả lời không có mảng JSON thì lần lượt thử các AI KHÁC đang đăng nhập
-    (thứ tự AI_THU_TU, model mặc định của AI đó) — user 05/11: "gửi GPT không phản hồi thì chuyển AI khác".
+    (thứ tự AI_THU_TU) — user 05/11: "gửi GPT không phản hồi thì chuyển AI khác". Model: `model` (riêng của `nha`) nếu
+    có, không thì model đã chọn cho AI đó ở tab Kết nối AI (MODEL_THEO_AI), không nữa thì mặc định của CLI.
     -> (module AI đã trả lời, TraLoi). Mọi AI đều hỏng -> RuntimeError gom lý do."""
     loi: list[str] = []
     for i, ten in enumerate([nha] + [t for t in AI_THU_TU if t != nha]):
@@ -1102,7 +1117,7 @@ def hoi_co_du_phong(nha: str, prompt: str, model: str | None, log: Callable[[str
                 continue
             log(f"  {loi[-1]} → thử {m.TEN}")
         try:
-            r = m.hoi(prompt, model=model if i == 0 else None, thoi_gian=AI_CHO)
+            r = m.hoi(prompt, model=(model if i == 0 else None) or MODEL_THEO_AI.get(ten), thoi_gian=AI_CHO)
             _json_trong_tra_loi(r.text)
             return m, r
         except Exception as e:                     # noqa: BLE001

@@ -1622,7 +1622,10 @@ def main():
                     help="kho cảnh minh họa theo từ khóa (link Google Sheet tab 'Kho minh họa' hoặc file CSV); cần kịch bản + "
                          "phần sau. AI chọn câu/từ khóa, tool chèn clip đúng giây câu đó (xem minh_hoa.py)")
     ap.add_argument("--minh-hoa-ai", default="gpt", choices=["gpt", "claude", "gemini"], help="AI chọn từ khóa (mặc định gpt)")
-    ap.add_argument("--minh-hoa-model", default=None, help="model của AI đó (mặc định của CLI)")
+    ap.add_argument("--minh-hoa-model", default=None, help="model của AI đó (mặc định: theo --minh-hoa-model-ai, rồi mặc định của CLI)")
+    ap.add_argument("--minh-hoa-model-ai", action="append", default=[], metavar="AI=MODEL",
+                    help="model đã chọn cho từng AI, lặp lại được (vd claude=opus gpt=gpt-6.1-sol); dùng khi "
+                         "--minh-hoa-model trống hoặc khi AI dự phòng trả lời thay")
     ap.add_argument("--minh-hoa-giay", type=float, default=5.0,
                     help="phủ kín: mỗi cảnh video ≈ bấy nhiêu giây thì đổi cảnh, ảnh giữ tối đa; điểm xuyết: mỗi cảnh tối đa (mặc định 5)")
     ap.add_argument("--minh-hoa-toc-do", type=float, default=1.2,
@@ -1697,6 +1700,9 @@ def main():
     ap.add_argument("--hook-giay", type=float, default=10.0,
                     help="với --video-dai: số giây đầu có tiêu đề + ảnh (mặc định 10); 0 = đè suốt video (khi đó không có phụ đề)")
     args = ap.parse_args()
+    if args.minh_hoa_model_ai:                    # model đã chọn cho từng AI (tab Kết nối AI của app)
+        import minh_hoa
+        minh_hoa.dat_model_theo_ai(args.minh_hoa_model_ai)
     if args.nhe and args.manh:
         sys.exit("--nhe và --manh loại trừ nhau, chọn một.")
     if args.do_phan_giai < 0:

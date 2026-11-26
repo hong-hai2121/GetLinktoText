@@ -393,6 +393,8 @@ def args_tuy_chon(tc: dict, thu_muc_minh_hoa: str = "") -> list[str]:
               "--minh-hoa-toc-do", str(tc.get("minh_hoa_toc_do", 1.2))]
         if tc["minh_hoa_model"]:
             a += ["--minh-hoa-model", tc["minh_hoa_model"]]
+        for k, v in minh_hoa.MODEL_THEO_AI.items():     # model đã chọn cho từng AI ở tab Kết nối AI (S.ai_model)
+            a += ["--minh-hoa-model-ai", f"{k}={v}"]
         if thu_muc_minh_hoa:
             a += ["--minh-hoa-thu-muc", thu_muc_minh_hoa]
         if tc.get("minh_hoa_hoi_lai"):
@@ -589,6 +591,12 @@ class State:
         self.ai_nhanh_den = 0.0
         self.ai_do_ngay = threading.Event()
         self.ai_phien = {k: None for k in NHA_AI}
+        # model user chọn cho từng AI ở tab Kết nối AI ("" = mặc định của CLI). Lưu trong file cài đặt chứ không để trình
+        # duyệt nhớ (localStorage gắn với cổng, đổi cổng / đổi cửa sổ là mất — user 26/11); dùng cho Hỏi thử VÀ khâu AI
+        # chọn cảnh minh họa (minh_hoa.MODEL_THEO_AI), ô Model của tab Chỉnh sửa có điền thì được ưu tiên
+        am = d.get("ai_model") if isinstance(d.get("ai_model"), dict) else {}
+        self.ai_model = {k: str(am.get(k) or "").strip()[:80] for k in NHA_AI}
+        minh_hoa.dat_model_theo_ai(self.ai_model)
         self.ai_dang_hoi: set[str] = set()
         self.ai_loi_xac_thuc: dict[str, str] = {}
         threading.Thread(target=self._vong_do_ai, daemon=True, name="do-ai").start()
@@ -721,7 +729,7 @@ class State:
                     "thu_muc_ra": self.thu_muc_ra_cfg, "minh_hoa_dir": self.minh_hoa_dir, "lam_dep_anh": self.lam_dep_anh,
                     "drive_dich": self.drive_dich, "drive_dich_chon": self.drive_dich_chon, "tu_tai_len": self.tu_tai_len,
                     "heygen_dich": self.heygen_dich, "heygen_dich_chon": self.heygen_dich_chon,
-                    "tu_don_rac": self.tu_don_rac, "sheet_dich": self.sheet_dich}
+                    "tu_don_rac": self.tu_don_rac, "sheet_dich": self.sheet_dich, "ai_model": self.ai_model}
             tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(SETTINGS_PATH)
@@ -923,7 +931,8 @@ def state_payload(after: int) -> dict:
             "lam_dep": {"anh": S.lam_dep_anh, "ton_tai": bool(S.lam_dep_anh) and Path(S.lam_dep_anh).is_file(),
                         "san_sang": _LD_SAN_SANG[0], "ly_do": "" if _LD_SAN_SANG[0] else _LD_SAN_SANG[1]},
             "xem_truoc": dict(S.xem_truoc),
-            "ai": {"nha": [dict(S.ai[k], ma=k, dang_hoi=(k in S.ai_dang_hoi), loi_xac_thuc=S.ai_loi_xac_thuc.get(k, ""))
+            "ai": {"nha": [dict(S.ai[k], ma=k, dang_hoi=(k in S.ai_dang_hoi), loi_xac_thuc=S.ai_loi_xac_thuc.get(k, ""),
+                                model_chon=S.ai_model.get(k, ""))
                            for k in NHA_AI],
                    "luc_do": time.strftime("%H:%M:%S", time.localtime(S.ai_luc_do)) if S.ai_luc_do else ""},
             "cai_dat": {"thu_muc_ra": S.thu_muc_ra_cfg, "thu_muc_ra_thuc": str(thu_muc_ra()), "thu_muc_done": str(thu_muc_done()),
@@ -1998,12 +2007,30 @@ def api_ai_cai_dat(data):
     return {"ok": True, "msg": f"Đang cài {m.TEN} CLI trong cửa sổ lệnh: {m.LENH_CAI}"}
 
 
-def api_ai_hoi(data):
-    ma, cau_hoi = data.get("ma"), str(data.get("cau_hoi") or "").strip()
-    model = str(data.get("model") or "").strip() or None      # None = mặc định của CLI
+def api_ai_model(data):
+    """Lưu model đã chọn cho một AI (tab Kết nối AI) vào file cài đặt; "" = về mặc định của CLI."""
+    ma = data.get("ma")
     m = NHA_AI.get(ma)
     if m is None:
         return {"ok": False, "msg": "Không rõ hãng AI."}
+    model = str(data.get("model") or "").strip()[:80]
+    with S.lock:
+        S.ai_model[ma] = model
+        S.ai_phien[ma] = None                      # đổi model = hội thoại mới (phiên CLI gắn với model lúc tạo)
+        minh_hoa.dat_model_theo_ai(S.ai_model)
+    S.save()
+    msg = f"{m.TEN}: dùng model {model}" if model else f"{m.TEN}: dùng model mặc định của CLI"
+    S.log(f"Kết nối AI — {msg} (đã lưu; áp dụng cho Hỏi thử và khâu chọn cảnh minh họa)")
+    return {"ok": True, "msg": msg + " — đã lưu."}
+
+
+def api_ai_hoi(data):
+    ma, cau_hoi = data.get("ma"), str(data.get("cau_hoi") or "").strip()
+    m = NHA_AI.get(ma)
+    if m is None:
+        return {"ok": False, "msg": "Không rõ hãng AI."}
+    # model: gửi kèm thì dùng, không thì model đã lưu cho AI đó; None = mặc định của CLI
+    model = str(data.get("model") or "").strip() or S.ai_model.get(ma) or None
     if not cau_hoi:
         return {"ok": False, "msg": "Chưa gõ câu hỏi."}
     with S.lock:
@@ -2708,6 +2735,7 @@ ROUTES = {
     "/api/ai_ket_noi": api_ai_ket_noi,
     "/api/ai_ngat": api_ai_ngat,
     "/api/ai_cai_dat": api_ai_cai_dat,
+    "/api/ai_model": api_ai_model,
     "/api/ai_hoi": api_ai_hoi,
     "/api/ai_hoi_thoai_moi": api_ai_hoi_thoai_moi,
 }

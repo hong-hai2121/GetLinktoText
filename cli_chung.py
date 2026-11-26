@@ -42,6 +42,8 @@ def thu_muc_ung_vien() -> list[str]:
         str(home / ".local" / "bin"),                            # claude bản native installer
         str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "nodejs"),
         str(home / "AppData" / "Local" / "Programs" / "claude"),
+        str(home / "AppData" / "Local" / "agy" / "bin"),         # agy (Antigravity CLI) cài bằng script chính thức
+        str(home / ".gemini" / "bin"),                           # agy do Antigravity IDE tự tải về
     ]
     nvm_home = os.environ.get("NVM_HOME") or str(home / "AppData" / "Local" / "nvm")
     try:                                                         # các bản node khác của nvm, mới nhất trước
@@ -97,7 +99,9 @@ def mo_cua_so_lenh(lenh_win: str, lenh_mac: str, tieu_de: str, env: dict | None 
     Windows: cmd /k `lenh_win` trong console mới. macOS: ghi `lenh_mac` vào file .command rồi mở bằng Terminal
     (Terminal mở shell mới nên `env` không truyền sang; biến cần thiết đặt ngay trong `lenh_mac`)."""
     if os.name == "nt":
-        subprocess.Popen(["cmd", "/k", f"chcp 65001>nul & title {tieu_de} & {lenh_win}"],
+        # Đưa MỘT chuỗi nguyên văn chứ không đưa list: với list, subprocess đổi dấu " bên trong thành \" mà cmd
+        # không hiểu -> lệnh có đường dẫn trong ngoặc kép (gemini) báo "is not recognized" và không hề chạy.
+        subprocess.Popen(f'cmd /k "chcp 65001>nul & title {tieu_de} & {lenh_win}"',
                          creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0), env=env)
         return
     import tempfile

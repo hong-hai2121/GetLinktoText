@@ -488,7 +488,7 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
         <div class="row" style="margin-top:8px">
           <div class="fld"><label>AI chọn từ khóa</label>
             <select id="tc_minh_hoa_ai" style="width:auto"><option value="gpt">GPT (Codex)</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
-          <div class="fld"><label>Model (trống = mặc định)</label><input type="text" id="tc_minh_hoa_model" style="width:170px" placeholder="vd gpt-6-astra"></div>
+          <div class="fld"><label title="Để trống: dùng model đã chọn cho AI đó ở tab Kết nối AI (chưa chọn thì mặc định của CLI). Điền vào: chỉ khâu chọn cảnh dùng model này.">Model riêng (trống = theo tab Kết nối AI)</label><input type="text" id="tc_minh_hoa_model" style="width:170px" placeholder="vd gpt-6-astra"></div>
           <div class="fld"><label>Mỗi cảnh video ≈ (đổi cảnh) / ảnh giữ tối đa</label><div class="row"><input type="number" id="tc_minh_hoa_giay" min="2.5" max="20" step="0.5"><span class="u">giây</span></div></div>
           <div class="fld"><label>Tốc độ clip minh họa</label><div class="row"><input type="number" id="tc_minh_hoa_toc_do" min="0.8" max="1.5" step="0.05"><span class="u">× (cần phủ dài hơn thì tự hạ tới 0,8, không đứng hình)</span></div></div>
           <div class="fld"><label>Tổng minh họa tối đa (chỉ điểm xuyết)</label><div class="row"><input type="number" id="tc_minh_hoa_ti_le" min="5" max="90" step="5"><span class="u">% phần sau</span></div></div>
@@ -573,11 +573,13 @@ pre.dap{margin:0;background:#fff;border:1px solid var(--border);border-radius:8p
       <div class="body" id="aiDs">(đang dò…)</div>
     </div>
     <div class="card">
+      <h3>Model đã chọn <small>lưu trong cài đặt phần mềm — dùng cho ô Hỏi thử và khâu AI chọn cảnh minh họa (ô <b>Model riêng</b> ở tab Chỉnh sửa có điền thì được ưu tiên)</small></h3>
+      <div class="body" id="aiModelDs">(đang dò…)</div>
+    </div>
+    <div class="card">
       <h3>Hỏi thử
         <div class="chips" id="aiChips"></div>
-        <span class="muted">Model</span>
-        <select id="aiModel" style="width:auto;max-width:260px" onchange="aiDoiModel()"></select>
-        <input id="aiModelKhac" type="text" placeholder="gõ id model…" style="width:200px;display:none" oninput="aiModelChon[aiChon]=this.value.trim();aiLuuModel()">
+        <span class="muted" id="aiModelNhan"></span>
         <span class="spacer"></span>
         <button class="btn sm" onclick="aiMoi()">Hội thoại mới</button>
       </h3>
@@ -737,6 +739,7 @@ const fmt = s => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s/6
 let seq = 0, logLines = [], state = null, toastT = 0, busy = false;
 let lastItemsKey = '', gocDirDirty = false, tcDirty = false, tcLoaded = false, cdDirty = false, lastAiKey = '', lastXtKey = '', lastS = null;
 let aiChon = 'claude', aiBusy = false;
+let aiNha = [], aiModelGo = '', lastAiModelKey = '';   // tab Kết nối AI: trạng thái các hãng (có model_chon); hãng đang mở ô "Khác (gõ id)…"
 const TAB_INFO = {
   'heygen': ['C Thảo HeyGen', 'Video dài có sẵn tiếng + tiêu đề + ảnh minh họa + ảnh ngang AI chọn câu nổi bật + phụ đề — không clip gốc'],
   'ghep': ['Ghép video', 'Hook + tiêu đề + minh họa + clip gốc + giọng đọc + phụ đề'],
@@ -1218,6 +1221,7 @@ function tcCmd(){
   if (t.che_do !== 'auto') a.push('--' + t.che_do); if (t.do_phan_giai) a.push(`--do-phan-giai ${t.do_phan_giai}`); if (t.seed !== null) a.push(`--seed ${t.seed}`);
   if (t.minh_hoa && t.minh_hoa_sheet){ a.push(`--minh-hoa "${t.minh_hoa_sheet.length > 60 ? t.minh_hoa_sheet.slice(0, 57) + '…' : t.minh_hoa_sheet}"`, `--minh-hoa-ai ${t.minh_hoa_ai}`, `--minh-hoa-giay ${t.minh_hoa_giay}`, `--minh-hoa-ti-le ${t.minh_hoa_ti_le}`, `--minh-hoa-che-do ${t.minh_hoa_che_do}`, `--minh-hoa-chuyen ${t.minh_hoa_chuyen}`, `--minh-hoa-chuyen-kieu ${t.minh_hoa_chuyen_kieu}`); if (!t.minh_hoa_anh_dong) a.push('--minh-hoa-anh-tinh');
     if (t.minh_hoa_chuyen_kieu === 'ngau_nhien') a.push(t.minh_hoa_sfx ? `--minh-hoa-sfx-db ${t.minh_hoa_sfx_db}` : '--khong-minh-hoa-sfx'); if (t.minh_hoa_model) a.push(`--minh-hoa-model ${t.minh_hoa_model}`);
+    aiNha.forEach(n => { if (n.model_chon) a.push(`--minh-hoa-model-ai ${n.ma}=${n.model_chon}`); });
     a.push(`--minh-hoa-vec-nguong ${t.minh_hoa_vec_nguong}`, `--minh-hoa-vec-nhom ${t.minh_hoa_vec_nhom}`, `--minh-hoa-toc-do ${t.minh_hoa_toc_do}`);
     if (!t.minh_hoa_soat) a.push('--khong-minh-hoa-soat');
     if (t.minh_hoa_xen_bs && !(lastS && lastS.tuy_chon && lastS.tuy_chon.khong_clip_goc)) a.push(`--minh-hoa-xen-bac-si ${t.minh_hoa_xen_bs_pct}`);
@@ -1320,35 +1324,47 @@ function aiHang(n){
   const ver = n.phien_ban ? `<div class="muted" style="font-family:Consolas,monospace" title="${esc(n.duong_dan || '')}">${esc(n.cli)} ${esc(n.phien_ban)}${n.duong_dan ? ' · ' + esc(n.duong_dan) : ''}</div>` : '';
   return `<div class="nha"><div class="dot ${dot}"></div><div class="tenai">${esc(n.ten)}</div><div class="grow tt">${tt}${ver}</div><div>${nut}</div></div>`;
 }
-let aiModelChon = {};                       // hãng -> id model đã chọn ('' = mặc định CLI), nhớ trong localStorage
-try{ aiModelChon = JSON.parse(localStorage.getItem('aiModelChon') || '{}') || {}; } catch(e){ aiModelChon = {}; }
-function aiLuuModel(){ try{ localStorage.setItem('aiModelChon', JSON.stringify(aiModelChon)); } catch(e){} }
+/* Model của từng AI: lưu ở SERVER (file cài đặt, /api/ai_model), state trả về n.model_chon. Trước 26/11 nhớ trong
+   localStorage — gắn với địa chỉ cổng nên đổi cổng / đổi cửa sổ là mất, và chỉ ô Hỏi thử dùng. */
+function aiModelCua(ma){ const n = aiNha.find(x => x.ma === ma); return (n && n.model_chon) || ''; }
 function aiVeModel(nha){
-  const n = nha.find(x => x.ma === aiChon), ds = (n && n.models) || [], chon = aiModelChon[aiChon] || '';
-  const coTrongDs = !chon || ds.some(m => m.id === chon);
-  const sel = $('aiModel');
-  sel.innerHTML = `<option value="">Mặc định của CLI</option>` + ds.map(m => `<option value="${esc(m.id)}">${esc(m.ten)}</option>`).join('') + `<option value="__khac">Khác (gõ id)…</option>`;
-  sel.value = coTrongDs ? chon : '__khac';
-  $('aiModelKhac').style.display = coTrongDs ? 'none' : ''; if (!coTrongDs) $('aiModelKhac').value = chon;
+  $('aiModelDs').innerHTML = nha.map(n => {
+    const ds = n.models || [], chon = n.model_chon || '';
+    const khac = aiModelGo === n.ma || (!!chon && !ds.some(m => m.id === chon));    // id không có trong danh sách -> hiện ô gõ
+    return `<div class="nha"><div class="tenai">${esc(n.ten)}</div><div class="grow">`
+      + `<select id="aiModel_${n.ma}" style="width:auto;max-width:320px" onchange="aiDoiModel('${n.ma}')"><option value="">Mặc định của CLI</option>`
+      + ds.map(m => `<option value="${esc(m.id)}"${!khac && m.id === chon ? ' selected' : ''}>${esc(m.ten)}</option>`).join('')
+      + `<option value="__khac"${khac ? ' selected' : ''}>Khác (gõ id)…</option></select> `
+      + `<input id="aiModelKhac_${n.ma}" type="text" placeholder="gõ id model rồi Enter" value="${khac ? esc(chon) : ''}" style="width:220px${khac ? '' : ';display:none'}" onchange="aiLuuModel('${n.ma}', this.value)" onblur="if(!this.value.trim() && aiModelGo){ aiModelGo=''; lastAiModelKey=''; }">`
+      + `</div><div class="muted">đang dùng: <b>${chon ? esc(chon) : 'mặc định của CLI'}</b></div></div>`;
+  }).join('');
 }
-function aiDoiModel(){
-  const v = $('aiModel').value;
-  if (v === '__khac'){ $('aiModelKhac').style.display = ''; $('aiModelKhac').focus(); return; }
-  $('aiModelKhac').style.display = 'none'; aiModelChon[aiChon] = v; aiLuuModel();
-  toast(v ? `${aiChon}: dùng model ${v} (hội thoại mới khi đổi model)` : `${aiChon}: dùng model mặc định của CLI`);
+function aiDoiModel(ma){
+  const v = $('aiModel_' + ma).value, o = $('aiModelKhac_' + ma);
+  if (v === '__khac'){ aiModelGo = ma; o.style.display = ''; o.focus(); return; }
+  aiLuuModel(ma, v);
 }
+async function aiLuuModel(ma, v){ aiModelGo = ''; lastAiModelKey = ''; await api('/api/ai_model', {ma, model: (v || '').trim()}); }
 function renderAi(a){
+  aiNha = a.nha;
   const key = JSON.stringify(a.nha) + aiChon;
   if (key !== lastAiKey){ lastAiKey = key; $('aiDs').innerHTML = a.nha.map(aiHang).join('');
     $('aiChips').innerHTML = a.nha.map(n => `<span class="c${n.ma === aiChon ? ' on' : ''}" onclick="aiChon='${n.ma}';tick()">${esc(n.ten)}${n.ket_noi ? '' : ' ○'}</span>`).join('');
     const ok = a.nha.filter(n => n.ket_noi).length; $('cntAi').innerHTML = `<b>${ok}</b>/${a.nha.length}`;
-    if (document.activeElement !== $('aiModel') && document.activeElement !== $('aiModelKhac')) aiVeModel(a.nha); }
+    $('aiModelNhan').textContent = 'Model: ' + (aiModelCua(aiChon) || 'mặc định của CLI'); }
+  // thẻ "Model đã chọn" có khóa vẽ riêng: chỉ vẽ lại khi danh sách / lựa chọn đổi, và không vẽ đè lúc đang chọn / gõ
+  const keyM = JSON.stringify(a.nha.map(n => [n.ma, n.ten, n.model_chon, n.models]));
+  if (keyM !== lastAiModelKey){
+    const dangO = document.activeElement && /^aiModel(Khac)?_/.test(document.activeElement.id || '');
+    if (!dangO && !document.getElementById('selMenu')){ lastAiModelKey = keyM; aiVeModel(a.nha); } }
   $('aiLuc').textContent = a.luc_do || '—';
 }
-async function aiNgat(ma){ if (!confirm('Ngắt kết nối ' + ma + '? (đăng xuất CLI đó)')) return; await api('/api/ai_ngat', {ma}); }
+async function aiNgat(ma){
+  const them = ma === 'gemini' ? '\n\nGemini chạy qua Antigravity CLI, dùng chung đăng nhập với Antigravity IDE — IDE cũng sẽ bị đăng xuất.' : '';
+  if (!confirm('Ngắt kết nối ' + ma + '? (đăng xuất CLI đó)' + them)) return; await api('/api/ai_ngat', {ma}); }
 async function aiGui(){
   if (aiBusy) return; const cau = $('aiCau').value.trim(); if (!cau) return toast('Chưa gõ câu hỏi.', true);
-  const model = aiModelChon[aiChon] || '';
+  const model = aiModelCua(aiChon);
   aiBusy = true; $('aiGui').disabled = true; $('aiTl').textContent = `Đang hỏi ${aiChon}${model ? ' (' + model + ')' : ''}…`; $('aiDap').textContent = '…';
   try{ const r = await fetch('/api/ai_hoi', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ma: aiChon, cau_hoi: cau, model})}).then(r => r.json());
     if (r.ok){ $('aiDap').textContent = r.text; $('aiTl').textContent = `${aiChon} trả lời sau ${r.giay}s` + (r.model ? ` · ${r.model}` : ''); }
